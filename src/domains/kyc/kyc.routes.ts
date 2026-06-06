@@ -1,15 +1,15 @@
 import { Router } from "express";
-import {
-  handleGetKycRequirements,
-  handleGetKycStatus,
-  handleUploadDocuments,
-  handleGetMyDocuments,
-  handleGetPendingDocuments,
-  handleGetAllDocuments,
-  handleReviewDocument,
-} from "./kyc.controller";
 import { requireAuth } from "../../middlewares/mockAuth";
 import { kycUpload } from "../../middlewares/uploadMiddleware";
+import {
+  handleGetAllDocuments,
+  handleGetKycRequirements,
+  handleGetKycStatus,
+  handleGetMyDocuments,
+  handleGetPendingDocuments,
+  handleReviewDocument,
+  handleUploadDocuments,
+} from "./kyc.controller";
 import { REQUIRED_KYC_DOCUMENTS } from "./kyc.validation";
 
 const router = Router();
@@ -18,7 +18,7 @@ const router = Router();
 
 // GET /api/v1/kyc/requirements
 // Returns the static list of all 7 required KYC documents with labels and
-// descriptions. No authentication required — for onboarding / info screens.
+// descriptions. 
 router.get("/requirements", handleGetKycRequirements);
 
 // ─── Driver Routes ────────────────────────────────────────────────────────────

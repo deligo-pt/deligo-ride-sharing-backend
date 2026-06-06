@@ -182,10 +182,17 @@ enum VehicleClass{
   PREMIUM
 
 }
+enum VehicleApprovalStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
 model Vehicle {
-  id                String        @id @default(uuid())
-  driverProfileId   String        @unique
-  driverProfile     DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  id                String               @id @default(uuid())
+  driverProfileId   String               @unique
+  driverProfile     DriverProfile        @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
 
   vehicleClass      VehicleClass
   vehicleType       VehicleType
@@ -193,12 +200,20 @@ model Vehicle {
   model             String
   year              Int
   color             String
-  licensePlate      String        @unique
-  capacity          Int           @default(4)
-  isVerified        Boolean       @default(false)
+  licensePlate      String               @unique
+  capacity          Int                  @default(4)
 
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  registrationExpiryDate  DateTime?
+  insuranceExpiryDate     DateTime?
+
+  photoUrls         String[]             @default([])
+
+  approvalStatus    VehicleApprovalStatus @default(PENDING_REVIEW)
+  adminNote         String?
+  reviewedAt        DateTime?
+
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   @@map("vehicles")
 }
