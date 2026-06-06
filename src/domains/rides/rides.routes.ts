@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/mockAuth';
-import * as rideController from './ride.controller';
+import * as ridesController from './rides.controller';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rides Router
@@ -10,12 +10,29 @@ import * as rideController from './ride.controller';
 const router = Router();
 
 /**
- * POST /api/v1/rides/request
+ * PATCH /api/v1/rides/location
  *
- * Request a new ride. Requires mock auth headers:
+ * Driver broadcasts their live GPS coordinates to Redis.
+ *
+ * Required headers:
+ *   x-mock-user-id : <driver user UUID>
+ *   x-mock-role    : DRIVER
+ *
+ * Body: { lat: number, lng: number }
+ */
+router.patch('/location', requireAuth, ridesController.updateLocation);
+
+/**
+ * POST /api/v1/rides/search
+ *
+ * Customer searches for nearby, available, KYC-approved drivers.
+ *
+ * Required headers:
  *   x-mock-user-id : <customer user UUID>
  *   x-mock-role    : CUSTOMER
+ *
+ * Body: { pickupLat: number, pickupLng: number }
  */
-router.post('/request', requireAuth, rideController.requestRide);
+router.post('/search', requireAuth, ridesController.searchRide);
 
 export default router;
