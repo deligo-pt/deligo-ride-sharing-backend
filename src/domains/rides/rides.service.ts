@@ -1,55 +1,16 @@
-import { VehicleType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import { LocationService } from '../../utils/redis';
+import { PricingEngine } from './pricing.service';
 import type {
   UpdateLocationDto,
   SearchRideDto,
   EstimateFareDto,
   RequestRideDto,
+  UpdateRideStatusDto,
+  CancelRideDto,
 } from './rides.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Private Geo Helper
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Haversine formula — returns the great-circle distance in kilometres between
- * two WGS-84 coordinates. Accurate enough for fare estimation (±0.5%).
- */
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371; // Earth's radius in km
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-
-  return R * 2 * Math.asin(Math.sqrt(a));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Fare Configuration
-// Rates are hardcoded here; move to a DB/config table in production.
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface FareConfig {
-  vehicleClass: string;
-  vehicleType: VehicleType;
-  baseFare: number;
-  perKmRate: number;
-  /** Estimated average speed in km/h — used for duration estimate */
-  avgSpeedKmh: number;
-}
-
-const FARE_CONFIGS: FareConfig[] = [
-  { vehicleClass: 'ECONOMY', vehicleType: VehicleType.Hatchback, baseFare: 2.0, perKmRate: 1.5, avgSpeedKmh: 30 },
-  { vehicleClass: 'ECONOMY', vehicleType: VehicleType.Micro,     baseFare: 1.5, perKmRate: 1.2, avgSpeedKmh: 30 },
-  { vehicleClass: 'COMFORT', vehicleType: VehicleType.Sedan,     baseFare: 3.0, perKmRate: 2.0, avgSpeedKmh: 35 },
-  { vehicleClass: 'PREMIUM', vehicleType: VehicleType.SUV,       baseFare: 5.0, perKmRate: 3.0, avgSpeedKmh: 40 },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service Functions
@@ -100,35 +61,23 @@ export async function findNearbyDrivers(dto: SearchRideDto) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fare Estimation
+// Fare Estimation — PRD 3.7
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface FareEstimate {
-  vehicleClass: string;
-  vehicleType: string;
-  distanceKm: number;
-  estimatedFare: number;
-  estimatedDurationMinutes: number;
-}
-
 /**
- * Returns one fare option per configured vehicle tier.
- *
- * Formula per tier: estimatedFare = baseFare + (distanceKm * perKmRate)
- * Duration:         ceil(distanceKm / avgSpeedKmh * 60)   [minutes]
+ * Returns one itemised FareBreakdown per vehicle tier (or a single one
+ * if vehicleType is specified). Promo code is validated and applied inside
+ * PricingEngine.
  */
-export function estimateFare(dto: EstimateFareDto): FareEstimate[] {
-  const distanceKm = parseFloat(
-    haversineKm(dto.pickupLat, dto.pickupLng, dto.dropoffLat, dto.dropoffLng).toFixed(2),
+export async function estimateFare(dto: EstimateFareDto) {
+  return PricingEngine.calculateEstimate(
+    dto.pickupLat,
+    dto.pickupLng,
+    dto.dropoffLat,
+    dto.dropoffLng,
+    dto.vehicleType,
+    dto.promoCode,
   );
-
-  return FARE_CONFIGS.map((cfg) => ({
-    vehicleClass: cfg.vehicleClass,
-    vehicleType: cfg.vehicleType,
-    distanceKm,
-    estimatedFare: parseFloat((cfg.baseFare + distanceKm * cfg.perKmRate).toFixed(2)),
-    estimatedDurationMinutes: Math.ceil((distanceKm / cfg.avgSpeedKmh) * 60),
-  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,4 +169,206 @@ export async function requestRide(
   }
 
   return { ride, dispatchedDriverIds };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3: Driver Acceptance
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Atomically accept a ride and mark the driver as unavailable.
+ *
+ * Uses a Prisma interactive transaction so both writes succeed or both fail —
+ * preventing a ghost acceptance where the ride is claimed but the driver
+ * stays available (or vice-versa).
+ */
+export async function acceptRide(driverUserId: string, rideId: string) {
+  // 1. Verify ride exists and is still REQUESTED
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    select: { id: true, status: true },
+  });
+
+  if (!ride) {
+    throw new Error('RIDE_NOT_FOUND');
+  }
+
+  if (ride.status !== 'REQUESTED') {
+    throw new Error('RIDE_NOT_AVAILABLE');
+  }
+
+  // 2. Resolve driver profile
+  const driverProfile = await prisma.driverProfile.findUnique({
+    where: { userId: driverUserId },
+    select: { id: true },
+  });
+
+  if (!driverProfile) {
+    throw new Error('DRIVER_PROFILE_NOT_FOUND');
+  }
+
+  // 3. Atomic transaction: claim ride + lock driver
+  const [updatedRide] = await prisma.$transaction([
+    prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        status: 'ACCEPTED',
+        driverProfileId: driverProfile.id,
+        acceptedAt: new Date(),
+      },
+    }),
+    prisma.driverProfile.update({
+      where: { id: driverProfile.id },
+      data: { isAvailable: false },
+    }),
+  ]);
+
+  return updatedRide;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4: Trip Lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Map each allowed status transition to its timestamp field.
+ */
+const STATUS_TIMESTAMP_MAP = {
+  DRIVER_ARRIVED: 'arrivedAt',
+  IN_PROGRESS:    'startedAt',
+  COMPLETED:      'completedAt',
+} as const;
+
+/**
+ * Advance the ride through its lifecycle.
+ *
+ * - Verifies the requesting driver is the one assigned to the ride.
+ * - Sets the appropriate timestamp for the new status.
+ * - On COMPLETED: puts the driver back on the map and increments totalRides
+ *   for both the driver and the customer.
+ */
+export async function updateRideStatus(
+  driverUserId: string,
+  rideId: string,
+  dto: UpdateRideStatusDto,
+) {
+  // 1. Fetch full ride to validate ownership and current status
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    include: { customerProfile: { select: { id: true } } },
+  });
+
+  if (!ride) {
+    throw new Error('RIDE_NOT_FOUND');
+  }
+
+  // 2. Resolve driver profile and verify ownership
+  const driverProfile = await prisma.driverProfile.findUnique({
+    where: { userId: driverUserId },
+    select: { id: true },
+  });
+
+  if (!driverProfile || ride.driverProfileId !== driverProfile.id) {
+    throw new Error('RIDE_FORBIDDEN');
+  }
+
+  // 3. Build the timestamp field to set
+  const timestampField = STATUS_TIMESTAMP_MAP[dto.status];
+
+  // 4. Base ride update payload
+  const rideUpdateData: Parameters<typeof prisma.ride.update>[0]['data'] = {
+    status: dto.status,
+    [timestampField]: new Date(),
+    ...(dto.finalDistanceKm !== undefined && { distanceKm: dto.finalDistanceKm }),
+    ...(dto.finalDurationMinutes !== undefined && { durationMinutes: dto.finalDurationMinutes }),
+  };
+
+  if (dto.status !== 'COMPLETED') {
+    // Simple status advance — single update
+    return { ride: await prisma.ride.update({ where: { id: rideId }, data: rideUpdateData }), fareBreakdown: null };
+  }
+
+  // 5. COMPLETED: calculate final fare via PricingEngine
+  const actualDistKm   = dto.actualDistanceKm ?? dto.finalDistanceKm ?? 1;
+  const actualDurMin   = dto.actualDurationMinutes ?? dto.finalDurationMinutes ?? 10;
+
+  const fareBreakdown = await PricingEngine.calculateFinalFare(
+    ride.vehicleType,
+    actualDistKm,
+    actualDurMin,
+    {
+      tolls:              dto.tolls,
+      waitingTimeMinutes: dto.waitingTimeMinutes,
+    },
+  );
+
+  // 6. Persist final fare into rideUpdateData
+  rideUpdateData.finalFare    = fareBreakdown.grandTotal;
+  rideUpdateData.distanceKm   = fareBreakdown.distanceKm;
+  rideUpdateData.durationMinutes = fareBreakdown.estimatedDurationMinutes;
+
+  // 7. Transaction: finalise ride + release driver + increment totalRides
+  const [updatedRide] = await prisma.$transaction([
+    prisma.ride.update({ where: { id: rideId }, data: rideUpdateData }),
+    prisma.driverProfile.update({
+      where: { id: driverProfile.id },
+      data: { isAvailable: true, totalRides: { increment: 1 } },
+    }),
+    prisma.customerProfile.update({
+      where: { id: ride.customerProfile.id },
+      data: { totalRides: { increment: 1 } },
+    }),
+  ]);
+
+  return { ride: updatedRide, fareBreakdown };
+}
+
+/**
+ * Cancel a ride (by either the customer or an assigned driver).
+ *
+ * If a driver was already assigned, they are released back to the pool.
+ */
+export async function cancelRide(
+  rideId: string,
+  dto: CancelRideDto,
+) {
+  // 1. Fetch the ride with just enough data for the teardown
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    select: { id: true, status: true, driverProfileId: true },
+  });
+
+  if (!ride) {
+    throw new Error('RIDE_NOT_FOUND');
+  }
+
+  // Prevent cancelling an already-terminal ride
+  if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
+    throw new Error('RIDE_ALREADY_TERMINAL');
+  }
+
+  // 2. Ride update is always required — build a typed PrismaPromise array
+  const updates: Prisma.PrismaPromise<unknown>[] = [
+    prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationReason: dto.reason,
+      },
+    }),
+  ];
+
+  // 3. Release the driver back to the pool only if one was assigned
+  if (ride.driverProfileId) {
+    updates.push(
+      prisma.driverProfile.update({
+        where: { id: ride.driverProfileId },
+        data: { isAvailable: true },
+      }),
+    );
+  }
+
+  const results = await prisma.$transaction(updates);
+  return results[0];
 }

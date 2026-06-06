@@ -38,6 +38,10 @@ export const EstimateFareSchema = z.object({
   pickupLng: lngField('pickupLng'),
   dropoffLat: latField('dropoffLat'),
   dropoffLng: lngField('dropoffLng'),
+  vehicleType: z.nativeEnum(VehicleType, {
+    error: `vehicleType must be one of: ${Object.values(VehicleType).join(', ')}`,
+  }).optional(),
+  promoCode: z.string().optional(),
 });
 export type EstimateFareDto = z.infer<typeof EstimateFareSchema>;
 
@@ -57,3 +61,28 @@ export const RequestRideSchema = z.object({
     .positive('estimatedFare must be a positive number'),
 });
 export type RequestRideDto = z.infer<typeof RequestRideSchema>;
+
+// ── PATCH /api/v1/rides/:id/accept ───────────────────────────────────────────
+// No body required — the ride ID and driver identity come from params + headers.
+
+// ── PATCH /api/v1/rides/:id/status ───────────────────────────────────────────
+export const UpdateRideStatusSchema = z.object({
+  status: z.enum(['DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED'], {
+    error: 'status must be one of: DRIVER_ARRIVED, IN_PROGRESS, COMPLETED',
+  }),
+  // Legacy fields (kept for backwards compat)
+  finalDistanceKm: z.number({ error: 'finalDistanceKm must be a number' }).positive().optional(),
+  finalDurationMinutes: z.number({ error: 'finalDurationMinutes must be a number' }).int().positive().optional(),
+  // PRD 3.7 actuals for final fare calculation
+  actualDistanceKm: z.number({ error: 'actualDistanceKm must be a number' }).positive().optional(),
+  actualDurationMinutes: z.number({ error: 'actualDurationMinutes must be a number' }).positive().optional(),
+  tolls: z.number({ error: 'tolls must be a number' }).min(0).optional(),
+  waitingTimeMinutes: z.number({ error: 'waitingTimeMinutes must be a number' }).min(0).optional(),
+});
+export type UpdateRideStatusDto = z.infer<typeof UpdateRideStatusSchema>;
+
+// ── POST /api/v1/rides/:id/cancel ────────────────────────────────────────────
+export const CancelRideSchema = z.object({
+  reason: z.string({ error: 'reason is required' }).min(1, 'reason cannot be empty'),
+});
+export type CancelRideDto = z.infer<typeof CancelRideSchema>;

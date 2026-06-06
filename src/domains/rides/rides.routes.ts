@@ -42,4 +42,29 @@ router.post('/estimate', requireAuth, ridesController.estimateFare);
  */
 router.post('/request', requireAuth, ridesController.requestRide);
 
+// ── Parameterised routes (must come AFTER all static routes) ─────────────────
+
+/**
+ * PATCH /api/v1/rides/:id/accept
+ * Driver → atomically claim a REQUESTED ride
+ * Headers: x-mock-role: DRIVER
+ */
+router.patch('/:id/accept', requireAuth, ridesController.acceptRide);
+
+/**
+ * PATCH /api/v1/rides/:id/status
+ * Driver → advance trip to DRIVER_ARRIVED | IN_PROGRESS | COMPLETED
+ * Headers: x-mock-role: DRIVER
+ * Body: { status, finalDistanceKm?, finalDurationMinutes? }
+ */
+router.patch('/:id/status', requireAuth, ridesController.updateRideStatus);
+
+/**
+ * POST /api/v1/rides/:id/cancel
+ * Customer or Driver → cancel a non-terminal ride
+ * Headers: x-mock-role: CUSTOMER or DRIVER
+ * Body: { reason }
+ */
+router.post('/:id/cancel', requireAuth, ridesController.cancelRide);
+
 export default router;
