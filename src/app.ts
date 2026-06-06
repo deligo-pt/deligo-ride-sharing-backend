@@ -9,7 +9,6 @@ import { NotFoundError } from './utils/errors';
 // ─── Route Imports ────────────────────────────────────────────────────────────
 import kycRouter from './domains/kyc/kyc.routes';
 import profileRouter from './domains/profile/profile.routes';
-import rideRouter from './domains/rides/ride.routes';
 import ridesRouter from './domains/rides/rides.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 
@@ -68,7 +67,6 @@ export function createApp(): Application {
   const API_PREFIX = '/api/v1';
 
   // ── Domain Routers ────────────────────────────────────────────────────────
-  app.use(`${API_PREFIX}/rides`, rideRouter);
   app.use(`${API_PREFIX}/rides`, ridesRouter);   // geospatial: /location, /search
   app.use(`${API_PREFIX}/vehicles`, vehicleRouter);
   app.use(`${API_PREFIX}/profile`, profileRouter);

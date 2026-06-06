@@ -1,7 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { UpdateLocationSchema, SearchRideSchema } from './rides.validation';
+import {
+  UpdateLocationSchema,
+  SearchRideSchema,
+  EstimateFareSchema,
+  RequestRideSchema,
+} from './rides.validation';
 import * as ridesService from './rides.service';
-import { BadRequestError, ForbiddenError } from '../../utils/errors';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rides Controllers
@@ -9,10 +14,7 @@ import { BadRequestError, ForbiddenError } from '../../utils/errors';
 
 /**
  * PATCH /api/v1/rides/location
- *
- * Allows an authenticated DRIVER to broadcast their current coordinates to
- * Redis. The TTL on the geo-set means the entry auto-expires after 5 minutes
- * of inactivity, keeping the dataset fresh without manual cleanup.
+ * Role: DRIVER
  */
 export async function updateLocation(
   req: Request,
@@ -20,9 +22,7 @@ export async function updateLocation(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const user = req.user!;
-
-    if (user.role !== 'DRIVER') {
+    if (req.user!.role !== 'DRIVER') {
       throw new ForbiddenError('Only drivers can update their location.');
     }
 
@@ -31,12 +31,9 @@ export async function updateLocation(
       throw new BadRequestError('Validation failed', parsed.error.flatten().fieldErrors);
     }
 
-    await ridesService.updateDriverLocation(user.id, parsed.data);
+    await ridesService.updateDriverLocation(req.user!.id, parsed.data);
 
-    res.status(200).json({
-      success: true,
-      data: { message: 'Location updated successfully.' },
-    });
+    res.status(200).json({ success: true, data: { message: 'Location updated successfully.' } });
   } catch (err) {
     next(err);
   }
@@ -44,10 +41,9 @@ export async function updateLocation(
 
 /**
  * POST /api/v1/rides/search
+ * Role: CUSTOMER
  *
- * Allows an authenticated CUSTOMER to discover nearby, available, KYC-approved
- * drivers. Returns an empty array rather than a 404 when no drivers are found —
- * the client should handle the "no drivers nearby" UX gracefully.
+ * Discovers nearby, KYC-approved, available drivers within 5 km.
  */
 export async function searchRide(
   req: Request,
@@ -55,9 +51,7 @@ export async function searchRide(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const user = req.user!;
-
-    if (user.role !== 'CUSTOMER') {
+    if (req.user!.role !== 'CUSTOMER') {
       throw new ForbiddenError('Only customers can search for rides.');
     }
 
@@ -68,11 +62,73 @@ export async function searchRide(
 
     const drivers = await ridesService.findNearbyDrivers(parsed.data);
 
-    res.status(200).json({
-      success: true,
-      data: drivers,
-    });
+    res.status(200).json({ success: true, data: drivers });
   } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/rides/estimate
+ * Role: CUSTOMER
+ *
+ * Returns an array of fare estimates — one per vehicle tier — for a given
+ * pickup → dropoff pair. Pure computation; no DB writes.
+ */
+export async function estimateFare(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'CUSTOMER') {
+      throw new ForbiddenError('Only customers can request fare estimates.');
+    }
+
+    const parsed = EstimateFareSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new BadRequestError('Validation failed', parsed.error.flatten().fieldErrors);
+    }
+
+    const estimates = ridesService.estimateFare(parsed.data);
+
+    res.status(200).json({ success: true, data: estimates });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/rides/request
+ * Role: CUSTOMER
+ *
+ * Creates a Ride record (status = REQUESTED) and dispatches it to nearby,
+ * eligible drivers. Returns the created Ride + dispatched driver IDs so the
+ * frontend/socket layer knows which drivers were pinged.
+ */
+export async function requestRide(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'CUSTOMER') {
+      throw new ForbiddenError('Only customers can request rides.');
+    }
+
+    const parsed = RequestRideSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new BadRequestError('Validation failed', parsed.error.flatten().fieldErrors);
+    }
+
+    const result = await ridesService.requestRide(req.user!.id, parsed.data);
+
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'CUSTOMER_PROFILE_NOT_FOUND') {
+      next(new NotFoundError('CustomerProfile for this user. Create a customer profile first.'));
+      return;
+    }
     next(err);
   }
 }

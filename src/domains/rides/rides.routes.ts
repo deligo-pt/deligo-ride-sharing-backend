@@ -11,28 +11,35 @@ const router = Router();
 
 /**
  * PATCH /api/v1/rides/location
- *
- * Driver broadcasts their live GPS coordinates to Redis.
- *
- * Required headers:
- *   x-mock-user-id : <driver user UUID>
- *   x-mock-role    : DRIVER
- *
- * Body: { lat: number, lng: number }
+ * Driver → broadcast live GPS to Redis + Postgres
+ * Headers: x-mock-user-id | x-mock-role: DRIVER
+ * Body: { lat, lng }
  */
 router.patch('/location', requireAuth, ridesController.updateLocation);
 
 /**
  * POST /api/v1/rides/search
- *
- * Customer searches for nearby, available, KYC-approved drivers.
- *
- * Required headers:
- *   x-mock-user-id : <customer user UUID>
- *   x-mock-role    : CUSTOMER
- *
- * Body: { pickupLat: number, pickupLng: number }
+ * Customer → find nearby available/approved drivers within 5 km
+ * Headers: x-mock-user-id | x-mock-role: CUSTOMER
+ * Body: { pickupLat, pickupLng }
  */
 router.post('/search', requireAuth, ridesController.searchRide);
+
+/**
+ * POST /api/v1/rides/estimate
+ * Customer → get fare estimates for all vehicle tiers (no DB write)
+ * Headers: x-mock-user-id | x-mock-role: CUSTOMER
+ * Body: { pickupLat, pickupLng, dropoffLat, dropoffLng }
+ */
+router.post('/estimate', requireAuth, ridesController.estimateFare);
+
+/**
+ * POST /api/v1/rides/request
+ * Customer → create Ride record + dispatch to nearby eligible drivers
+ * Headers: x-mock-user-id | x-mock-role: CUSTOMER
+ * Body: { pickupLat, pickupLng, pickupAddress, dropoffLat, dropoffLng,
+ *         dropoffAddress, vehicleType, estimatedFare }
+ */
+router.post('/request', requireAuth, ridesController.requestRide);
 
 export default router;
