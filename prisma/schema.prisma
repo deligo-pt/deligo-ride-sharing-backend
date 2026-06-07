@@ -97,6 +97,9 @@ model User {
   role        UserRole   @default(CUSTOMER)
   status      UserStatus @default(ACTIVE)
 
+  // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
+  fcmToken    String?
+
   // Relations
   customerProfile       CustomerProfile?
   driverProfile         DriverProfile?

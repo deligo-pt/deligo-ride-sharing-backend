@@ -31,3 +31,11 @@ export interface DispatchOptions {
   /** Optional structured metadata stored in the Notification.data JSON column */
   data?:     Record<string, unknown>;
 }
+
+// ── PATCH /api/v1/users/fcm-token ────────────────────────────────────────────
+export const SaveFcmTokenSchema = z.object({
+  fcmToken: z
+    .string({ error: 'fcmToken is required' })
+    .min(1, 'fcmToken cannot be empty'),
+});
+export type SaveFcmTokenDto = z.infer<typeof SaveFcmTokenSchema>;

@@ -25,6 +25,8 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET must be set'),
   // Redis — geospatial driver location tracking
   REDIS_URL: z.string().default('redis://localhost:6379'),
+  // Firebase Admin — push notifications
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./firebase-service-account.json'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

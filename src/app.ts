@@ -13,6 +13,16 @@ import profileRouter from './domains/profile/profile.routes';
 import ridesRouter from './domains/rides/rides.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 
+// ── Inline micro-router for /api/v1/users ────────────────────────────────────
+// Keeps the users-related endpoints (e.g. FCM token) without needing a
+// full domain folder for a single route.
+import { Router } from 'express';
+import { requireAuth } from './middlewares/mockAuth';
+import { saveFcmTokenHandler } from './domains/notifications/notifications.controller';
+const usersRouter = Router();
+/** PATCH /api/v1/users/fcm-token — save/replace FCM push token (any role) */
+usersRouter.patch('/fcm-token', requireAuth, saveFcmTokenHandler);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Express Application Factory
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,6 +83,7 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/profile`, profileRouter);
   app.use(`${API_PREFIX}/kyc`, kycRouter);
   app.use(`${API_PREFIX}/notifications`, notificationsRouter);
+  app.use(`${API_PREFIX}/users`, usersRouter);
 
   // Registers routes will be here
   // API root — health / welcome

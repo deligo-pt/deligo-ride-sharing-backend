@@ -10,3 +10,4 @@ yarn-error.log*
 coverage/
 .nyc_output/
 agent.md
+firebase-service-account.json

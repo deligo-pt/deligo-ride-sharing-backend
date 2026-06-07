@@ -4,8 +4,9 @@ import {
   getInbox,
   markAllAsRead,
   markAsRead,
+  saveFcmToken,
 } from './notifications.service';
-import { ListNotificationsSchema } from './notifications.validation';
+import { ListNotificationsSchema, SaveFcmTokenSchema } from './notifications.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notifications Controller  — PRD 3.12
@@ -74,6 +75,30 @@ export async function readAllNotifications(
 ): Promise<void> {
   try {
     const result = await markAllAsRead(req.user!.id);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/v1/users/fcm-token
+ * Saves or replaces the FCM push token for the authenticated user.
+ * Called by the mobile app on login or whenever the OS rotates the token.
+ * Accessible by any authenticated role (CUSTOMER, DRIVER, ADMIN).
+ */
+export async function saveFcmTokenHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const parsed = SaveFcmTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new BadRequestError('Validation failed', parsed.error.flatten().fieldErrors);
+    }
+
+    const result = await saveFcmToken(req.user!.id, parsed.data.fcmToken);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     next(err);

@@ -1,5 +1,6 @@
 import { NotificationType } from '@prisma/client';
 import type { Server as SocketIoServer } from 'socket.io';
+import admin from '../../utils/firebase';
 import prisma from '../../config/db';
 import type {
   ClientToServerEvents,
@@ -16,10 +17,10 @@ import type {
 // PRD 3.12: Notification Engine
 //
 // Single source of truth for dispatching notifications across multiple
-// channels. Currently supported:
+// channels. Supported:
 //   • IN_APP    → persisted in the `notifications` table (Prisma)
 //   • WEBSOCKET → pushed to the user's personal Socket.io room
-//   • PUSH      → [MOCK] placeholder for Firebase FCM
+//   • PUSH      → Firebase FCM via firebase-admin SDK
 //   • SMS       → [MOCK] placeholder for Twilio SMS
 //   • EMAIL     → [MOCK] placeholder for SendGrid / SES
 //
@@ -88,9 +89,61 @@ function pushOverWebSocket(
   console.info(`[NOTIFICATION] WebSocket → user room "${userRoom(opts.userId)}" | ${opts.title}`);
 }
 
-/** [MOCK] Will integrate Firebase FCM in production */
-function sendPush(opts: DispatchOptions): void {
-  console.log(`[MOCK PUSH]  → userId=${opts.userId} | ${opts.title}: ${opts.message}`);
+/**
+ * Send a real Firebase Cloud Messaging push notification.
+ *
+ * Flow:
+ *  1. Fetch the user's fcmToken from the database.
+ *  2. If no token is stored, warn and bail — don't crash the caller.
+ *  3. Send via firebase-admin messaging().send().
+ *  4. Handle expired/invalid tokens gracefully (log only).
+ */
+async function sendPush(opts: DispatchOptions): Promise<void> {
+  // 1. Lookup user's FCM token
+  const user = await prisma.user.findUnique({
+    where: { id: opts.userId },
+    select: { id: true, fcmToken: true },
+  });
+
+  if (!user?.fcmToken) {
+    console.warn(
+      `[PUSH] No FCM token for userId=${opts.userId} — skipping push notification.`,
+    );
+    return;
+  }
+
+  // 2. Send via Firebase Admin SDK
+  try {
+    const messageId = await admin.messaging().send({
+      token: user.fcmToken,
+      notification: {
+        title: opts.title,
+        body:  opts.message,
+      },
+      // Optional data payload for the mobile app to act on
+      data: opts.data
+        ? Object.fromEntries(
+            Object.entries(opts.data).map(([k, v]) => [k, String(v)]),
+          )
+        : undefined,
+    });
+
+    console.info(`[PUSH] ✅ Sent | messageId=${messageId} | userId=${opts.userId} | ${opts.title}`);
+  } catch (err: unknown) {
+    // Expired or unregistered tokens are expected — log and move on
+    const code = (err as { code?: string }).code ?? '';
+    if (code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token') {
+      console.warn(`[PUSH] Token expired/invalid for userId=${opts.userId} — clearing from DB.`);
+      // Proactively clear stale token so we don't keep trying
+      await prisma.user.update({
+        where: { id: opts.userId },
+        data:  { fcmToken: null },
+      });
+    } else {
+      console.error(`[PUSH] Failed to send to userId=${opts.userId}:`, err);
+    }
+  }
 }
 
 /** [MOCK] Will integrate Twilio SMS in production */
@@ -149,8 +202,8 @@ export const NotificationEngine = {
       pushOverWebSocket(opts, record);
     }
 
-    // 3. Other channels — mocked for now
-    if (channels.includes('PUSH'))  sendPush(opts);
+    // 3. Other channels
+    if (channels.includes('PUSH'))  await sendPush(opts);
     if (channels.includes('SMS'))   sendSMS(opts);
     if (channels.includes('EMAIL')) sendEmail(opts);
   },
@@ -235,6 +288,27 @@ export async function markAllAsRead(userId: string) {
     data:  { isRead: true, readAt: new Date() },
   });
   return { updatedCount: result.count };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FCM Token Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Save (or replace) the FCM push token for a user.
+ * Called by the mobile app on login or when the OS issues a new token.
+ */
+export async function saveFcmToken(
+  userId: string,
+  fcmToken: string,
+): Promise<{ message: string }> {
+  await prisma.user.update({
+    where: { id: userId },
+    data:  { fcmToken },
+  });
+
+  console.info(`[FCM] Token saved for userId=${userId}`);
+  return { message: 'FCM token saved successfully.' };
 }
 
 // Re-export the type so callers don't need two imports
