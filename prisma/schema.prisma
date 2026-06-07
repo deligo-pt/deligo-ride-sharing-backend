@@ -79,9 +79,11 @@ enum NotificationType {
   RIDE_ACCEPTED
   RIDE_COMPLETED
   RIDE_CANCELLED
+  RIDE_UPDATE
   PAYMENT
   PROMO
   SYSTEM
+  SECURITY
 }
 
 // USER — Core identity only. Authentication is handled by an external microservice.
@@ -387,6 +389,7 @@ model Notification {
   readAt      DateTime?
 
   createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   @@index([userId, isRead])
   @@map("notifications")

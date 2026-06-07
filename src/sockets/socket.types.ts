@@ -39,6 +39,9 @@ export interface ClientToServerEvents {
   /** Join a private ride room */
   join_ride: (payload: { rideId: string }) => void;
 
+  /** Join the user's personal notification room (call once on connect) */
+  notification_subscribe: () => void;
+
   /** Driver broadcasts live GPS position */
   driver_location_update: (payload: LocationPayload) => void;
 
@@ -56,6 +59,9 @@ export interface ServerToClientEvents {
 
   /** Acknowledgement after joining a room */
   room_joined: (payload: { room: string }) => void;
+
+  /** Push a notification to a user's personal room */
+  notification: (payload: NotificationPayload) => void;
 
   /** Error feedback to the originating client */
   error: (payload: { message: string }) => void;
@@ -81,5 +87,14 @@ export interface ChatMessagePayload {
   senderId: string;
   senderRole: string;
   message: string;
+  timestamp: string; // ISO-8601
+}
+
+export interface NotificationPayload {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  data: Record<string, unknown> | null;
   timestamp: string; // ISO-8601
 }

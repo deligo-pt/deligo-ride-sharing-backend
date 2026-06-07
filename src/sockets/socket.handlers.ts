@@ -25,6 +25,21 @@ export function registerSocketHandlers(io: IoServer): void {
     const { id: userId, role } = socket.data.user;
     console.info(`🔌 [SOCKET] Connected   | socketId=${socket.id} userId=${userId} role=${role}`);
 
+    // ── Auto-join personal notification room ──────────────────────────────────
+    // Every authenticated socket is automatically placed in user_<userId>.
+    // The NotificationEngine uses this room to push real-time notifications.
+    void socket.join(`user_${userId}`);
+
+    // ── notification_subscribe ────────────────────────────────────────────────
+    // Explicit subscription event — lets the client confirm the join and
+    // learn the room name. Useful for debugging in Postman.
+    socket.on('notification_subscribe', async () => {
+      const room = `user_${userId}`;
+      await socket.join(room);
+      socket.emit('room_joined', { room });
+      console.info(`[SOCKET] ${userId} subscribed to notification room "${room}"`);
+    });
+
     // ── join_ride ─────────────────────────────────────────────────────────────
     // Accepts: { "rideId": "..." }  OR  a plain string "..."
     // Both the driver and customer emit this right after a ride is accepted.

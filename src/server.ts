@@ -3,6 +3,7 @@ import http from 'http';
 import { createApp } from './app';
 import prisma from './config/db';
 import { env } from './config/env';
+import { NotificationEngine } from './domains/notifications/notifications.service';
 import { initSocketServer } from './sockets';
 
 // Server Entry Point
@@ -22,7 +23,11 @@ async function bootstrap(): Promise<void> {
   const server = http.createServer(app);
 
   // Attach Socket.io to the same HTTP server (same port as REST)
-  initSocketServer(server);
+  const io = initSocketServer(server);
+
+  // Give NotificationEngine access to the io instance so it can push
+  // real-time notifications to user rooms from anywhere in the codebase.
+  NotificationEngine.setIo(io);
 
   server.listen(env.PORT, () => {
     console.info(`🚀 Server running on http://localhost:${env.PORT}`);

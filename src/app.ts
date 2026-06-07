@@ -8,6 +8,7 @@ import { NotFoundError } from './utils/errors';
 
 // ─── Route Imports ────────────────────────────────────────────────────────────
 import kycRouter from './domains/kyc/kyc.routes';
+import notificationsRouter from './domains/notifications/notifications.routes';
 import profileRouter from './domains/profile/profile.routes';
 import ridesRouter from './domains/rides/rides.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
@@ -67,10 +68,11 @@ export function createApp(): Application {
   const API_PREFIX = '/api/v1';
 
   // ── Domain Routers ────────────────────────────────────────────────────────
-  app.use(`${API_PREFIX}/rides`, ridesRouter);   // geospatial: /location, /search
+  app.use(`${API_PREFIX}/rides`, ridesRouter);
   app.use(`${API_PREFIX}/vehicles`, vehicleRouter);
   app.use(`${API_PREFIX}/profile`, profileRouter);
   app.use(`${API_PREFIX}/kyc`, kycRouter);
+  app.use(`${API_PREFIX}/notifications`, notificationsRouter);
 
   // Registers routes will be here
   // API root — health / welcome
