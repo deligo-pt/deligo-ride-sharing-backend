@@ -123,10 +123,11 @@ model CustomerProfile {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   totalRides      Int      @default(0)
-  averageRating   Float    @default(0)
+  totalReviews    Int      @default(0)
+  averageRating   Float    @default(5.0)
   homeAddress     String?
   workAddress     String?
- 
+
   emergencyContactNumber String?
 
   createdAt       DateTime @default(now())
@@ -165,7 +166,8 @@ model DriverProfile {
   licenseNumber     String         @unique
   licenseExpiresAt  DateTime
   totalRides        Int            @default(0)
-  averageRating     Float          @default(0)
+  totalReviews      Int            @default(0)
+  averageRating     Float          @default(5.0)
   isAvailable       Boolean        @default(false)
   currentLatitude   Float?
   currentLongitude  Float?
@@ -296,7 +298,7 @@ model Ride {
   promoCodeId       String?
 promoCode         PromoCode? @relation(fields: [promoCodeId], references: [id])
   payment             Payment?
-  review              Review?
+  reviews             Review[]   // one per direction: customer→driver AND driver→customer
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
@@ -356,10 +358,12 @@ model WalletTransaction {
 }
 
 // REVIEWS
+// One review per direction per ride (author+ride is unique).
+// A customer can review the driver AND the driver can review the customer.
 
 model Review {
   id          String   @id @default(uuid())
-  rideId      String   @unique
+  rideId      String
   ride        Ride     @relation(fields: [rideId], references: [id])
 
   authorId    String
@@ -367,12 +371,14 @@ model Review {
   targetId    String
   target      User     @relation("ReviewTarget", fields: [targetId], references: [id])
 
-  rating      Int    @default(0)  // 1-5 //default  0
+  rating      Int      // 1-5, enforced by Zod at the application layer
   comment     String?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Guarantees each user can only review once per ride
+  @@unique([rideId, authorId])
   @@index([targetId])
   @@map("reviews")
 }

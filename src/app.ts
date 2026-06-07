@@ -10,6 +10,7 @@ import { NotFoundError } from './utils/errors';
 import kycRouter from './domains/kyc/kyc.routes';
 import notificationsRouter from './domains/notifications/notifications.routes';
 import profileRouter from './domains/profile/profile.routes';
+import reviewsRouter from './domains/reviews/reviews.routes';
 import ridesRouter from './domains/rides/rides.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 
@@ -83,6 +84,7 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/profile`, profileRouter);
   app.use(`${API_PREFIX}/kyc`, kycRouter);
   app.use(`${API_PREFIX}/notifications`, notificationsRouter);
+  app.use(`${API_PREFIX}/reviews`, reviewsRouter);
   app.use(`${API_PREFIX}/users`, usersRouter);
 
   // Registers routes will be here
