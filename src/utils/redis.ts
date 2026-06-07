@@ -76,3 +76,6 @@ export const LocationService = {
 };
 
 export default redis;
+
+// Named export so callers can do: import { redis } from '../../utils/redis'
+export { redis };

@@ -67,4 +67,11 @@ router.patch('/:id/status', requireAuth, ridesController.updateRideStatus);
  */
 router.post('/:id/cancel', requireAuth, ridesController.cancelRide);
 
+/**
+ * POST /api/v1/rides/:id/share
+ * Customer → generate 24-hour tracking token + public URL
+ * Headers: x-mock-role: CUSTOMER
+ */
+router.post('/:id/share', requireAuth, ridesController.shareRide);
+
 export default router;

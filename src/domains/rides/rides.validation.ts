@@ -86,3 +86,9 @@ export const CancelRideSchema = z.object({
   reason: z.string({ error: 'reason is required' }).min(1, 'reason cannot be empty'),
 });
 export type CancelRideDto = z.infer<typeof CancelRideSchema>;
+
+// ── POST /api/v1/rides/:id/share ─────────────────────────────────────────────
+// No body required. The rideId comes from the URL param, auth from headers.
+// (Schema kept as empty object so it's consistent with the rest of the file)
+export const ShareRideSchema = z.object({});
+export type ShareRideDto = z.infer<typeof ShareRideSchema>;

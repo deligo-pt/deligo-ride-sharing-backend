@@ -1,7 +1,9 @@
 import 'dotenv/config'; // Must be the VERY FIRST import to load .env
+import http from 'http';
 import { createApp } from './app';
 import prisma from './config/db';
 import { env } from './config/env';
+import { initSocketServer } from './sockets';
 
 // Server Entry Point
 
@@ -15,13 +17,19 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // ── 2. Create and start the Express app ───────────────────────────────────
-  const app = createApp();
-  const server = app.listen(env.PORT, () => {
+  // ── 2. Create Express app + HTTP server + Socket.io ────────────────────────
+  const app    = createApp();
+  const server = http.createServer(app);
+
+  // Attach Socket.io to the same HTTP server (same port as REST)
+  initSocketServer(server);
+
+  server.listen(env.PORT, () => {
     console.info(`🚀 Server running on http://localhost:${env.PORT}`);
     console.info(`   Environment : ${env.NODE_ENV}`);
     console.info(`   Health      : http://localhost:${env.PORT}/health`);
     console.info(`   API         : http://localhost:${env.PORT}/api/v1`);
+    console.info(`   WebSocket   : ws://localhost:${env.PORT}`);
   });
 
   // ── 3. Graceful Shutdown ───────────────────────────────────────────────────

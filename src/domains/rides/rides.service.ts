@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import prisma from '../../config/db';
-import { LocationService } from '../../utils/redis';
+import { LocationService, redis } from '../../utils/redis';
 import { PricingEngine } from './pricing.service';
 import type {
   UpdateLocationDto,
@@ -371,4 +372,67 @@ export async function cancelRide(
 
   const results = await prisma.$transaction(updates);
   return results[0];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD 3.5: Trip Sharing
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TRACKING_TOKEN_TTL_SECONDS = 86_400; // 24 hours
+const TRACKING_BASE_URL = 'https://deligo.com/track';
+
+/**
+ * Generate a one-time tracking token for a ride and persist it in Redis.
+ *
+ * Flow:
+ *  1. Resolve the customer’s CustomerProfile to verify ride ownership.
+ *  2. Confirm the ride is in an active (non-terminal) state.
+ *  3. Generate a UUID token, write it to Redis with a 24-hour TTL.
+ *  4. Return the public tracking URL the customer can share.
+ *
+ * A read-only guest may later present this token to join the Socket.io room
+ * without a driver or customer account.
+ */
+export async function shareRide(
+  userId: string,
+  rideId: string,
+): Promise<{ trackingToken: string; trackingUrl: string }> {
+  // 1. Resolve the customer profile
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!customerProfile) {
+    throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
+  }
+
+  // 2. Verify ride ownership and active status
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    select: { id: true, customerId: true, status: true },
+  });
+
+  if (!ride) {
+    throw new Error('RIDE_NOT_FOUND');
+  }
+
+  if (ride.customerId !== customerProfile.id) {
+    throw new Error('RIDE_FORBIDDEN');
+  }
+
+  if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
+    throw new Error('RIDE_ALREADY_TERMINAL');
+  }
+
+  // 3. Generate token and persist in Redis
+  const trackingToken = randomUUID();
+  const redisKey = `tracking_token:${trackingToken}`;
+  await redis.setex(redisKey, TRACKING_TOKEN_TTL_SECONDS, rideId);
+
+  // 4. Return the public share URL
+  return {
+    trackingToken,
+    trackingUrl: `${TRACKING_BASE_URL}/${trackingToken}`,
+  };
 }

@@ -235,3 +235,30 @@ export async function cancelRide(
     next(mapRideError(err));
   }
 }
+
+/**
+ * POST /api/v1/rides/:id/share
+ * Role: CUSTOMER
+ *
+ * Generates a 24-hour tracking token stored in Redis and returns a public
+ * tracking URL the customer can share with friends/family. A guest can use
+ * the token to join the Socket.io room in read-only mode.
+ */
+export async function shareRide(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'CUSTOMER') {
+      throw new ForbiddenError('Only customers can share their ride.');
+    }
+
+    const rideId = String(req.params.id);
+    const result = await ridesService.shareRide(req.user!.id, rideId);
+
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    next(mapRideError(err));
+  }
+}
