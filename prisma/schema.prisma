@@ -41,6 +41,7 @@ enum RideStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  EMERGENCY
 }
 
 enum PaymentMethod {
@@ -108,6 +109,9 @@ model User {
   reviewsReceived       Review[]         @relation("ReviewTarget")
   wallet                Wallet?
   promoUsages           PromoUsage[]
+  emergencyContacts     EmergencyContact[]
+  supportTickets        SupportTicket[]   @relation("TicketCreator")
+  assignedTickets       SupportTicket[]   @relation("TicketAdmin")
 
   @@index([email])
   @@index([phone])
@@ -295,6 +299,7 @@ model Ride {
   promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id])
   payment     Payment?
   reviews     Review[] // one per direction: customer→driver AND driver→customer
+  tickets     SupportTicket[]
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
@@ -454,4 +459,89 @@ model PromoUsage {
   @@index([promoCodeId])
   @@index([userId])
   @@map("promo_usages")
+}
+
+// CUSTOMER SUPPORT & SAFETY  —  PRD 3.x
+
+enum TicketType {
+  SAFETY
+  COMPLAINT
+  LOST_ITEM
+  GENERAL
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// Emergency contacts linked to a user (max 3 enforced at the app layer).
+model EmergencyContact {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  phoneNumber String
+  relation    String   // e.g. "Spouse", "Parent", "Friend"
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("emergency_contacts")
+}
+
+/// A support ticket opened by any authenticated user.
+model SupportTicket {
+  id          String         @id @default(uuid())
+
+  userId      String
+  user        User           @relation("TicketCreator", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Optional link to the ride that triggered the ticket.
+  rideId      String?
+  ride        Ride?          @relation(fields: [rideId], references: [id])
+
+  subject     String
+  description String
+  type        TicketType
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+
+  /// Admin assigned to handle this ticket.
+  adminId     String?
+  admin       User?          @relation("TicketAdmin", fields: [adminId], references: [id])
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  messages    TicketMessage[]
+
+  @@index([userId, status])
+  @@index([status, priority])
+  @@map("support_tickets")
+}
+
+/// A single message in a support ticket thread (for Live Chat).
+model TicketMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  senderId  String        // userId of the sender (customer or admin)
+  message   String
+
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_messages")
 }

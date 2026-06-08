@@ -14,6 +14,7 @@ import profileRouter from './domains/profile/profile.routes';
 import promotionsRouter from './domains/promotions/promotions.routes';
 import reviewsRouter from './domains/reviews/reviews.routes';
 import ridesRouter from './domains/rides/rides.routes';
+import supportRouter from './domains/support/support.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 
 // ── Inline micro-router for /api/v1/users ────────────────────────────────────
@@ -89,6 +90,7 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/notifications`, notificationsRouter);
   app.use(`${API_PREFIX}/promotions`, promotionsRouter);
   app.use(`${API_PREFIX}/reviews`, reviewsRouter);
+  app.use(`${API_PREFIX}/support`, supportRouter);
   app.use(`${API_PREFIX}/users`, usersRouter);
 
   // Registers routes will be here
