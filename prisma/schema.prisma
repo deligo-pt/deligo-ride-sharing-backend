@@ -1,5 +1,3 @@
-
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,7 +9,7 @@ datasource db {
 // ENUMS
 
 enum UserRole {
-  CUSTOMER 
+  CUSTOMER
   DRIVER
   ADMIN
 }
@@ -22,6 +20,7 @@ enum UserStatus {
   PENDING_VERIFICATION
   DEACTIVATED
 }
+
 enum AccessLabel {
   SUPER_ADMIN
   SUPPORT
@@ -58,12 +57,12 @@ enum PaymentStatus {
 }
 
 enum VehicleType {
- SUV
- Sedan
- Hatchback
-Micro
-Motorcycle
-PickupTruck
+  SUV
+  Sedan
+  Hatchback
+  Micro
+  Motorcycle
+  PickupTruck
 }
 
 enum DocumentStatus {
@@ -89,25 +88,26 @@ enum NotificationType {
 // USER — Core identity only. Authentication is handled by an external microservice.
 
 model User {
-  id          String     @id @default(uuid())
-  email       String     @unique
-  phone       String     @unique
-  firstName   String?
-  lastName    String?
-  role        UserRole   @default(CUSTOMER)
-  status      UserStatus @default(ACTIVE)
+  id        String     @id @default(uuid())
+  email     String     @unique
+  phone     String     @unique
+  firstName String?
+  lastName  String?
+  role      UserRole   @default(CUSTOMER)
+  status    UserStatus @default(ACTIVE)
 
   // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
-  fcmToken    String?
+  fcmToken String?
 
   // Relations
   customerProfile       CustomerProfile?
   driverProfile         DriverProfile?
   adminProfile          AdminProfile?
   notificationsReceived Notification[]
-  reviewsGiven          Review[]   @relation("ReviewAuthor")
-  reviewsReceived       Review[]   @relation("ReviewTarget")
+  reviewsGiven          Review[]         @relation("ReviewAuthor")
+  reviewsReceived       Review[]         @relation("ReviewTarget")
   wallet                Wallet?
+  promoUsages           PromoUsage[]
 
   @@index([email])
   @@index([phone])
@@ -116,79 +116,76 @@ model User {
 
 // CUSTOMER PROFILE
 
-
 model CustomerProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  totalRides      Int      @default(0)
-  totalReviews    Int      @default(0)
-  averageRating   Float    @default(5.0)
-  homeAddress     String?
-  workAddress     String?
+  totalRides    Int     @default(0)
+  totalReviews  Int     @default(0)
+  averageRating Float   @default(5.0)
+  homeAddress   String?
+  workAddress   String?
 
   emergencyContactNumber String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  rides           Ride[]   @relation("CustomerRides")
+  rides Ride[] @relation("CustomerRides")
 
   @@map("customer_profiles")
 }
 
-
-
 //  ADMIN PROFILE
 model AdminProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  accessLabel     AccessLabel @default(SUPER_ADMIN)
-  assignedRegion  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String      @id @default(uuid())
+  userId         String      @unique
+  accessLabel    AccessLabel @default(SUPER_ADMIN)
+  assignedRegion String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   // Relations
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("admin_profiles")
 }
-  
+
 // DRIVER PROFILE
 
-
 model DriverProfile {
-  id                String         @id @default(uuid())
-  userId            String         @unique
-  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  licenseNumber     String         @unique
-  licenseExpiresAt  DateTime
-  totalRides        Int            @default(0)
-  totalReviews      Int            @default(0)
-  averageRating     Float          @default(5.0)
-  isAvailable       Boolean        @default(false)
-  currentLatitude   Float?
-  currentLongitude  Float?
+  licenseNumber    String   @unique
+  licenseExpiresAt DateTime
+  totalRides       Int      @default(0)
+  totalReviews     Int      @default(0)
+  averageRating    Float    @default(5.0)
+  isAvailable      Boolean  @default(false)
+  currentLatitude  Float?
+  currentLongitude Float?
 
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  vehicle           Vehicle?
-  document          DriverDocument?
-  rides             Ride[]         @relation("DriverRides")
+  vehicle  Vehicle?
+  document DriverDocument?
+  rides    Ride[]          @relation("DriverRides")
 
   @@map("driver_profiles")
 }
 
-enum VehicleClass{
+enum VehicleClass {
   ECONOMY
   COMFORT
   PREMIUM
-
 }
+
 enum VehicleApprovalStatus {
   PENDING_REVIEW
   APPROVED
@@ -197,58 +194,58 @@ enum VehicleApprovalStatus {
 }
 
 model Vehicle {
-  id                String               @id @default(uuid())
-  driverProfileId   String               @unique
-  driverProfile     DriverProfile        @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid())
+  driverProfileId String        @unique
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
 
-  vehicleClass      VehicleClass
-  vehicleType       VehicleType
-  brand             String
-  model             String
-  year              Int
-  color             String
-  licensePlate      String               @unique
-  capacity          Int                  @default(4)
+  vehicleClass VehicleClass
+  vehicleType  VehicleType
+  brand        String
+  model        String
+  year         Int
+  color        String
+  licensePlate String       @unique
+  capacity     Int          @default(4)
 
-  registrationExpiryDate  DateTime?
-  insuranceExpiryDate     DateTime?
+  registrationExpiryDate DateTime?
+  insuranceExpiryDate    DateTime?
 
-  photoUrls         String[]             @default([])
+  photoUrls String[] @default([])
 
-  approvalStatus    VehicleApprovalStatus @default(PENDING_REVIEW)
-  adminNote         String?
-  reviewedAt        DateTime?
+  approvalStatus VehicleApprovalStatus @default(PENDING_REVIEW)
+  adminNote      String?
+  reviewedAt     DateTime?
 
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("vehicles")
 }
 
 model DriverDocument {
-  id              String         @id @default(uuid())
-  driverProfileId String         @unique
-  driverProfile   DriverProfile  @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
-  
-  drivingLicenseUrl       String
-  nationalIdUrl           String
-  vehicleRegistrationUrl  String
-  vehicleInsuranceUrl     String
-  driverSelfieUrl         String
-  proofOfAddressUrl       String
-  taxIdUrl                String
+  id              String        @id @default(uuid())
+  driverProfileId String        @unique
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+
+  drivingLicenseUrl      String
+  nationalIdUrl          String
+  vehicleRegistrationUrl String
+  vehicleInsuranceUrl    String
+  driverSelfieUrl        String
+  proofOfAddressUrl      String
+  taxIdUrl               String
 
   drivingLicenseExpiry      DateTime?
   vehicleRegistrationExpiry DateTime?
   vehicleInsuranceExpiry    DateTime?
 
-  verificationStatus    DocumentStatus @default(PENDING)
-  reviewNote      String?
-  reviewedAt      DateTime?
-  rejectionReason String?
+  verificationStatus DocumentStatus @default(PENDING)
+  reviewNote         String?
+  reviewedAt         DateTime?
+  rejectionReason    String?
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("driver_documents")
 }
@@ -256,49 +253,48 @@ model DriverDocument {
 // RIDES
 
 model Ride {
-  id                  String       @id @default(uuid())
+  id              String          @id @default(uuid())
   customerId      String
-  customerProfile     CustomerProfile @relation("CustomerRides", fields: [customerId], references: [id])
-  driverProfileId     String?
-  driverProfile       DriverProfile? @relation("DriverRides", fields: [driverProfileId], references: [id])
-  vehicleClass      VehicleClass @default(ECONOMY)
-  vehicleType         VehicleType  @default(Hatchback)
-  status              RideStatus   @default(REQUESTED)
+  customerProfile CustomerProfile @relation("CustomerRides", fields: [customerId], references: [id])
+  driverProfileId String?
+  driverProfile   DriverProfile?  @relation("DriverRides", fields: [driverProfileId], references: [id])
+  vehicleClass    VehicleClass    @default(ECONOMY)
+  vehicleType     VehicleType     @default(Hatchback)
+  status          RideStatus      @default(REQUESTED)
 
   // Pickup
-  pickupAddress       String
-  pickupLatitude      Float
-  pickupLongitude     Float
+  pickupAddress   String
+  pickupLatitude  Float
+  pickupLongitude Float
 
   // Dropoff
-  dropoffAddress      String
-  dropoffLatitude     Float
-  dropoffLongitude    Float
+  dropoffAddress   String
+  dropoffLatitude  Float
+  dropoffLongitude Float
 
   // Fare
-  estimatedFare       Decimal  @db.Decimal(10, 2)
-  finalFare           Decimal?  @db.Decimal(10, 2)
-  distanceKm          Float?
-  durationMinutes     Int?
-
+  estimatedFare   Decimal  @db.Decimal(10, 2)
+  finalFare       Decimal? @db.Decimal(10, 2)
+  distanceKm      Float?
+  durationMinutes Int?
 
   // Timestamps
-  requestedAt         DateTime     @default(now())
-  acceptedAt          DateTime?
-  arrivedAt           DateTime?
-  startedAt           DateTime?
-  completedAt         DateTime?
-  cancelledAt         DateTime?
-  cancellationReason  String?
+  requestedAt        DateTime  @default(now())
+  acceptedAt         DateTime?
+  arrivedAt          DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
 
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  promoCodeId       String?
-promoCode         PromoCode? @relation(fields: [promoCodeId], references: [id])
-  payment             Payment?
-  reviews             Review[]   // one per direction: customer→driver AND driver→customer
+  promoCodeId String?
+  promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id])
+  payment     Payment?
+  reviews     Review[] // one per direction: customer→driver AND driver→customer
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
@@ -308,50 +304,50 @@ promoCode         PromoCode? @relation(fields: [promoCodeId], references: [id])
 // PAYMENTS & WALLET => demo 
 
 model Payment {
-  id              String        @id @default(uuid())
-  rideId          String        @unique
-  ride            Ride          @relation(fields: [rideId], references: [id])
+  id     String @id @default(uuid())
+  rideId String @unique
+  ride   Ride   @relation(fields: [rideId], references: [id])
 
-  amount          Float
-  method          PaymentMethod
-  status          PaymentStatus @default(PENDING)
-  transactionRef  String?       @unique
-  paidAt          DateTime?
+  amount         Float
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  transactionRef String?       @unique
+  paidAt         DateTime?
 
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("payments")
 }
 
 model Wallet {
-  id              String          @id @default(uuid())
-  userId          String          @unique
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  balance         Float           @default(0)
-  currency        String          @default("USD")
+  balance  Float  @default(0)
+  currency String @default("USD")
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  transactions    WalletTransaction[]
+  transactions WalletTransaction[]
 
   @@map("wallets")
 }
 
 model WalletTransaction {
-  id          String   @id @default(uuid())
-  walletId    String
-  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid())
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   amount      Float
-  type        String   // "CREDIT" | "DEBIT"
+  type        String // "CREDIT" | "DEBIT"
   description String?
   reference   String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([walletId])
   @@map("wallet_transactions")
@@ -362,20 +358,20 @@ model WalletTransaction {
 // A customer can review the driver AND the driver can review the customer.
 
 model Review {
-  id          String   @id @default(uuid())
-  rideId      String
-  ride        Ride     @relation(fields: [rideId], references: [id])
+  id     String @id @default(uuid())
+  rideId String
+  ride   Ride   @relation(fields: [rideId], references: [id])
 
-  authorId    String
-  author      User     @relation("ReviewAuthor", fields: [authorId], references: [id])
-  targetId    String
-  target      User     @relation("ReviewTarget", fields: [targetId], references: [id])
+  authorId String
+  author   User   @relation("ReviewAuthor", fields: [authorId], references: [id])
+  targetId String
+  target   User   @relation("ReviewTarget", fields: [targetId], references: [id])
 
-  rating      Int      // 1-5, enforced by Zod at the application layer
-  comment     String?
+  rating  Int // 1-5, enforced by Zod at the application layer
+  comment String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Guarantees each user can only review once per ride
   @@unique([rideId, authorId])
@@ -386,19 +382,19 @@ model Review {
 // NOTIFICATIONS
 
 model Notification {
-  id          String           @id @default(uuid())
-  userId      String
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type        NotificationType
-  title       String
-  body        String
-  data        Json?
-  isRead      Boolean          @default(false)
-  readAt      DateTime?
+  type   NotificationType
+  title  String
+  body   String
+  data   Json?
+  isRead Boolean          @default(false)
+  readAt DateTime?
 
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, isRead])
   @@map("notifications")
@@ -406,29 +402,56 @@ model Notification {
 
 // PROMO CODES
 
-enum DiscountType{
+enum DiscountType {
+  FLAT
   PERCENTAGE
-  FIXED
 }
 
 model PromoCode {
-  id              String    @id @default(uuid())
-  code            String    @unique
-  discountType      DiscountType @default(PERCENTAGE)
-  minimumFareAmount Decimal? @db.Decimal(10, 2)
-  description     String?
-  discountPercent Float?
-  discountAmount  Decimal? @db.Decimal(10, 2)
-  maxUses         Int?
-  usedCount       Int       @default(0)
-  validFrom       DateTime
-  validUntil      DateTime
-  isActive        Boolean   @default(true)
+  id             String       @id @default(uuid())
+  /// Stored as uppercase. Enforced at the application layer via Zod transform.
+  code           String       @unique
+  discountType   DiscountType
+  discountValue  Float
+  /// For PERCENTAGE codes: cap the maximum discount amount. Null = uncapped.
+  maxDiscountCap Float?
+  /// Minimum ride fare required to apply this promo code.
+  minRideValue   Float        @default(0)
+  maxGlobalUses  Int
+  currentUses    Int          @default(0)
+  validFrom      DateTime
+  validUntil     DateTime
+  isActive       Boolean      @default(true)
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  // relations 
-  rides             Ride[]
+  createdAt DateTime @default(now())
+
+  // Relations
+  rides  Ride[]
+  usages PromoUsage[]
 
   @@map("promo_codes")
+}
+
+/// Records a single redemption of a PromoCode by a User.
+/// Written when a ride reaches COMPLETED status with a promo attached.
+model PromoUsage {
+  id String @id @default(uuid())
+
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Optional: populated once the ride that used the code is COMPLETED.
+  rideId String?
+
+  /// The actual monetary discount that was applied to the ride fare.
+  discountApplied Float
+
+  createdAt DateTime @default(now())
+
+  @@index([promoCodeId])
+  @@index([userId])
+  @@map("promo_usages")
 }
