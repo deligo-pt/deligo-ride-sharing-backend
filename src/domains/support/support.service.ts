@@ -8,7 +8,7 @@ import type {
 } from './support.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Support Service  —  PRD 3.x: Customer Support & Safety
+// Support Service  —: Customer Support & Safety
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAX_EMERGENCY_CONTACTS = 3;

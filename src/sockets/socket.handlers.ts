@@ -58,7 +58,7 @@ export function registerSocketHandlers(io: IoServer): void {
 
       const room = rideRoom(rideId);
 
-      // ✅ KEY FIX: socket.join() returns a Promise — MUST be awaited.
+      //  socket.join() returns a Promise — MUST be awaited.
       try {
         await socket.join(room);
         console.info(`[SOCKET] ${userId} (${role}) joined room "${room}"`);
