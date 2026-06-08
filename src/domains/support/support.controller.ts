@@ -181,7 +181,7 @@ export async function addTicketMessageHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const ticketId = req.params.id;
+    const ticketId = req.params.id as string;
     if (!ticketId) {
       throw new BadRequestError('Ticket ID is required');
     }
