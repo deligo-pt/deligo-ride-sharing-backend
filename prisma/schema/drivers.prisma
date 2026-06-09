@@ -1,0 +1,98 @@
+enum VehicleApprovalStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  TEMPORARILY_BLOCKED
+}
+
+// DRIVER PROFILE
+
+model DriverProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  licenseNumber    String   @unique
+  licenseExpiresAt DateTime
+  totalRides       Int      @default(0)
+  totalReviews     Int      @default(0)
+  averageRating    Float    @default(5.0)
+  isAvailable      Boolean  @default(false)
+  currentLatitude  Float?
+  currentLongitude Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  vehicle  Vehicle?
+  document DriverDocument?
+  rides    Ride[]          @relation("DriverRides")
+
+  @@map("driver_profiles")
+}
+
+model Vehicle {
+  id              String        @id @default(uuid())
+  driverProfileId String        @unique
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+
+  vehicleClass VehicleClass
+  vehicleType  VehicleType
+  brand        String
+  model        String
+  year         Int
+  color        String
+  licensePlate String       @unique
+  capacity     Int          @default(4)
+
+  registrationExpiryDate DateTime?
+  insuranceExpiryDate    DateTime?
+
+  photoUrls String[] @default([])
+
+  approvalStatus VehicleApprovalStatus @default(PENDING_REVIEW)
+  adminNote      String?
+  reviewedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vehicles")
+}
+
+model DriverDocument {
+  id              String        @id @default(uuid())
+  driverProfileId String        @unique
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+
+  drivingLicenseUrl      String
+  nationalIdUrl          String
+  vehicleRegistrationUrl String
+  vehicleInsuranceUrl    String
+  driverSelfieUrl        String
+  proofOfAddressUrl      String
+  taxIdUrl               String
+
+  drivingLicenseExpiry      DateTime?
+  vehicleRegistrationExpiry DateTime?
+  vehicleInsuranceExpiry    DateTime?
+
+  verificationStatus DocumentStatus @default(PENDING)
+  reviewNote         String?
+  reviewedAt         DateTime?
+  rejectionReason    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("driver_documents")
+}

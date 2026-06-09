@@ -1,0 +1,25 @@
+// REVIEWS
+// One review per direction per ride (author+ride is unique).
+// A customer can review the driver AND the driver can review the customer.
+
+model Review {
+  id     String @id @default(uuid())
+  rideId String
+  ride   Ride   @relation(fields: [rideId], references: [id])
+
+  authorId String
+  author   User   @relation("ReviewAuthor", fields: [authorId], references: [id])
+  targetId String
+  target   User   @relation("ReviewTarget", fields: [targetId], references: [id])
+
+  rating  Int // 1-5, enforced by Zod at the application layer
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Guarantees each user can only review once per ride
+  @@unique([rideId, authorId])
+  @@index([targetId])
+  @@map("reviews")
+}

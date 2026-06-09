@@ -1,0 +1,21 @@
+enum VehicleClass {
+  ECONOMY
+  COMFORT
+  PREMIUM
+}
+
+enum VehicleType {
+  SUV
+  Sedan
+  Hatchback
+  Micro
+  Motorcycle
+  PickupTruck
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}

@@ -1,0 +1,91 @@
+enum RideStatus {
+  REQUESTED
+  ACCEPTED
+  DRIVER_ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EMERGENCY
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  WALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// RIDES
+
+model Ride {
+  id              String          @id @default(uuid())
+  customerId      String
+  customerProfile CustomerProfile @relation("CustomerRides", fields: [customerId], references: [id])
+  driverProfileId String?
+  driverProfile   DriverProfile?  @relation("DriverRides", fields: [driverProfileId], references: [id])
+  vehicleClass    VehicleClass    @default(ECONOMY)
+  vehicleType     VehicleType     @default(Hatchback)
+  status          RideStatus      @default(REQUESTED)
+
+  // Pickup
+  pickupAddress   String
+  pickupLatitude  Float
+  pickupLongitude Float
+
+  // Dropoff
+  dropoffAddress   String
+  dropoffLatitude  Float
+  dropoffLongitude Float
+
+  // Fare
+  estimatedFare   Decimal  @db.Decimal(10, 2)
+  finalFare       Decimal? @db.Decimal(10, 2)
+  distanceKm      Float?
+  durationMinutes Int?
+
+  // Timestamps
+  requestedAt        DateTime  @default(now())
+  acceptedAt         DateTime?
+  arrivedAt          DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  promoCodeId String?
+  promoCode   PromoCode?      @relation(fields: [promoCodeId], references: [id])
+  payment     Payment?
+  reviews     Review[] // one per direction: customer→driver AND driver→customer
+  tickets     SupportTicket[]
+
+  @@index([customerId, status])
+  @@index([driverProfileId, status])
+  @@map("rides")
+}
+
+model Payment {
+  id     String @id @default(uuid())
+  rideId String @unique
+  ride   Ride   @relation(fields: [rideId], references: [id])
+
+  amount         Float
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  transactionRef String?       @unique
+  paidAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payments")
+}

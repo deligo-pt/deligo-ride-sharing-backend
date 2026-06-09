@@ -1,0 +1,124 @@
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+  DEACTIVATED
+}
+
+enum AccessLabel {
+  SUPER_ADMIN
+  SUPPORT
+  REGIONAL
+}
+
+// USER — Core identity only. Authentication is handled by an external microservice.
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  phone     String     @unique
+  firstName String?
+  lastName  String?
+  role      UserRole   @default(CUSTOMER)
+  status    UserStatus @default(ACTIVE)
+
+  // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
+  fcmToken String?
+
+  // Relations
+  customerProfile       CustomerProfile?
+  driverProfile         DriverProfile?
+  adminProfile          AdminProfile?
+  notificationsReceived Notification[]
+  reviewsGiven          Review[]           @relation("ReviewAuthor")
+  reviewsReceived       Review[]           @relation("ReviewTarget")
+  wallet                Wallet?
+  promoUsages           PromoUsage[]
+  emergencyContacts     EmergencyContact[]
+  supportTickets        SupportTicket[]    @relation("TicketCreator")
+  assignedTickets       SupportTicket[]    @relation("TicketAdmin")
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+// CUSTOMER PROFILE
+
+model CustomerProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  totalRides    Int     @default(0)
+  totalReviews  Int     @default(0)
+  averageRating Float   @default(5.0)
+  homeAddress   String?
+  workAddress   String?
+
+  emergencyContactNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  rides Ride[] @relation("CustomerRides")
+
+  @@map("customer_profiles")
+}
+
+//  ADMIN PROFILE
+model AdminProfile {
+  id             String      @id @default(uuid())
+  userId         String      @unique
+  accessLabel    AccessLabel @default(SUPER_ADMIN)
+  assignedRegion String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_profiles")
+}
+
+// PAYMENTS & WALLET => demo 
+
+model Wallet {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  balance  Float  @default(0)
+  currency String @default("USD")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id       String @id @default(uuid())
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  amount      Float
+  type        String // "CREDIT" | "DEBIT"
+  description String?
+  reference   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([walletId])
+  @@map("wallet_transactions")
+}
