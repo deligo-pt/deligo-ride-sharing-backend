@@ -11,6 +11,7 @@ import type {
   UpdateRideStatusDto,
   CancelRideDto,
 } from './rides.validation';
+import { generateAndSendReceipt } from './receipt.service';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -321,7 +322,13 @@ export async function updateRideStatus(
     }),
   ]);
 
+  // Fire-and-forget: send receipt email + SMS — does NOT block the API response
+  void generateAndSendReceipt(rideId);
+
   return { ride: updatedRide, fareBreakdown };
+
+  // Note: receipt generation is done OUTSIDE the transaction above
+  // to ensure the API response is never delayed.
 }
 
 /**

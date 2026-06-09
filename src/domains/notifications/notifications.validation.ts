@@ -30,6 +30,8 @@ export interface DispatchOptions {
   channels?: NotificationChannel[];
   /** Optional structured metadata stored in the Notification.data JSON column */
   data?:     Record<string, unknown>;
+  /** Optional rich HTML body used when the EMAIL channel is requested */
+  emailHtml?: string;
 }
 
 // ── PATCH /api/v1/users/fcm-token ────────────────────────────────────────────

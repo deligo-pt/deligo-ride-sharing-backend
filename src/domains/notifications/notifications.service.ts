@@ -2,6 +2,8 @@ import { NotificationType } from '@prisma/client';
 import type { Server as SocketIoServer } from 'socket.io';
 import admin from '../../utils/firebase';
 import prisma from '../../config/db';
+import twilio from 'twilio';
+import { Resend } from 'resend';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -146,15 +148,57 @@ async function sendPush(opts: DispatchOptions): Promise<void> {
   }
 }
 
-/** [MOCK] Will integrate Twilio SMS in production */
-function sendSMS(opts: DispatchOptions): void {
-  console.log(`[MOCK SMS]   → userId=${opts.userId} | ${opts.title}: ${opts.message}`);
+/**
+ * Send an SMS via Twilio.
+ * Falls back to console.log if TWILIO_ACCOUNT_SID is not configured.
+ */
+async function sendSMS(phone: string, message: string): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken  = process.env.TWILIO_AUTH_TOKEN;
+  const from       = process.env.TWILIO_FROM_NUMBER;
+
+  if (!accountSid || !authToken || !from) {
+    console.log(`[SMS FALLBACK] → ${phone} | ${message}`);
+    return;
+  }
+
+  try {
+    const client = twilio(accountSid, authToken);
+    const msg = await client.messages.create({ body: message, from, to: phone });
+    console.info(`[SMS] ✅ Sent | sid=${msg.sid} | to=${phone}`);
+  } catch (err) {
+    console.error(`[SMS] ❌ Failed to send to ${phone}:`, err);
+  }
 }
 
-/** [MOCK] Will integrate SendGrid / AWS SES in production */
-function sendEmail(opts: DispatchOptions): void {
-  console.log(`[MOCK EMAIL] → userId=${opts.userId} | ${opts.title}: ${opts.message}`);
+/**
+ * Send a transactional email via Resend.
+ * Falls back to console.log if RESEND_API_KEY is not configured.
+ */
+async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+  const apiKey   = process.env.RESEND_API_KEY;
+  const fromAddr = process.env.EMAIL_FROM_ADDRESS ?? 'noreply@deligo.app';
+
+  if (!apiKey) {
+    console.log(`[EMAIL FALLBACK] → ${to} | ${subject}`);
+    return;
+  }
+
+  try {
+    const resend = new Resend(apiKey);
+    const { data, error } = await resend.emails.send({ from: fromAddr, to, subject, html });
+    if (error) throw error;
+    console.info(`[EMAIL] ✅ Sent | id=${data?.id} | to=${to}`);
+  } catch (err) {
+    console.error(`[EMAIL] ❌ Failed to send to ${to}:`, err);
+  }
 }
+
+/**
+ * Public helpers exposed for use in receipt and other direct dispatch
+ * scenarios where callers already have the phone/email value.
+ */
+export { sendSMS, sendEmail };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -202,10 +246,35 @@ export const NotificationEngine = {
       pushOverWebSocket(opts, record);
     }
 
-    // 3. Other channels
+    // 3. Push notification
     if (channels.includes('PUSH'))  await sendPush(opts);
-    if (channels.includes('SMS'))   sendSMS(opts);
-    if (channels.includes('EMAIL')) sendEmail(opts);
+
+    // 4. SMS — look up user phone and dispatch via Twilio
+    if (channels.includes('SMS')) {
+      const userForSms = await prisma.user.findUnique({
+        where: { id: opts.userId },
+        select: { phone: true },
+      });
+      if (userForSms?.phone) {
+        void sendSMS(userForSms.phone, `${opts.title}: ${opts.message}`);
+      } else {
+        console.warn(`[SMS] No phone number for userId=${opts.userId} — skipping.`);
+      }
+    }
+
+    // 5. EMAIL — look up user email and dispatch via Resend
+    if (channels.includes('EMAIL')) {
+      const userForEmail = await prisma.user.findUnique({
+        where: { id: opts.userId },
+        select: { email: true },
+      });
+      if (userForEmail?.email) {
+        const html = opts.emailHtml ?? `<p>${opts.message}</p>`;
+        void sendEmail(userForEmail.email, opts.title, html);
+      } else {
+        console.warn(`[EMAIL] No email for userId=${opts.userId} — skipping.`);
+      }
+    }
   },
 };
 
