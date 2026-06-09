@@ -14,15 +14,33 @@ async function main() {
   console.log('🌱 Starting database seeding...');
 
   // Clear existing data to avoid conflicts
+  await prisma.review.deleteMany({});
+  await prisma.ticketMessage.deleteMany({});
+  await prisma.supportTicket.deleteMany({});
   await prisma.ride.deleteMany({});
   await prisma.vehicle.deleteMany({});
+  await prisma.driverDocument.deleteMany({});
   await prisma.driverProfile.deleteMany({});
   await prisma.customerProfile.deleteMany({});
   await prisma.adminProfile.deleteMany({});
   await prisma.wallet.deleteMany({});
   await prisma.user.deleteMany({});
+  await prisma.pricingRule.deleteMany({});
 
   console.log('🗑️  Existing data cleared.');
+
+  // Seed Pricing Rules
+  await prisma.pricingRule.createMany({
+    data: [
+      { vehicleType: VehicleType.Hatchback, baseFare: 2.00, perKmRate: 1.50, perMinRate: 0.10, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+      { vehicleType: VehicleType.Micro, baseFare: 1.50, perKmRate: 1.20, perMinRate: 0.08, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+      { vehicleType: VehicleType.Sedan, baseFare: 3.00, perKmRate: 2.00, perMinRate: 0.15, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+      { vehicleType: VehicleType.SUV, baseFare: 5.00, perKmRate: 3.00, perMinRate: 0.25, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+      { vehicleType: VehicleType.Motorcycle, baseFare: 1.00, perKmRate: 0.90, perMinRate: 0.06, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+      { vehicleType: VehicleType.PickupTruck, baseFare: 4.00, perKmRate: 2.50, perMinRate: 0.20, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+    ],
+  });
+  console.log('💰 Pricing Rules seeded successfully.');
 
   // 1. Create CUSTOMER
   const customerUser = await prisma.user.create({
@@ -80,7 +98,7 @@ async function main() {
               color: 'Silver',
               licensePlate: 'NY-DRV-789',
               capacity: 4,
-              isVerified: true,
+              approvalStatus: 'APPROVED',
             },
           },
         },

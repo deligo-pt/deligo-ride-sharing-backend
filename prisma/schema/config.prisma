@@ -5,3 +5,16 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model PricingRule {
+  id                 String      @id @default(uuid())
+  vehicleType        VehicleType @unique
+  baseFare           Float
+  perKmRate          Float
+  perMinRate         Float
+  surgeMultiplier    Float       @default(1.0)
+  adminFeePercentage Float       @default(20.0)
+  updatedAt          DateTime    @updatedAt
+
+  @@map("pricing_rules")
+}

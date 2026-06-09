@@ -40,6 +40,29 @@ import {
 import {
   BroadcastNotificationSchema,
 } from './admin.notifications.validation';
+import {
+  getPricingRulesHandler,
+  updatePricingRuleHandler,
+} from './admin.pricing.controller';
+import {
+  VehicleTypeParamSchema,
+  UpdatePricingRuleSchema,
+} from './admin.pricing.validation';
+import {
+  getPromotionsHandler,
+  updatePromotionHandler,
+} from './admin.promotions.controller';
+import {
+  ListPromotionsQuerySchema,
+  PromoIdParamSchema,
+  DeactivatePromotionSchema,
+} from './admin.promotions.validation';
+import {
+  getLedgerHandler,
+} from './admin.finances.controller';
+import {
+  GetLedgerQuerySchema,
+} from './admin.finances.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Router  —  PRD 5.x
@@ -178,6 +201,48 @@ router.post(
   requireAuth,
   validate({ body: BroadcastNotificationSchema }),
   broadcastNotificationHandler,
+);
+
+// ── Financial Controller & Pricing (PRD 5.5, 5.6, 5.8) ──────────────────────
+
+router.get(
+  '/pricing',
+  requireAuth,
+  getPricingRulesHandler,
+);
+
+router.patch(
+  '/pricing/:vehicleType',
+  requireAuth,
+  validate({
+    params: VehicleTypeParamSchema,
+    body: UpdatePricingRuleSchema,
+  }),
+  updatePricingRuleHandler,
+);
+
+router.get(
+  '/promotions',
+  requireAuth,
+  validate({ query: ListPromotionsQuerySchema }),
+  getPromotionsHandler,
+);
+
+router.patch(
+  '/promotions/:id',
+  requireAuth,
+  validate({
+    params: PromoIdParamSchema,
+    body: DeactivatePromotionSchema,
+  }),
+  updatePromotionHandler,
+);
+
+router.get(
+  '/finances/ledger',
+  requireAuth,
+  validate({ query: GetLedgerQuerySchema }),
+  getLedgerHandler,
 );
 
 export default router;

@@ -6,23 +6,7 @@ import prisma from '../../config/db';
 
 // ── Rate table ────────────────────────────────────────────────────────────────
 
-interface TierRates {
-  vehicleClass: string;
-  baseFare: number;       // USD
-  perKmRate: number;      // USD / km
-  perMinRate: number;     // USD / min
-  avgSpeedKmh: number;    // used for duration estimate when actual is unknown
-}
-
-const TIER_RATES: Record<string, TierRates> = {
-  // VehicleType → rates
-  Hatchback:   { vehicleClass: 'ECONOMY', baseFare: 2.00, perKmRate: 1.50, perMinRate: 0.10, avgSpeedKmh: 30 },
-  Micro:       { vehicleClass: 'ECONOMY', baseFare: 1.50, perKmRate: 1.20, perMinRate: 0.08, avgSpeedKmh: 30 },
-  Sedan:       { vehicleClass: 'COMFORT', baseFare: 3.00, perKmRate: 2.00, perMinRate: 0.15, avgSpeedKmh: 35 },
-  SUV:         { vehicleClass: 'PREMIUM', baseFare: 5.00, perKmRate: 3.00, perMinRate: 0.25, avgSpeedKmh: 40 },
-  Motorcycle:  { vehicleClass: 'ECONOMY', baseFare: 1.00, perKmRate: 0.90, perMinRate: 0.06, avgSpeedKmh: 35 },
-  PickupTruck: { vehicleClass: 'COMFORT', baseFare: 4.00, perKmRate: 2.50, perMinRate: 0.20, avgSpeedKmh: 30 },
-};
+// Removed TIER_RATES (migrated to DB)
 
 // ── Fixed fees (applied on top of all tiers) ──────────────────────────────────
 
@@ -101,15 +85,26 @@ async function computeFare(
   tolls: number = 0,
   promoCode?: string,
 ): Promise<FareBreakdown> {
-  const rates = TIER_RATES[vehicleType as string];
-  if (!rates) {
+  const rule = await prisma.pricingRule.findUnique({
+    where: { vehicleType }
+  });
+
+  if (!rule) {
     throw new Error(`UNSUPPORTED_VEHICLE_TYPE:${vehicleType}`);
   }
 
+  // Map the rule to the expected class (fallback mapping since class isn't in rule directly)
+  const vehicleClassMap: Record<string, string> = {
+    Hatchback: 'ECONOMY', Micro: 'ECONOMY', Motorcycle: 'ECONOMY',
+    Sedan: 'COMFORT', PickupTruck: 'COMFORT',
+    SUV: 'PREMIUM'
+  };
+  const vehicleClass = vehicleClassMap[vehicleType as string] || 'ECONOMY';
+
   // ── Line items ────────────────────────────────────────────────────────────
-  const baseFare     = round2(rates.baseFare);
-  const distanceFare = round2(distanceKm * rates.perKmRate);
-  const timeFare     = round2(durationMinutes * rates.perMinRate);
+  const baseFare     = round2(rule.baseFare);
+  const distanceFare = round2(distanceKm * rule.perKmRate);
+  const timeFare     = round2(durationMinutes * rule.perMinRate);
   const subtotal     = round2(baseFare + distanceFare + timeFare);
   const surgeAmount  = round2(subtotal * (surgeMultiplier - 1));
   const afterSurge   = round2(subtotal + surgeAmount + tolls);
@@ -143,7 +138,7 @@ async function computeFare(
 
   return {
     vehicleType,
-    vehicleClass: rates.vehicleClass,
+    vehicleClass,
     distanceKm: round2(distanceKm),
     estimatedDurationMinutes: Math.ceil(durationMinutes),
     surgeMultiplier,
@@ -183,15 +178,22 @@ export const PricingEngine = {
   ): Promise<FareBreakdown[]> {
     const distanceKm = haversineKm(pickupLat, pickupLng, dropoffLat, dropoffLng);
 
-    const typesToEstimate = vehicleType
-      ? [vehicleType]
-      : (Object.keys(TIER_RATES) as VehicleType[]);
+    // Fetch active rules from DB
+    let rules = await prisma.pricingRule.findMany();
+    if (vehicleType) {
+      rules = rules.filter(r => r.vehicleType === vehicleType);
+    }
+
+    // Default average speeds for duration estimate
+    const speedMap: Record<string, number> = {
+      Hatchback: 30, Micro: 30, Sedan: 35, SUV: 40, Motorcycle: 35, PickupTruck: 30
+    };
 
     return Promise.all(
-      typesToEstimate.map((vt) => {
-        const rate = TIER_RATES[vt as string];
-        const durationMinutes = (distanceKm / rate.avgSpeedKmh) * 60;
-        return computeFare(vt, distanceKm, durationMinutes, surgeMultiplier, 0, promoCode);
+      rules.map((rule) => {
+        const avgSpeedKmh = speedMap[rule.vehicleType as string] || 30;
+        const durationMinutes = (distanceKm / avgSpeedKmh) * 60;
+        return computeFare(rule.vehicleType, distanceKm, durationMinutes, surgeMultiplier, 0, promoCode);
       }),
     );
   },
