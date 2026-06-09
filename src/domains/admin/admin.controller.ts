@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
 import { successResponse } from '../../types/api.types';
-import { ForbiddenError } from '../../utils/errors';
 import {
   getPendingKycProfiles,
   reviewDriverKyc,
@@ -17,12 +16,7 @@ import {
 //  3. Returns a standardized JSON response.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Role guard — rejects non-admin callers immediately. */
-function assertAdmin(req: Request): void {
-  if (req.user?.role !== 'ADMIN') {
-    throw new ForbiddenError('This action requires ADMIN privileges.');
-  }
-}
+import { assertAdmin } from './admin.utils';
 
 // ─── GET /api/v1/admin/kyc/pending ───────────────────────────────────────────
 

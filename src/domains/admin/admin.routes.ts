@@ -14,6 +14,32 @@ import {
   UserIdParamSchema,
   UpdateUserStatusSchema,
 } from './admin.validation';
+import {
+  getTicketsHandler,
+  updateTicketHandler,
+  addTicketMessageHandler,
+} from './admin.support.controller';
+import {
+  ListTicketsQuerySchema,
+  UpdateTicketSchema,
+  AddTicketMessageSchema,
+  TicketIdParamSchema,
+} from './admin.support.validation';
+import {
+  getRidesHandler,
+  cancelRideHandler,
+} from './admin.rides.controller';
+import {
+  ListRidesQuerySchema,
+  CancelRideSchema,
+  RideIdParamSchema,
+} from './admin.rides.validation';
+import {
+  broadcastNotificationHandler,
+} from './admin.notifications.controller';
+import {
+  BroadcastNotificationSchema,
+} from './admin.notifications.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Router  —  PRD 5.x
@@ -95,6 +121,63 @@ router.patch(
     body: UpdateUserStatusSchema,
   }),
   updateUserStatusHandler,
+);
+
+// ── Support Tickets (PRD 5.11) ──────────────────────────────────────────────
+
+router.get(
+  '/support/tickets',
+  requireAuth,
+  validate({ query: ListTicketsQuerySchema }),
+  getTicketsHandler,
+);
+
+router.patch(
+  '/support/tickets/:id',
+  requireAuth,
+  validate({
+    params: TicketIdParamSchema,
+    body: UpdateTicketSchema,
+  }),
+  updateTicketHandler,
+);
+
+router.post(
+  '/support/tickets/:id/messages',
+  requireAuth,
+  validate({
+    params: TicketIdParamSchema,
+    body: AddTicketMessageSchema,
+  }),
+  addTicketMessageHandler,
+);
+
+// ── Ride Management (PRD 5.4) ───────────────────────────────────────────────
+
+router.get(
+  '/rides',
+  requireAuth,
+  validate({ query: ListRidesQuerySchema }),
+  getRidesHandler,
+);
+
+router.patch(
+  '/rides/:id/cancel',
+  requireAuth,
+  validate({
+    params: RideIdParamSchema,
+    body: CancelRideSchema,
+  }),
+  cancelRideHandler,
+);
+
+// ── Broadcast Notifications (PRD 5.9) ───────────────────────────────────────
+
+router.post(
+  '/notifications/broadcast',
+  requireAuth,
+  validate({ body: BroadcastNotificationSchema }),
+  broadcastNotificationHandler,
 );
 
 export default router;
