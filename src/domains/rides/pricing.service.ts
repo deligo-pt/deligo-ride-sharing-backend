@@ -1,12 +1,8 @@
 import { VehicleType } from '@prisma/client';
 import prisma from '../../config/db';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Pricing Engine — PRD 3.7: Fare Calculation Engine
-//
 // Single source of truth for all fare arithmetic. Both the estimate endpoint
 // and the trip-completion flow call this engine so the numbers are consistent.
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Rate table ────────────────────────────────────────────────────────────────
 
@@ -75,14 +71,14 @@ async function resolvePromoCode(code: string | undefined) {
       id: true,
       code: true,
       discountType: true,
-      discountValue: true,
-      maxDiscountCap: true,
-      minRideValue: true,
-      maxGlobalUses: true,
-      currentUses: true,
+      discountPercent: true,
+      discountAmount: true,
+      maxUses: true,
+      usedCount: true,
       validUntil: true,
       validFrom: true,
       isActive: true,
+      minimumFareAmount: true,
     },
   });
 }
@@ -131,16 +127,14 @@ async function computeFare(
       promo.isActive &&
       promo.validFrom <= now &&
       promo.validUntil >= now &&
-      promo.currentUses < promo.maxGlobalUses &&
-      (afterSurge + serviceFee + taxAmount) >= promo.minRideValue;
+      (promo.maxUses === null || promo.usedCount < promo.maxUses);
 
     if (isValid) {
       appliedCode = promo.code;
-      if (promo.discountType === 'PERCENTAGE') {
-        const rawDiscount = (afterSurge + serviceFee + taxAmount) * (promo.discountValue / 100);
-        discount = round2(promo.maxDiscountCap ? Math.min(rawDiscount, promo.maxDiscountCap) : rawDiscount);
-      } else if (promo.discountType === 'FLAT') {
-        discount = round2(Number(promo.discountValue));
+      if (promo.discountType === 'PERCENTAGE' && promo.discountPercent !== null) {
+        discount = round2((afterSurge + serviceFee + taxAmount) * (promo.discountPercent / 100));
+      } else if (promo.discountAmount !== null) {
+        discount = round2(Number(promo.discountAmount));
       }
     }
   }
