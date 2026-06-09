@@ -23,12 +23,20 @@ export function validate(schemas: ValidationTargets) {
         req.body = await schemas.body.parseAsync(req.body);
       }
       if (schemas.params) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        req.params = (await schemas.params.parseAsync(req.params)) as typeof req.params;
+        Object.defineProperty(req, 'params', {
+          value: await schemas.params.parseAsync(req.params),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
       }
       if (schemas.query) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        req.query = (await schemas.query.parseAsync(req.query)) as typeof req.query;
+        Object.defineProperty(req, 'query', {
+          value: await schemas.query.parseAsync(req.query),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
       }
       next();
     } catch (err) {
