@@ -63,6 +63,15 @@ import {
 import {
   GetLedgerQuerySchema,
 } from './admin.finances.validation';
+import {
+  getDashboardHandler,
+  getTrendsHandler,
+  exportReportHandler,
+} from './admin.analytics.controller';
+import {
+  GetTrendsQuerySchema,
+  ExportReportQuerySchema,
+} from './admin.analytics.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Router  —  PRD 5.x
@@ -243,6 +252,28 @@ router.get(
   requireAuth,
   validate({ query: GetLedgerQuerySchema }),
   getLedgerHandler,
+);
+
+// ── Analytics & Business Intelligence (PRD 5.1, 5.12) ─────────────────────
+
+router.get(
+  '/analytics/dashboard',
+  requireAuth,
+  getDashboardHandler,
+);
+
+router.get(
+  '/analytics/trends',
+  requireAuth,
+  validate({ query: GetTrendsQuerySchema }),
+  getTrendsHandler,
+);
+
+router.get(
+  '/analytics/export',
+  requireAuth,
+  validate({ query: ExportReportQuerySchema }),
+  exportReportHandler,
 );
 
 export default router;
