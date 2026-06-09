@@ -16,6 +16,7 @@ import reviewsRouter from './domains/reviews/reviews.routes';
 import ridesRouter from './domains/rides/rides.routes';
 import supportRouter from './domains/support/support.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
+import adminRouter from './domains/admin/admin.routes';
 
 // ── Inline micro-router for /api/v1/users ────────────────────────────────────
 // Keeps the users-related endpoints (e.g. FCM token) without needing a
@@ -92,6 +93,7 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/reviews`, reviewsRouter);
   app.use(`${API_PREFIX}/support`, supportRouter);
   app.use(`${API_PREFIX}/users`, usersRouter);
+  app.use(`${API_PREFIX}/admin`, adminRouter);
 
   // Registers routes will be here
   // API root — health / welcome

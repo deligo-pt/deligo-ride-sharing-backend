@@ -1,3 +1,12 @@
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING_DOCS
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
 enum VehicleApprovalStatus {
   PENDING_REVIEW
   APPROVED
@@ -20,12 +29,13 @@ model DriverProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  licenseNumber    String   @unique
+  licenseNumber    String    @unique
   licenseExpiresAt DateTime
-  totalRides       Int      @default(0)
-  totalReviews     Int      @default(0)
-  averageRating    Float    @default(5.0)
-  isAvailable      Boolean  @default(false)
+  totalRides       Int       @default(0)
+  totalReviews     Int       @default(0)
+  averageRating    Float     @default(5.0)
+  kycStatus        KycStatus @default(NOT_SUBMITTED)
+  isAvailable      Boolean   @default(false)
   currentLatitude  Float?
   currentLongitude Float?
 
