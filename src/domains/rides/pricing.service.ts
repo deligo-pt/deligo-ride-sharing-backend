@@ -1,6 +1,7 @@
 import { VehicleType } from '@prisma/client';
 import prisma from '../../config/db';
 import { getRouteData } from '../../utils/map.service';
+import { isPointInPolygon, parsePolygon } from '../../utils/geo.utils';
 
 // Single source of truth for all fare arithmetic. Both the estimate endpoint
 // and the trip-completion flow call this engine so the numbers are consistent.
@@ -15,6 +16,13 @@ const SERVICE_FEE = 0.50;   // USD flat
 const TAX_RATE    = 0.05;   // 5%
 
 // ── Fare Breakdown shape ──────────────────────────────────────────────────────
+
+/** A single zone surcharge applied to this fare. */
+export interface ZoneSurcharge {
+  zoneId: string;
+  zoneName: string;
+  amount: number;
+}
 
 export interface FareBreakdown {
   vehicleType: string;
@@ -31,6 +39,9 @@ export interface FareBreakdown {
   surgeAmount: number;       // subtotal * (surge - 1)
   serviceFee: number;
   taxAmount: number;
+  // Zone surcharges (e.g. airport fees)
+  zoneSurcharges: ZoneSurcharge[];
+  zoneSurchargeTotal: number;
   // Promo
   promoCode: string | null;
   discountAmount: number;
@@ -85,6 +96,7 @@ async function computeFare(
   surgeMultiplier: number = 1.0,
   tolls: number = 0,
   promoCode?: string,
+  zoneSurcharges: ZoneSurcharge[] = [],
 ): Promise<FareBreakdown> {
   const rule = await prisma.pricingRule.findUnique({
     where: { vehicleType }
@@ -103,14 +115,17 @@ async function computeFare(
   const vehicleClass = vehicleClassMap[vehicleType as string] || 'ECONOMY';
 
   // ── Line items ────────────────────────────────────────────────────────────
-  const baseFare     = round2(rule.baseFare);
-  const distanceFare = round2(distanceKm * rule.perKmRate);
-  const timeFare     = round2(durationMinutes * rule.perMinRate);
-  const subtotal     = round2(baseFare + distanceFare + timeFare);
-  const surgeAmount  = round2(subtotal * (surgeMultiplier - 1));
-  const afterSurge   = round2(subtotal + surgeAmount + tolls);
-  const serviceFee   = SERVICE_FEE;
-  const taxAmount    = round2((afterSurge + serviceFee) * TAX_RATE);
+  const baseFare          = round2(rule.baseFare);
+  const distanceFare      = round2(distanceKm * rule.perKmRate);
+  const timeFare          = round2(durationMinutes * rule.perMinRate);
+  const subtotal          = round2(baseFare + distanceFare + timeFare);
+  const surgeAmount       = round2(subtotal * (surgeMultiplier - 1));
+  const zoneSurchargeTotal = round2(
+    zoneSurcharges.reduce((acc, z) => acc + z.amount, 0),
+  );
+  const afterSurge        = round2(subtotal + surgeAmount + tolls + zoneSurchargeTotal);
+  const serviceFee        = SERVICE_FEE;
+  const taxAmount         = round2((afterSurge + serviceFee) * TAX_RATE);
 
   // ── Promo code ────────────────────────────────────────────────────────────
   const promo = await resolvePromoCode(promoCode);
@@ -150,6 +165,8 @@ async function computeFare(
     surgeAmount,
     serviceFee,
     taxAmount,
+    zoneSurcharges,
+    zoneSurchargeTotal,
     promoCode: appliedCode,
     discountAmount: discount,
     grandTotal,
@@ -182,6 +199,33 @@ export const PricingEngine = {
     const distanceKm      = routeData.distanceMeters / 1_000;
     const durationMinutes = routeData.durationSeconds / 60;
 
+    // ── Geofencing: find SURCHARGE zones that intersect pickup or dropoff ──
+    const activeZones = await prisma.zone.findMany({
+      where: { isActive: true, type: 'SURCHARGE' },
+    });
+
+    const matchedZones: ZoneSurcharge[] = [];
+    const seenZoneIds = new Set<string>();
+
+    for (const zone of activeZones) {
+      if (seenZoneIds.has(zone.id)) continue;
+
+      const polygon = parsePolygon(zone.polygon);
+      if (polygon.length < 3) continue;
+
+      const pickupHit  = isPointInPolygon(pickupLat, pickupLng, polygon);
+      const dropoffHit = isPointInPolygon(dropoffLat, dropoffLng, polygon);
+
+      if (pickupHit || dropoffHit) {
+        matchedZones.push({
+          zoneId:   zone.id,
+          zoneName: zone.name,
+          amount:   zone.surchargeAmount,
+        });
+        seenZoneIds.add(zone.id);
+      }
+    }
+
     // Fetch active rules from DB
     let rules = await prisma.pricingRule.findMany();
     if (vehicleType) {
@@ -190,7 +234,7 @@ export const PricingEngine = {
 
     return Promise.all(
       rules.map((rule) =>
-        computeFare(rule.vehicleType, distanceKm, durationMinutes, surgeMultiplier, 0, promoCode),
+        computeFare(rule.vehicleType, distanceKm, durationMinutes, surgeMultiplier, 0, promoCode, matchedZones),
       ),
     );
   },
