@@ -80,8 +80,9 @@ export function errorHandler(
   }
 
   if (err instanceof Prisma.PrismaClientValidationError) {
+    console.error('[Prisma Validation Error]', err.message);
     res.status(400).json(
-      errorResponse('Invalid data sent to the database', 'DATABASE_VALIDATION_ERROR'),
+      errorResponse('Invalid data sent to the database', 'DATABASE_VALIDATION_ERROR', err.message),
     );
     return;
   }

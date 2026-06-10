@@ -1,5 +1,6 @@
 import { VehicleType } from '@prisma/client';
 import prisma from '../../config/db';
+import { getRouteData } from '../../utils/map.service';
 
 // Single source of truth for all fare arithmetic. Both the estimate endpoint
 // and the trip-completion flow call this engine so the numbers are consistent.
@@ -163,9 +164,9 @@ export const PricingEngine = {
   /**
    * Calculate an upfront fare estimate for a given route.
    *
-   * Uses the Haversine distance and estimated duration (from avgSpeedKmh).
-   * Returns one FareBreakdown per vehicle type, or a single one if a
-   * specific vehicleType is requested.
+   * Uses real-world routing (Mapbox → OSRM → Haversine fallback) to obtain
+   * accurate road distance and estimated travel time. Returns one
+   * FareBreakdown per vehicle type, or a single one if vehicleType is given.
    */
   async calculateEstimate(
     pickupLat: number,
@@ -176,7 +177,10 @@ export const PricingEngine = {
     promoCode?: string,
     surgeMultiplier: number = 1.0,
   ): Promise<FareBreakdown[]> {
-    const distanceKm = haversineKm(pickupLat, pickupLng, dropoffLat, dropoffLng);
+    // ── Fetch real-world route data (single API call shared across all tiers) ──
+    const routeData = await getRouteData(pickupLat, pickupLng, dropoffLat, dropoffLng);
+    const distanceKm      = routeData.distanceMeters / 1_000;
+    const durationMinutes = routeData.durationSeconds / 60;
 
     // Fetch active rules from DB
     let rules = await prisma.pricingRule.findMany();
@@ -184,17 +188,10 @@ export const PricingEngine = {
       rules = rules.filter(r => r.vehicleType === vehicleType);
     }
 
-    // Default average speeds for duration estimate
-    const speedMap: Record<string, number> = {
-      Hatchback: 30, Micro: 30, Sedan: 35, SUV: 40, Motorcycle: 35, PickupTruck: 30
-    };
-
     return Promise.all(
-      rules.map((rule) => {
-        const avgSpeedKmh = speedMap[rule.vehicleType as string] || 30;
-        const durationMinutes = (distanceKm / avgSpeedKmh) * 60;
-        return computeFare(rule.vehicleType, distanceKm, durationMinutes, surgeMultiplier, 0, promoCode);
-      }),
+      rules.map((rule) =>
+        computeFare(rule.vehicleType, distanceKm, durationMinutes, surgeMultiplier, 0, promoCode),
+      ),
     );
   },
 

@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../config/db';
 import { LocationService, redis } from '../../utils/redis';
 import { PricingEngine } from './pricing.service';
+import { getRouteData } from '../../utils/map.service';
 import type {
   UpdateLocationDto,
   SearchRideDto,
@@ -95,6 +96,8 @@ export interface RequestRideResult {
 async function createRideRecord(
   customerId: string,
   dto: RequestRideDto,
+  estimatedDistance?: number,
+  estimatedDuration?: number,
 ) {
   return prisma.ride.create({
     data: {
@@ -107,6 +110,8 @@ async function createRideRecord(
       dropoffLongitude: dto.dropoffLng,
       vehicleType: dto.vehicleType,
       estimatedFare: dto.estimatedFare,
+      estimatedDistance,
+      estimatedDuration,
       status: 'REQUESTED',
     },
     include: {
@@ -141,8 +146,20 @@ export async function requestRide(
     throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
   }
 
-  // 2. Persist the ride
-  const ride = await createRideRecord(customerProfile.id, dto);
+  // 1b. Fetch real-world route data for estimated distance / duration
+  //     We call this BEFORE creating the ride so the values can be persisted.
+  //     getRouteData never throws — it falls back to Haversine on API failure.
+  const routeData = await getRouteData(
+    dto.pickupLat,
+    dto.pickupLng,
+    dto.dropoffLat,
+    dto.dropoffLng,
+  );
+  const estimatedDistance = Math.round((routeData.distanceMeters / 1_000) * 100) / 100; // km, 2dp
+  const estimatedDuration = Math.ceil(routeData.durationSeconds / 60);                   // minutes
+
+  // 2. Persist the ride with routing-engine estimates
+  const ride = await createRideRecord(customerProfile.id, dto, estimatedDistance, estimatedDuration);
 
   // 3. Geospatial candidate lookup from Redis
   const candidateUserIds = await LocationService.findNearbyDrivers(

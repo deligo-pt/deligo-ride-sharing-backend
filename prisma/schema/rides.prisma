@@ -44,10 +44,14 @@ model Ride {
   dropoffLongitude Float
 
   // Fare
-  estimatedFare   Decimal  @db.Decimal(10, 2)
-  finalFare       Decimal? @db.Decimal(10, 2)
-  distanceKm      Float?
-  durationMinutes Int?
+  estimatedFare     Decimal  @db.Decimal(10, 2)
+  finalFare         Decimal? @db.Decimal(10, 2)
+  // Estimated at ride-request time (from routing engine)
+  estimatedDistance Float? // kilometres
+  estimatedDuration Int? // minutes
+  // Actual values recorded at trip completion
+  distanceKm        Float?
+  durationMinutes   Int?
 
   // Timestamps
   requestedAt        DateTime  @default(now())
