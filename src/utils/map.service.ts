@@ -8,12 +8,21 @@ import { haversineKm } from '../domains/rides/pricing.service';
 //   1. Mapbox Directions API   (if MAPBOX_ACCESS_TOKEN is set in env)
 //   2. OSRM public demo server (free, no key required)
 //   3. Haversine straight-line (fallback when both APIs are unavailable)
+//
+// Both getRouteData() (2 points) and getMultiStopRouteData() (N points) share
+// the same underlying provider helpers — coordinates are joined with semicolons
+// in "lng,lat" order as required by both OSRM and Mapbox.
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface Coordinate {
+  lat: number;
+  lng: number;
+}
+
 export interface RouteData {
-  /** Metres from pickup to dropoff via actual road network */
+  /** Total road-network distance in metres across all waypoints */
   distanceMeters: number;
-  /** Seconds estimated travel time (traffic-naive unless Mapbox with traffic) */
+  /** Total estimated travel time in seconds across all waypoints */
   durationSeconds: number;
   /** Encoded polyline string (geometry), if the provider returned one */
   polyline: string | null;
@@ -21,17 +30,19 @@ export interface RouteData {
   source: 'mapbox' | 'osrm' | 'haversine_fallback';
 }
 
+// ── Internal coordinate serialiser ────────────────────────────────────────────
+
+/** Converts an array of {lat,lng} pairs to OSRM/Mapbox waypoint string. */
+function toWaypointString(coords: Coordinate[]): string {
+  return coords.map((c) => `${c.lng},${c.lat}`).join(';');
+}
+
 // ── OSRM public demo ──────────────────────────────────────────────────────────
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving';
 
-async function getRouteFromOSRM(
-  startLat: number,
-  startLng: number,
-  endLat: number,
-  endLng: number,
-): Promise<RouteData> {
-  const url = `${OSRM_BASE}/${startLng},${startLat};${endLng},${endLat}`;
+async function getRouteFromOSRM(coords: Coordinate[]): Promise<RouteData> {
+  const url = `${OSRM_BASE}/${toWaypointString(coords)}`;
 
   const response = await axios.get<{
     code: string;
@@ -42,10 +53,10 @@ async function getRouteFromOSRM(
     }>;
   }>(url, {
     params: {
-      overview: 'simplified',  // include compressed polyline
-      geometries: 'polyline',  // encoded polyline format
+      overview: 'simplified',
+      geometries: 'polyline',
     },
-    timeout: 6_000, // 6 s — OSRM demo can be slow
+    timeout: 6_000,
   });
 
   if (response.data.code !== 'Ok' || !response.data.routes.length) {
@@ -55,10 +66,10 @@ async function getRouteFromOSRM(
   const route = response.data.routes[0];
 
   return {
-    distanceMeters: route.distance,
+    distanceMeters:  route.distance,
     durationSeconds: route.duration,
-    polyline: route.geometry ?? null,
-    source: 'osrm',
+    polyline:        route.geometry ?? null,
+    source:          'osrm',
   };
 }
 
@@ -67,13 +78,10 @@ async function getRouteFromOSRM(
 const MAPBOX_BASE = 'https://api.mapbox.com/directions/v5/mapbox/driving';
 
 async function getRouteFromMapbox(
-  startLat: number,
-  startLng: number,
-  endLat: number,
-  endLng: number,
+  coords: Coordinate[],
   accessToken: string,
 ): Promise<RouteData> {
-  const url = `${MAPBOX_BASE}/${startLng},${startLat};${endLng},${endLat}`;
+  const url = `${MAPBOX_BASE}/${toWaypointString(coords)}`;
 
   const response = await axios.get<{
     code: string;
@@ -100,7 +108,7 @@ async function getRouteFromMapbox(
     typeof route.geometry === 'string' ? route.geometry : null;
 
   return {
-    distanceMeters: route.distance,
+    distanceMeters:  route.distance,
     durationSeconds: route.duration,
     polyline,
     source: 'mapbox',
@@ -110,40 +118,74 @@ async function getRouteFromMapbox(
 // ── Haversine fallback ────────────────────────────────────────────────────────
 
 /**
- * Build a synthetic RouteData from a straight-line Haversine distance.
+ * Chains pairwise Haversine segments to produce cumulative distance and
+ * duration across an arbitrary number of waypoints.
  *
- * Adds a 1.35× road-distance factor and assumes 30 km/h average speed.
- * This is intentionally conservative so the estimate errs on the side of
- * being slightly higher than actual.
+ * Adds a 1.35× road-distance factor; assumes 30 km/h average speed.
  */
-function haversineFallback(
-  startLat: number,
-  startLng: number,
-  endLat: number,
-  endLng: number,
-): RouteData {
-  const straightKm = haversineKm(startLat, startLng, endLat, endLng);
-  // Apply a road-factor to approximate actual driving distance
-  const estimatedRoadKm = straightKm * 1.35;
-  const distanceMeters = estimatedRoadKm * 1_000;
-  // Assume 30 km/h average speed
-  const durationSeconds = (estimatedRoadKm / 30) * 3_600;
+function haversineFallback(coords: Coordinate[]): RouteData {
+  let totalMeters = 0;
+
+  for (let i = 0; i < coords.length - 1; i++) {
+    const { lat: lat1, lng: lng1 } = coords[i];
+    const { lat: lat2, lng: lng2 } = coords[i + 1];
+    const straightKm = haversineKm(lat1, lng1, lat2, lng2);
+    totalMeters += straightKm * 1.35 * 1_000;
+  }
+
+  const durationSeconds = (totalMeters / 1_000 / 30) * 3_600;
 
   return {
-    distanceMeters,
+    distanceMeters:  totalMeters,
     durationSeconds,
-    polyline: null,
-    source: 'haversine_fallback',
+    polyline:        null,
+    source:          'haversine_fallback',
   };
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
+// ── Public entry point: N-waypoint routing ────────────────────────────────────
+
+/**
+ * Fetch real-world route data for an ordered array of coordinates (≥ 2 points).
+ *
+ * Returns a single RouteData whose distanceMeters and durationSeconds are
+ * cumulative across the full itinerary (pickup → stop1 → stop2 → dropoff).
+ *
+ * Tries Mapbox → OSRM → Haversine. Never throws.
+ */
+export async function getMultiStopRouteData(
+  coordinates: Coordinate[],
+): Promise<RouteData> {
+  if (coordinates.length < 2) {
+    throw new Error('getMultiStopRouteData requires at least 2 coordinates.');
+  }
+
+  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
+
+  if (mapboxToken) {
+    try {
+      return await getRouteFromMapbox(coordinates, mapboxToken);
+    } catch (err) {
+      console.warn('[MapService] Mapbox failed, falling back to OSRM:', (err as Error).message);
+    }
+  }
+
+  try {
+    return await getRouteFromOSRM(coordinates);
+  } catch (err) {
+    console.warn('[MapService] OSRM failed, falling back to Haversine:', (err as Error).message);
+  }
+
+  console.warn('[MapService] Using Haversine fallback for multi-stop route.');
+  return haversineFallback(coordinates);
+}
+
+// ── Backward-compatible 2-point shortcut ──────────────────────────────────────
 
 /**
  * Fetch real-world route data for a pickup → dropoff pair.
  *
- * Tries Mapbox (if token present), then OSRM, then falls back to Haversine.
- * Never throws — callers always receive a RouteData object.
+ * Delegates to getMultiStopRouteData internally. Kept for existing call sites.
  */
 export async function getRouteData(
   startLat: number,
@@ -151,25 +193,8 @@ export async function getRouteData(
   endLat: number,
   endLng: number,
 ): Promise<RouteData> {
-  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
-
-  // 1. Try Mapbox if configured
-  if (mapboxToken) {
-    try {
-      return await getRouteFromMapbox(startLat, startLng, endLat, endLng, mapboxToken);
-    } catch (err) {
-      console.warn('[MapService] Mapbox failed, falling back to OSRM:', (err as Error).message);
-    }
-  }
-
-  // 2. Try OSRM public demo
-  try {
-    return await getRouteFromOSRM(startLat, startLng, endLat, endLng);
-  } catch (err) {
-    console.warn('[MapService] OSRM failed, falling back to Haversine:', (err as Error).message);
-  }
-
-  // 3. Haversine fallback — always succeeds
-  console.warn('[MapService] Using Haversine fallback for route calculation.');
-  return haversineFallback(startLat, startLng, endLat, endLng);
+  return getMultiStopRouteData([
+    { lat: startLat, lng: startLng },
+    { lat: endLat,   lng: endLng   },
+  ]);
 }

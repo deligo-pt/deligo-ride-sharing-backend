@@ -22,6 +22,12 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum RideStopStatus {
+  PENDING
+  ARRIVED
+  COMPLETED
+}
+
 // RIDES
 
 model Ride {
@@ -77,6 +83,7 @@ model Ride {
   payment     Payment?
   reviews     Review[] // one per direction: customer→driver AND driver→customer
   tickets     SupportTicket[]
+  stops       RideStop[]      // intermediate waypoints for multi-stop rides
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
@@ -98,4 +105,67 @@ model Payment {
   updatedAt DateTime @updatedAt
 
   @@map("payments")
+}
+
+// ── Multi-Stop Routing  —  PRD 3.4 ────────────────────────────────────────────
+
+/// An intermediate waypoint within a multi-stop ride.
+/// sequence starts at 1; pickup is 0, dropoff is implied last.
+model RideStop {
+  id       String @id @default(uuid())
+  rideId   String
+  ride     Ride   @relation(fields: [rideId], references: [id], onDelete: Cascade)
+
+  address  String
+  lat      Float
+  lng      Float
+
+  /// 1-based ordering of stops between pickup and final dropoff.
+  sequence Int
+
+  status   RideStopStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rideId, sequence])
+  @@map("ride_stops")
+}
+
+// ── Recurring Rides  —  PRD 3.9 ───────────────────────────────────────────────
+
+/// A customer's repeating ride template.
+/// The factory engine (recurring.service.ts) reads all active profiles every
+/// day and mints SCHEDULED Ride records for the next execution window.
+model RecurringRideProfile {
+  id     String @id @default(uuid())
+  userId String /// References User.id (not customerProfile, for simplicity)
+
+  vehicleType VehicleType
+
+  pickupAddress String
+  pickupLat     Float
+  pickupLng     Float
+
+  dropoffAddress String
+  dropoffLat     Float
+  dropoffLng     Float
+
+  /// ISO weekday numbers: 1 = Monday … 7 = Sunday.
+  /// Stored as Int[] (PostgreSQL integer array).
+  daysOfWeek Int[]
+
+  /// Local time of day in 'HH:MM' format, e.g. "08:30".
+  timeOfDay String
+
+  startDate DateTime
+  endDate   DateTime
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@map("recurring_ride_profiles")
 }

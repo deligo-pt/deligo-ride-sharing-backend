@@ -18,6 +18,14 @@ const lngField = (name: string) =>
     .min(-180, `${name} must be >= -180`)
     .max(180, `${name} must be <= 180`);
 
+// ── Reusable intermediate stop schema ─────────────────────────────────────────
+export const StopSchema = z.object({
+  address: z.string({ error: 'address is required' }).min(1, 'address cannot be empty'),
+  lat:     latField('stop.lat'),
+  lng:     lngField('stop.lng'),
+});
+export type StopDto = z.infer<typeof StopSchema>;
+
 // ── PATCH /api/v1/rides/location ──────────────────────────────────────────────
 export const UpdateLocationSchema = z.object({
   lat: latField('lat'),
@@ -42,6 +50,8 @@ export const EstimateFareSchema = z.object({
     error: `vehicleType must be one of: ${Object.values(VehicleType).join(', ')}`,
   }).optional(),
   promoCode: z.string().optional(),
+  /** Optional intermediate stops for multi-stop fare estimation. */
+  stops: z.array(StopSchema).max(5, 'A maximum of 5 intermediate stops is allowed').optional(),
 });
 export type EstimateFareDto = z.infer<typeof EstimateFareSchema>;
 
@@ -59,6 +69,8 @@ export const RequestRideSchema = z.object({
   estimatedFare: z
     .number({ error: 'estimatedFare must be a number' })
     .positive('estimatedFare must be a positive number'),
+  /** Optional intermediate stops saved as RideStop records in the DB. */
+  stops: z.array(StopSchema).max(5, 'A maximum of 5 intermediate stops is allowed').optional(),
   /**
    * Optional future datetime for scheduling a ride.
    * Must be an ISO 8601 string and must be at least 30 minutes from now.

@@ -1,6 +1,6 @@
 import { VehicleType } from '@prisma/client';
 import prisma from '../../config/db';
-import { getRouteData } from '../../utils/map.service';
+import { getMultiStopRouteData, type Coordinate } from '../../utils/map.service';
 import { isPointInPolygon, parsePolygon } from '../../utils/geo.utils';
 
 // Single source of truth for all fare arithmetic. Both the estimate endpoint
@@ -181,9 +181,13 @@ export const PricingEngine = {
   /**
    * Calculate an upfront fare estimate for a given route.
    *
-   * Uses real-world routing (Mapbox → OSRM → Haversine fallback) to obtain
-   * accurate road distance and estimated travel time. Returns one
-   * FareBreakdown per vehicle type, or a single one if vehicleType is given.
+   * Accepts an optional array of intermediate `stops` between pickup and
+   * dropoff. When supplied, the full coordinate chain
+   * (pickup → stop1 → … → stopN → dropoff) is sent to the routing provider
+   * in a single request so distance and duration are cumulative.
+   *
+   * Returns one FareBreakdown per vehicle type, or a single one if
+   * vehicleType is given.
    */
   async calculateEstimate(
     pickupLat: number,
@@ -193,9 +197,17 @@ export const PricingEngine = {
     vehicleType?: VehicleType,
     promoCode?: string,
     surgeMultiplier: number = 1.0,
+    stops: Coordinate[] = [],
   ): Promise<FareBreakdown[]> {
-    // ── Fetch real-world route data (single API call shared across all tiers) ──
-    const routeData = await getRouteData(pickupLat, pickupLng, dropoffLat, dropoffLng);
+    // ── Build full coordinate chain (pickup → intermediate stops → dropoff) ──
+    const coordinates: Coordinate[] = [
+      { lat: pickupLat,  lng: pickupLng  },
+      ...stops,
+      { lat: dropoffLat, lng: dropoffLng },
+    ];
+
+    // ── Fetch real-world route data (single API call for the full itinerary) ─
+    const routeData = await getMultiStopRouteData(coordinates);
     const distanceKm      = routeData.distanceMeters / 1_000;
     const durationMinutes = routeData.durationSeconds / 60;
 

@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../config/db';
 import { LocationService, redis } from '../../utils/redis';
 import { PricingEngine } from './pricing.service';
-import { getRouteData } from '../../utils/map.service';
+import { getMultiStopRouteData } from '../../utils/map.service';
 import { addScheduledRideJob } from '../../queues/ride.queue';
 import type {
   UpdateLocationDto,
@@ -81,6 +81,8 @@ export async function estimateFare(dto: EstimateFareDto) {
     dto.dropoffLng,
     dto.vehicleType,
     dto.promoCode,
+    1.0,
+    dto.stops,   // pass intermediate stops for multi-stop pricing
   );
 }
 
@@ -89,40 +91,9 @@ export async function estimateFare(dto: EstimateFareDto) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface RequestRideResult {
-  ride: Awaited<ReturnType<typeof createRideRecord>>;
+  ride: Awaited<ReturnType<typeof prisma.ride.create>>;
   dispatchedDriverIds: string[];
   scheduled: boolean;
-}
-
-/** Private helper — keeps the return-type inference clean */
-async function createRideRecord(
-  customerId: string,
-  dto: RequestRideDto,
-  estimatedDistance?: number,
-  estimatedDuration?: number,
-) {
-  const isScheduled = dto.scheduledAt !== undefined;
-
-  return prisma.ride.create({
-    data: {
-      customerId,
-      pickupAddress:    dto.pickupAddress,
-      pickupLatitude:   dto.pickupLat,
-      pickupLongitude:  dto.pickupLng,
-      dropoffAddress:   dto.dropoffAddress,
-      dropoffLatitude:  dto.dropoffLat,
-      dropoffLongitude: dto.dropoffLng,
-      vehicleType:      dto.vehicleType,
-      estimatedFare:    dto.estimatedFare,
-      estimatedDistance,
-      estimatedDuration,
-      status:      isScheduled ? 'SCHEDULED' : 'REQUESTED',
-      scheduledAt: dto.scheduledAt ?? null,
-    },
-    include: {
-      customerProfile: { select: { userId: true } },
-    },
-  });
 }
 
 /**
@@ -151,29 +122,68 @@ export async function requestRide(
     throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
   }
 
-  // 2. Fetch real-world route data (never throws — falls back to Haversine)
-  const routeData = await getRouteData(
-    dto.pickupLat,
-    dto.pickupLng,
-    dto.dropoffLat,
-    dto.dropoffLng,
-  );
+  // 2. Build full coordinate chain and fetch cumulative route data
+  const intermediateStops = dto.stops ?? [];
+  const coordinates = [
+    { lat: dto.pickupLat,  lng: dto.pickupLng  },
+    ...intermediateStops.map((s) => ({ lat: s.lat, lng: s.lng })),
+    { lat: dto.dropoffLat, lng: dto.dropoffLng },
+  ];
+
+  const routeData = await getMultiStopRouteData(coordinates);
   const estimatedDistance = Math.round((routeData.distanceMeters / 1_000) * 100) / 100;
   const estimatedDuration = Math.ceil(routeData.durationSeconds / 60);
 
-  // 3. Persist the ride record
-  const ride = await createRideRecord(customerProfile.id, dto, estimatedDistance, estimatedDuration);
+  const isScheduled = dto.scheduledAt !== undefined;
+
+  // 3. Persist Ride + RideStops atomically in a transaction
+  const ride = await prisma.$transaction(async (tx) => {
+    const createdRide = await tx.ride.create({
+      data: {
+        customerId:       customerProfile.id,
+        pickupAddress:    dto.pickupAddress,
+        pickupLatitude:   dto.pickupLat,
+        pickupLongitude:  dto.pickupLng,
+        dropoffAddress:   dto.dropoffAddress,
+        dropoffLatitude:  dto.dropoffLat,
+        dropoffLongitude: dto.dropoffLng,
+        vehicleType:      dto.vehicleType,
+        estimatedFare:    dto.estimatedFare,
+        estimatedDistance,
+        estimatedDuration,
+        status:      isScheduled ? 'SCHEDULED' : 'REQUESTED',
+        scheduledAt: dto.scheduledAt ?? null,
+      },
+      include: {
+        customerProfile: { select: { userId: true } },
+        stops: true,
+      },
+    });
+
+    // Insert intermediate stops with strict 1-based sequence ordering
+    if (intermediateStops.length > 0) {
+      await tx.rideStop.createMany({
+        data: intermediateStops.map((stop, idx) => ({
+          rideId:   createdRide.id,
+          address:  stop.address,
+          lat:      stop.lat,
+          lng:      stop.lng,
+          sequence: idx + 1,
+          status:   'PENDING' as const,
+        })),
+      });
+    }
+
+    return createdRide;
+  });
 
   // ── SCHEDULED path ──────────────────────────────────────────────────────────
   if (dto.scheduledAt) {
-    // Enqueue a delayed BullMQ job that fires 30 min before pickup time.
-    // The worker will transition the ride to REQUESTED and run driver matching.
     await addScheduledRideJob(ride.id, dto.scheduledAt);
     return { ride, dispatchedDriverIds: [], scheduled: true };
   }
 
   // ── ON-DEMAND path ────────────────────────────────────────────────────────
-  // 4. Geospatial candidate lookup from Redis
   const candidateUserIds = await LocationService.findNearbyDrivers(
     dto.pickupLng,
     dto.pickupLat,
@@ -183,7 +193,6 @@ export async function requestRide(
   let dispatchedDriverIds: string[] = [];
 
   if (candidateUserIds.length > 0) {
-    // 5. Postgres filter: available + matching vehicle type
     const eligibleDrivers = await prisma.driverProfile.findMany({
       where: {
         userId: { in: candidateUserIds },

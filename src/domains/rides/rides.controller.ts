@@ -283,3 +283,124 @@ export async function shareRide(
     next(mapRideError(err));
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recurring Rides  —  PRD 3.9
+// ─────────────────────────────────────────────────────────────────────────────
+
+import * as recurringService from './recurring.service';
+import { ValidationError } from '../../utils/errors';
+
+function mapRecurringError(err: unknown): Error {
+  if (err instanceof Error) {
+    switch (err.message) {
+      case 'END_DATE_BEFORE_START':   return new BadRequestError('endDate must be after startDate.');
+      case 'END_DATE_IN_PAST':        return new BadRequestError('endDate must be in the future.');
+      case 'PROFILE_NOT_FOUND':       return new NotFoundError('Recurring ride profile');
+      case 'PROFILE_FORBIDDEN':       return new ForbiddenError('You do not own this recurring profile.');
+      case 'PROFILE_ALREADY_INACTIVE': return new BadRequestError('This profile is already inactive.');
+    }
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+/**
+ * POST /api/v1/rides/recurring
+ * Role: CUSTOMER
+ *
+ * Creates a new RecurringRideProfile template.
+ */
+export async function createRecurringProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'CUSTOMER') {
+      throw new ForbiddenError('Only customers can create recurring ride profiles.');
+    }
+
+    const parsed = recurringService.RecurringProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
+    }
+
+    const profile = await recurringService.createRecurringProfile(req.user!.id, parsed.data);
+    res.status(201).json({ success: true, data: { profile } });
+  } catch (err) {
+    next(mapRecurringError(err));
+  }
+}
+
+/**
+ * GET /api/v1/rides/recurring
+ * Role: CUSTOMER
+ *
+ * Returns all recurring profiles for the authenticated customer.
+ */
+export async function getMyRecurringProfiles(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'CUSTOMER') {
+      throw new ForbiddenError('Only customers can view their recurring profiles.');
+    }
+
+    const profiles = await recurringService.getMyRecurringProfiles(req.user!.id);
+    res.status(200).json({ success: true, data: { profiles, total: profiles.length } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/v1/rides/recurring/:id
+ * Role: CUSTOMER
+ *
+ * Deactivates (soft-deletes) a recurring ride profile.
+ */
+export async function deactivateRecurringProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'CUSTOMER') {
+      throw new ForbiddenError('Only customers can deactivate recurring profiles.');
+    }
+
+    const profileId = String(req.params.id);
+    const profile = await recurringService.deactivateRecurringProfile(req.user!.id, profileId);
+    res.status(200).json({ success: true, data: { profile } });
+  } catch (err) {
+    next(mapRecurringError(err));
+  }
+}
+
+/**
+ * POST /api/v1/rides/recurring/evaluate
+ * Role: ADMIN
+ *
+ * Manually triggers the recurring profile evaluation sweep.
+ * In production this would be called by a cron job; exposing it as an
+ * endpoint enables easy manual triggering and testing.
+ */
+export async function triggerRecurringEvaluate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.user!.role !== 'ADMIN') {
+      throw new ForbiddenError('Only admins can trigger the recurring ride evaluation.');
+    }
+
+    const result = await recurringService.evaluateRecurringProfiles();
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
