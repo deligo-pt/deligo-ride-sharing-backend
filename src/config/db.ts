@@ -93,19 +93,16 @@ const softDeleteExtension = Prisma.defineExtension({
   },
 });
 
-// ── Derive the extended type so the global declaration stays accurate ─────────
-// We instantiate a throwaway bare client solely for type inference — it is
-// never connected and never exported. This avoids the circular self-reference
-// that occurs when you write `type T = ReturnType<typeof fnThatReturnsT>`.
-const _typeBase = new PrismaClient();
-type ExtendedPrismaClient = typeof _typeBase extends PrismaClient
-  ? ReturnType<(base: typeof _typeBase) => ReturnType<typeof _typeBase.$extends>>
-  : never;
-
-// The concrete helper used at runtime:
+// ── Build the extended client & derive its type ───────────────────────────────
+// `buildExtendedClient` has NO explicit return-type annotation — TypeScript
+// infers it from the body (`base.$extends(...)`).  We then derive the type
+// alias from the inferred return type.  This avoids BOTH the circular-reference
+// error (TS2456) AND any runtime `new PrismaClient()` call.
 function buildExtendedClient(base: PrismaClient) {
   return base.$extends(softDeleteExtension);
 }
+
+type ExtendedPrismaClient = ReturnType<typeof buildExtendedClient>;
 
 // ── Global singleton declaration ──────────────────────────────────────────────
 

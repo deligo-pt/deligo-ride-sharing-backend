@@ -31,6 +31,9 @@ model User {
   // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
   fcmToken String?
 
+  // Profile picture URL (set via POST /api/v1/customers/me/avatar)
+  profilePicture String?
+
   // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -47,6 +50,7 @@ model User {
   emergencyContacts     EmergencyContact[]
   supportTickets        SupportTicket[]    @relation("TicketCreator")
   assignedTickets       SupportTicket[]    @relation("TicketAdmin")
+  savedLocations        SavedLocation[]
 
   @@index([email])
   @@index([phone])
@@ -125,4 +129,28 @@ model WalletTransaction {
 
   @@index([walletId])
   @@map("wallet_transactions")
+}
+
+// SAVED LOCATIONS — PRD 2.1
+
+/// A favourite address saved by a customer (e.g. Home, Work).
+model SavedLocation {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name    String // e.g. "Home", "Work", "Gym"
+  address String
+  lat     Float
+  lng     Float
+
+  // Soft delete (handled automatically by the Prisma extension)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("saved_locations")
 }

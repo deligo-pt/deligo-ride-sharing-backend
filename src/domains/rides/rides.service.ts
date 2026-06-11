@@ -5,6 +5,7 @@ import { LocationService, redis } from '../../utils/redis';
 import { PricingEngine } from './pricing.service';
 import { getRouteData } from '../../utils/map.service';
 import { addScheduledRideJob } from '../../queues/ride.queue';
+import { sendSMS } from '../notifications/notifications.service';
 import type {
   UpdateLocationDto,
   SearchRideDto,
@@ -471,4 +472,81 @@ export async function shareRide(
     trackingToken,
     trackingUrl: `${TRACKING_BASE_URL}/${trackingToken}`,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD 2.1: Share Live Trip via SMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FRONTEND_TRACKING_URL = process.env.FRONTEND_URL ?? 'https://deligo.app';
+
+/**
+ * Verify the ride is IN_PROGRESS and owned by the customer, then SMS a
+ * tracking message (with driver name + vehicle details) to any phone number.
+ *
+ * This is distinct from shareRide() which generates a Redis token for
+ * Socket.io read-only access.  Here we simply send an informational SMS
+ * to a third-party contact chosen by the customer.
+ */
+export async function shareTripViaSms(
+  userId: string,
+  rideId: string,
+  phoneNumber: string,
+): Promise<{ sentTo: string }> {
+  // 1. Resolve the customer profile
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!customerProfile) {
+    throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
+  }
+
+  // 2. Fetch ride with driver + vehicle details, enforcing ownership
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    select: {
+      id: true,
+      customerId: true,
+      status: true,
+      driverProfile: {
+        select: {
+          user: { select: { firstName: true, lastName: true } },
+          vehicle: { select: { brand: true, model: true, color: true, licensePlate: true } },
+        },
+      },
+    },
+  });
+
+  if (!ride) {
+    throw new Error('RIDE_NOT_FOUND');
+  }
+
+  if (ride.customerId !== customerProfile.id) {
+    throw new Error('RIDE_FORBIDDEN');
+  }
+
+  if (ride.status !== 'IN_PROGRESS') {
+    throw new Error('RIDE_NOT_IN_PROGRESS');
+  }
+
+  // 3. Build the SMS message
+  const driver = ride.driverProfile;
+  const driverName = driver
+    ? `${driver.user.firstName ?? ''} ${driver.user.lastName ?? ''}`.trim() || 'your driver'
+    : 'your driver';
+
+  const vehicleDesc = driver?.vehicle
+    ? `${driver.vehicle.color} ${driver.vehicle.brand} ${driver.vehicle.model} (${driver.vehicle.licensePlate})`
+    : 'a vehicle';
+
+  const message =
+    `Track my ride! I am riding with ${driverName} in a ${vehicleDesc}. ` +
+    `Follow along here: ${FRONTEND_TRACKING_URL}/track/${rideId}`;
+
+  // 4. Dispatch SMS (fire-and-forget — does not block the response)
+  await sendSMS(phoneNumber, message);
+
+  return { sentTo: phoneNumber };
 }

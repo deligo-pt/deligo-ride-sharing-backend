@@ -7,6 +7,7 @@ import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './utils/errors';
 
 // ─── Route Imports ────────────────────────────────────────────────────────────
+import customersRouter from './domains/customers/customers.routes';
 import driversRouter from './domains/drivers/drivers.routes';
 import kycRouter from './domains/kyc/kyc.routes';
 import notificationsRouter from './domains/notifications/notifications.routes';
@@ -84,6 +85,7 @@ export function createApp(): Application {
 
   // ── Domain Routers ────────────────────────────────────────────────────────
   app.use(`${API_PREFIX}/rides`, ridesRouter);
+  app.use(`${API_PREFIX}/customers`, customersRouter);
   app.use(`${API_PREFIX}/drivers`, driversRouter);
   app.use(`${API_PREFIX}/vehicles`, vehicleRouter);
   app.use(`${API_PREFIX}/profile`, profileRouter);
