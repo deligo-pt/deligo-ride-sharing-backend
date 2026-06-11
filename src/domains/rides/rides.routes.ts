@@ -74,13 +74,4 @@ router.post('/:id/cancel', requireAuth, ridesController.cancelRide);
  */
 router.post('/:id/share', requireAuth, ridesController.shareRide);
 
-/**
- * POST /api/v1/rides/:id/share-sms
- * Customer → send live trip details via SMS to a given phone number
- * Ride must be IN_PROGRESS.
- * Headers: x-mock-role: CUSTOMER
- * Body: { phoneNumber }
- */
-router.post('/:id/share-sms', requireAuth, ridesController.shareTripViaSms);
-
 export default router;

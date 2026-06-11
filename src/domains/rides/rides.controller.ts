@@ -7,7 +7,6 @@ import {
   UpdateRideStatusSchema,
   CancelRideSchema,
 } from './rides.validation';
-import { ShareRideViaSmsSchema } from '../customers/customers.validation';
 import * as ridesService from './rides.service';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
@@ -161,13 +160,11 @@ export async function requestRide(
 function mapRideError(err: unknown): Error {
   if (err instanceof Error) {
     switch (err.message) {
-      case 'RIDE_NOT_FOUND':             return new NotFoundError('Ride');
-      case 'RIDE_NOT_AVAILABLE':         return new BadRequestError('Ride is no longer available for acceptance.');
-      case 'DRIVER_PROFILE_NOT_FOUND':   return new NotFoundError('DriverProfile for this user. Complete driver onboarding first.');
-      case 'RIDE_FORBIDDEN':             return new ForbiddenError('You are not authorised to perform this action on the ride.');
-      case 'RIDE_ALREADY_TERMINAL':      return new BadRequestError('Ride is already completed or cancelled.');
-      case 'CUSTOMER_PROFILE_NOT_FOUND': return new NotFoundError('CustomerProfile for this user. Create a customer profile first.');
-      case 'RIDE_NOT_IN_PROGRESS':       return new BadRequestError('This feature is only available while the ride is IN_PROGRESS.');
+      case 'RIDE_NOT_FOUND':          return new NotFoundError('Ride');
+      case 'RIDE_NOT_AVAILABLE':      return new BadRequestError('Ride is no longer available for acceptance.');
+      case 'DRIVER_PROFILE_NOT_FOUND': return new NotFoundError('DriverProfile for this user. Complete driver onboarding first.');
+      case 'RIDE_FORBIDDEN':          return new ForbiddenError('You are not the assigned driver for this ride.');
+      case 'RIDE_ALREADY_TERMINAL':   return new BadRequestError('Ride is already completed or cancelled.');
     }
   }
   return err instanceof Error ? err : new Error(String(err));
@@ -282,45 +279,6 @@ export async function shareRide(
     const result = await ridesService.shareRide(req.user!.id, rideId);
 
     res.status(201).json({ success: true, data: result });
-  } catch (err) {
-    next(mapRideError(err));
-  }
-}
-
-/**
- * POST /api/v1/rides/:id/share-sms
- * Role: CUSTOMER
- *
- * Verifies the ride is IN_PROGRESS and owned by the caller, then sends an
- * SMS to the provided phoneNumber containing driver/vehicle details and a
- * tracking URL.
- */
-export async function shareTripViaSms(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    if (req.user!.role !== 'CUSTOMER') {
-      throw new ForbiddenError('Only customers can share their live trip.');
-    }
-
-    const parsed = ShareRideViaSmsSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new BadRequestError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-
-    const rideId = String(req.params.id);
-    const result = await ridesService.shareTripViaSms(
-      req.user!.id,
-      rideId,
-      parsed.data.phoneNumber,
-    );
-
-    res.status(200).json({
-      success: true,
-      data: { message: `Trip details sent via SMS to ${result.sentTo}.` },
-    });
   } catch (err) {
     next(mapRideError(err));
   }
