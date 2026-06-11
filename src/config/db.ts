@@ -24,10 +24,26 @@ import { PrismaPg } from '@prisma/adapter-pg';
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 /**
+ * Models that carry `isDeleted` / `deletedAt` soft-delete columns.
+ * Models that lack these fields (e.g. EmergencyAlert) must NOT be included here.
+ */
+const SOFT_DELETE_MODELS = new Set([
+  'User',
+  'Ride',
+  'SupportTicket',
+  'PromoCode',
+]);
+
+/**
  * Merges `{ isDeleted: false }` into an existing `where` clause, but only
  * when the caller has NOT explicitly requested `isDeleted: true` (audit mode).
+ * Returns args unchanged for models not in SOFT_DELETE_MODELS.
  */
-function withNotDeleted(args: Record<string, unknown>): Record<string, unknown> {
+function withNotDeleted(
+  model: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!SOFT_DELETE_MODELS.has(model)) return args;
   const where = (args.where ?? {}) as Record<string, unknown>;
   // Respect an explicit audit override: isDeleted: true means "show me deleted records"
   if (where['isDeleted'] === true) return args;
@@ -65,29 +81,25 @@ const softDeleteExtension = Prisma.defineExtension({
         ) as ReturnType<typeof query>;
       },
 
-      // ── Inject isDeleted: false into read operations ───────────────────────
+      // ── Inject isDeleted: false into read operations (soft-delete models only) ──
       async findUnique({ model, operation, args, query }) {
-        void model;
         void operation;
-        return query(withNotDeleted(args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
       },
 
       async findFirst({ model, operation, args, query }) {
-        void model;
         void operation;
-        return query(withNotDeleted(args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
       },
 
       async findMany({ model, operation, args, query }) {
-        void model;
         void operation;
-        return query(withNotDeleted(args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
       },
 
       async count({ model, operation, args, query }) {
-        void model;
         void operation;
-        return query(withNotDeleted(args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
       },
     },
   },

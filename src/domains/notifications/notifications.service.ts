@@ -44,7 +44,14 @@ type IoServer = SocketIoServer<
 
 let _io: IoServer | null = null;
 
-// ── Per-user room name (matches the pattern used in socket.handlers.ts) ──────
+/**
+ * Returns the Socket.io server instance, or null if not yet initialised.
+ * Use this to emit to arbitrary rooms from outside the NotificationEngine.
+ */
+export function getIo(): IoServer | null {
+  return _io;
+}
+
 const userRoom = (userId: string) => `user_${userId}`;
 
 // ─────────────────────────────────────────────────────────────────────────────

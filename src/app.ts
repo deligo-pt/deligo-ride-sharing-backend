@@ -14,6 +14,7 @@ import profileRouter from './domains/profile/profile.routes';
 import promotionsRouter from './domains/promotions/promotions.routes';
 import reviewsRouter from './domains/reviews/reviews.routes';
 import ridesRouter from './domains/rides/rides.routes';
+import safetyRouter from './domains/safety/safety.routes';
 import supportRouter from './domains/support/support.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 import adminRouter from './domains/admin/admin.routes';
@@ -92,6 +93,7 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/promotions`, promotionsRouter);
   app.use(`${API_PREFIX}/reviews`, reviewsRouter);
   app.use(`${API_PREFIX}/support`, supportRouter);
+  app.use(`${API_PREFIX}/safety`, safetyRouter);
   app.use(`${API_PREFIX}/users`, usersRouter);
   app.use(`${API_PREFIX}/admin`, adminRouter);
 

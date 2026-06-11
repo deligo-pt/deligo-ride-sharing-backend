@@ -47,6 +47,8 @@ model User {
   emergencyContacts     EmergencyContact[]
   supportTickets        SupportTicket[]    @relation("TicketCreator")
   assignedTickets       SupportTicket[]    @relation("TicketAdmin")
+  sosAlertsInitiated    EmergencyAlert[]   @relation("SosInitiator")
+  sosAlertsResolved     EmergencyAlert[]   @relation("SosResolver")
 
   @@index([email])
   @@index([phone])

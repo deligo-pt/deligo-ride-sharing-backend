@@ -63,6 +63,9 @@ export interface ServerToClientEvents {
   /** Push a notification to a user's personal room */
   notification: (payload: NotificationPayload) => void;
 
+  /** SOS alert broadcast to the admin_security_desk room */
+  sos_alert: (payload: SosAlertPayload) => void;
+
   /** Error feedback to the originating client */
   error: (payload: { message: string }) => void;
 }
@@ -97,4 +100,17 @@ export interface NotificationPayload {
   type: string;
   data: Record<string, unknown> | null;
   timestamp: string; // ISO-8601
+}
+
+export interface SosAlertPayload {
+  alertId: string;
+  initiatorId: string;
+  initiatorName: string;
+  initiatorRole: 'CUSTOMER' | 'DRIVER';
+  rideId: string | null;
+  lat: number;
+  lng: number;
+  mapsLink: string;
+  status: 'ACTIVE';
+  createdAt: string; // ISO-8601
 }
