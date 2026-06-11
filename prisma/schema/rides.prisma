@@ -1,4 +1,5 @@
 enum RideStatus {
+  SCHEDULED
   REQUESTED
   ACCEPTED
   DRIVER_ARRIVED
@@ -54,6 +55,7 @@ model Ride {
   durationMinutes   Int?
 
   // Timestamps
+  scheduledAt        DateTime? // set when status = SCHEDULED
   requestedAt        DateTime  @default(now())
   acceptedAt         DateTime?
   arrivedAt          DateTime?

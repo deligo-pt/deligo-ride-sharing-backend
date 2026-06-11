@@ -59,6 +59,19 @@ export const RequestRideSchema = z.object({
   estimatedFare: z
     .number({ error: 'estimatedFare must be a number' })
     .positive('estimatedFare must be a positive number'),
+  /**
+   * Optional future datetime for scheduling a ride.
+   * Must be an ISO 8601 string and must be at least 30 minutes from now.
+   */
+  scheduledAt: z
+    .string()
+    .datetime({ message: 'scheduledAt must be a valid ISO 8601 datetime string' })
+    .refine(
+      (v) => new Date(v).getTime() > Date.now() + 30 * 60 * 1000,
+      { message: 'scheduledAt must be at least 30 minutes in the future' },
+    )
+    .transform((v) => new Date(v))
+    .optional(),
 });
 export type RequestRideDto = z.infer<typeof RequestRideSchema>;
 

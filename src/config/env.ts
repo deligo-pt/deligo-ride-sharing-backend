@@ -27,6 +27,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   // Firebase Admin — push notifications
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./firebase-service-account.json'),
+  // BulkGate — transactional SMS gateway
+  // Obtain from https://portal.bulkgate.com → Administration → Applications
+  BULKGATE_APPLICATION_ID: z.string().optional(),
+  BULKGATE_APPLICATION_TOKEN: z.string().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

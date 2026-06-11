@@ -5,6 +5,7 @@ import prisma from './config/db';
 import { env } from './config/env';
 import { NotificationEngine } from './domains/notifications/notifications.service';
 import { initSocketServer } from './sockets';
+import { rideWorker } from './queues/ride.worker';
 
 // Server Entry Point
 
@@ -44,10 +45,12 @@ async function bootstrap(): Promise<void> {
     server.close(async () => {
       console.info('   HTTP server closed');
       try {
+        await rideWorker.close();
+        console.info('   BullMQ worker closed');
         await prisma.$disconnect();
         console.info('   Database disconnected');
       } catch (err) {
-        console.error('   Error during database disconnect:', err);
+        console.error('   Error during shutdown cleanup:', err);
       }
       console.info('✅ Shutdown complete');
       process.exit(0);

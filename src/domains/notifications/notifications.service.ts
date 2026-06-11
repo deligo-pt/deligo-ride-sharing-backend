@@ -2,7 +2,7 @@ import { NotificationType } from '@prisma/client';
 import type { Server as SocketIoServer } from 'socket.io';
 import admin from '../../utils/firebase';
 import prisma from '../../config/db';
-import twilio from 'twilio';
+import { sendBulkGateSms } from '../../utils/bulkgate';
 import { Resend } from 'resend';
 import type {
   ClientToServerEvents,
@@ -23,7 +23,7 @@ import type {
 //   • IN_APP    → persisted in the `notifications` table (Prisma)
 //   • WEBSOCKET → pushed to the user's personal Socket.io room
 //   • PUSH      → Firebase FCM via firebase-admin SDK
-//   • SMS       → [MOCK] placeholder for Twilio SMS
+//   • SMS       → BulkGate transactional API (src/utils/bulkgate.ts)
 //   • EMAIL     → [MOCK] placeholder for SendGrid / SES
 //
 // Usage:
@@ -149,26 +149,16 @@ async function sendPush(opts: DispatchOptions): Promise<void> {
 }
 
 /**
- * Send an SMS via Twilio.
- * Falls back to console.log if TWILIO_ACCOUNT_SID is not configured.
+ * Send a transactional SMS via BulkGate.
+ *
+ * Delegates to `sendBulkGateSms` which gracefully degrades to a console
+ * log when BULKGATE_APPLICATION_ID / BULKGATE_APPLICATION_TOKEN are absent.
+ *
+ * @param phone   Recipient phone in any international format (e.g. "+447000000000").
+ * @param message SMS body text.
  */
 async function sendSMS(phone: string, message: string): Promise<void> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken  = process.env.TWILIO_AUTH_TOKEN;
-  const from       = process.env.TWILIO_FROM_NUMBER;
-
-  if (!accountSid || !authToken || !from) {
-    console.log(`[SMS FALLBACK] → ${phone} | ${message}`);
-    return;
-  }
-
-  try {
-    const client = twilio(accountSid, authToken);
-    const msg = await client.messages.create({ body: message, from, to: phone });
-    console.info(`[SMS] ✅ Sent | sid=${msg.sid} | to=${phone}`);
-  } catch (err) {
-    console.error(`[SMS] ❌ Failed to send to ${phone}:`, err);
-  }
+  await sendBulkGateSms(phone, message);
 }
 
 /**

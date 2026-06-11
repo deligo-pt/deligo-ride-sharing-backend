@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient, UserRole, UserStatus, AccessLabel, VehicleClass, VehicleType } from '@prisma/client';
+import { PrismaClient, UserRole, UserStatus, AccessLabel, VehicleClass, VehicleType, ZoneType } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 const connectionString = process.env.DATABASE_URL;
@@ -26,6 +26,7 @@ async function main() {
   await prisma.wallet.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.pricingRule.deleteMany({});
+  await prisma.zone.deleteMany({});
 
   console.log('🗑️  Existing data cleared.');
 
@@ -41,6 +42,49 @@ async function main() {
     ],
   });
   console.log('💰 Pricing Rules seeded successfully.');
+
+  // Seed Zones (Geofencing)
+  await prisma.zone.createMany({
+    data: [
+      {
+        name: 'Hazrat Shahjalal International Airport',
+        type: ZoneType.SURCHARGE,
+        surchargeAmount: 5.00,
+        polygon: [
+          [23.8450, 90.3979],
+          [23.8450, 90.4230],
+          [23.8280, 90.4230],
+          [23.8280, 90.3979]
+        ],
+        isActive: true,
+      },
+      {
+        name: 'Kamalapur Railway Station',
+        type: ZoneType.SURCHARGE,
+        surchargeAmount: 2.50,
+        polygon: [
+          [23.7340, 90.4245],
+          [23.7340, 90.4300],
+          [23.7290, 90.4300],
+          [23.7290, 90.4245]
+        ],
+        isActive: true,
+      },
+      {
+        name: 'Padma Bridge Toll Plaza',
+        type: ZoneType.SURCHARGE,
+        surchargeAmount: 10.00,
+        polygon: [
+          [23.4730, 90.2600],
+          [23.4730, 90.2700],
+          [23.4680, 90.2700],
+          [23.4680, 90.2600]
+        ],
+        isActive: true,
+      }
+    ],
+  });
+  console.log('🌍 Geofencing Zones seeded successfully.');
 
   // 1. Create CUSTOMER
   const customerUser = await prisma.user.create({

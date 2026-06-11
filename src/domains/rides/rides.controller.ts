@@ -125,7 +125,28 @@ export async function requestRide(
 
     const result = await ridesService.requestRide(req.user!.id, parsed.data);
 
-    res.status(201).json({ success: true, data: result });
+    if (result.scheduled) {
+      // Scheduled ride: BullMQ job enqueued, no immediate driver dispatch.
+      res.status(201).json({
+        success: true,
+        data: {
+          ride: result.ride,
+          scheduled: true,
+          message: `Ride scheduled for ${result.ride.scheduledAt?.toISOString()}. Driver search will begin 30 minutes before pickup.`,
+          dispatchedDriverIds: [],
+        },
+      });
+    } else {
+      // On-demand ride: driver search already triggered.
+      res.status(201).json({
+        success: true,
+        data: {
+          ride: result.ride,
+          scheduled: false,
+          dispatchedDriverIds: result.dispatchedDriverIds,
+        },
+      });
+    }
   } catch (err) {
     if (err instanceof Error && err.message === 'CUSTOMER_PROFILE_NOT_FOUND') {
       next(new NotFoundError('CustomerProfile for this user. Create a customer profile first.'));
