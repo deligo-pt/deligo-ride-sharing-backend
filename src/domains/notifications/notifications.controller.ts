@@ -7,6 +7,7 @@ import {
   saveFcmToken,
 } from './notifications.service';
 import { ListNotificationsSchema, SaveFcmTokenSchema } from './notifications.validation';
+import { sendBulkGateSms } from '../../utils/bulkgate';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notifications Controller  — PRD 3.12
@@ -100,6 +101,33 @@ export async function saveFcmTokenHandler(
 
     const result = await saveFcmToken(req.user!.id, parsed.data.fcmToken);
     res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/notifications/test-sms
+ * Temporary endpoint to test BulkGate SMS integration
+ */
+export async function testSmsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) {
+      throw new BadRequestError('phone and message are required');
+    }
+    
+    // Call our new utility
+    await sendBulkGateSms(phone, message);
+    
+    res.status(200).json({ 
+      success: true, 
+      data: { message: `SMS request dispatched to ${phone}` } 
+    });
   } catch (err) {
     next(err);
   }

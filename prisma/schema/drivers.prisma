@@ -42,6 +42,10 @@ model DriverProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Soft delete
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   // Relations
   vehicle  Vehicle?
   document DriverDocument?

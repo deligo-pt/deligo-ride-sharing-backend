@@ -21,6 +21,10 @@ model PromoCode {
   validUntil     DateTime
   isActive       Boolean      @default(true)
 
+  // Soft delete
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
 
   // Relations

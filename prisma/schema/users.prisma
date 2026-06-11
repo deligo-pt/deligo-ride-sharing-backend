@@ -31,6 +31,10 @@ model User {
   // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
   fcmToken String?
 
+  // Soft delete
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   // Relations
   customerProfile       CustomerProfile?
   driverProfile         DriverProfile?

@@ -29,4 +29,10 @@ router.patch('/read-all', requireAuth, notificationsController.readAllNotificati
  */
 router.patch('/:id/read', requireAuth, notificationsController.readNotification);
 
+/**
+ * POST /api/v1/notifications/test-sms
+ * Test endpoint to dispatch an SMS
+ */
+router.post('/test-sms', notificationsController.testSmsHandler);
+
 export default router;
