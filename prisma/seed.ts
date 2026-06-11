@@ -108,9 +108,19 @@ async function main() {
           currency: 'USD',
         },
       },
+      emergencyContacts: {
+        create: [
+          {
+            name: 'John Doe',
+            phoneNumber: '+15550009999',
+            relation: 'Brother',
+          },
+        ],
+      },
     },
     include: {
       customerProfile: true,
+      emergencyContacts: true,
     },
   });
 
@@ -165,6 +175,25 @@ async function main() {
 
   console.log('🚖 Driver and Vehicle seeded successfully.');
 
+  // Create an active Ride for testing safety features with rideId
+  const activeRide = await prisma.ride.create({
+    data: {
+      customerId: customerUser.customerProfile!.id,
+      driverProfileId: driverUser.driverProfile!.id,
+      status: 'IN_PROGRESS',
+      pickupAddress: '123 Main Street, New York, NY',
+      pickupLatitude: 40.7128,
+      pickupLongitude: -74.0060,
+      dropoffAddress: '456 Business Rd, New York, NY',
+      dropoffLatitude: 40.7200,
+      dropoffLongitude: -74.0100,
+      estimatedFare: 15.50,
+      estimatedDistance: 2.5,
+      estimatedDuration: 10,
+    },
+  });
+  console.log('🚗 Active Ride seeded successfully.');
+
   // 3. Create ADMIN
   const adminUser = await prisma.user.create({
     data: {
@@ -197,12 +226,20 @@ async function main() {
   console.log(`  Profile ID: ${customerUser.customerProfile?.id}`);
   console.log(`  Email:      ${customerUser.email}`);
   console.log(`  Role:       ${customerUser.role}`);
+  if (customerUser.emergencyContacts.length > 0) {
+    console.log(`  Emergency Contact: ${customerUser.emergencyContacts[0].name} (${customerUser.emergencyContacts[0].phoneNumber})`);
+  }
   console.log('--------------------------------------------------');
   console.log(`DRIVER:`);
   console.log(`  User ID:    ${driverUser.id}`);
   console.log(`  Profile ID: ${driverUser.driverProfile?.id}`);
   console.log(`  Email:      ${driverUser.email}`);
   console.log(`  Role:       ${driverUser.role}`);
+  console.log('--------------------------------------------------');
+  console.log(`RIDE (IN_PROGRESS):`);
+  console.log(`  Ride ID:    ${activeRide.id}`);
+  console.log(`  Customer:   ${customerUser.id}`);
+  console.log(`  Driver:     ${driverUser.id}`);
   console.log('--------------------------------------------------');
   console.log(`ADMIN:`);
   console.log(`  User ID:    ${adminUser.id}`);
