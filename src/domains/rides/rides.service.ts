@@ -14,6 +14,7 @@ import type {
   CancelRideDto,
 } from './rides.validation';
 import { generateAndSendReceipt } from './receipt.service';
+import { processReferralReward } from './referral.hook';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -362,6 +363,18 @@ export async function updateRideStatus(
 
   // Fire-and-forget: send receipt email + SMS — does NOT block the API response
   void generateAndSendReceipt(rideId);
+
+  // Fire-and-forget: process referral bonus if this is the rider's first ride
+  // Resolve the rider's User.id from their CustomerProfile
+  void (async () => {
+    const customerProfile = await prisma.customerProfile.findUnique({
+      where: { id: ride.customerProfile.id },
+      select: { userId: true },
+    });
+    if (customerProfile) {
+      void processReferralReward(rideId, customerProfile.userId);
+    }
+  })();
 
   return { ride: updatedRide, fareBreakdown };
 

@@ -57,3 +57,27 @@ model PromoUsage {
   @@index([userId])
   @@map("promo_usages")
 }
+
+// ── Referral Campaign Config (Singleton) ─────────────────────────────────────
+
+/// Global configuration for the referral programme.
+/// Treated as a singleton — only one row should exist (id = "default").
+/// Admin can update bonus amounts and toggle the campaign via
+///   PATCH /api/v1/admin/referrals/config
+model ReferralCampaign {
+  /// Always "default" — enforces the singleton pattern.
+  id String @id @default("default")
+
+  /// Amount credited to the referrer (the person who shared the code).
+  referrerBonusAmount Float @default(10.0)
+
+  /// Amount credited to the referee (the new user who used the code).
+  refereeBonusAmount Float @default(5.0)
+
+  /// When false, no bonuses are paid even if a referral is detected.
+  isActive Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("referral_campaigns")
+}

@@ -103,32 +103,32 @@ enum EmergencyAlertStatus {
 /// A live SOS alert triggered by a customer or driver.
 /// Separate from SupportTicket due to critical severity and distinct resolution workflow.
 model EmergencyAlert {
-  id          String               @id @default(uuid())
+  id String @id @default(uuid())
 
   /// Optional link to the ride during which the alert was triggered.
-  rideId      String?
+  rideId String?
 
   /// The user who triggered the SOS.
   initiatorId String
-  initiator   User                 @relation("SosInitiator", fields: [initiatorId], references: [id])
+  initiator   User   @relation("SosInitiator", fields: [initiatorId], references: [id])
 
   initiatorRole AlertInitiatorRole
 
   /// GPS coordinates at the time of trigger.
-  lat         Float
-  lng         Float
+  lat Float
+  lng Float
 
-  status      EmergencyAlertStatus @default(ACTIVE)
+  status EmergencyAlertStatus @default(ACTIVE)
 
   /// Admin who resolved / dismissed the alert.
   resolvedById String?
-  resolvedBy   User?               @relation("SosResolver", fields: [resolvedById], references: [id])
+  resolvedBy   User?   @relation("SosResolver", fields: [resolvedById], references: [id])
 
   /// Free-text notes added by the resolving admin.
-  notes       String?
+  notes String?
 
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
   @@index([initiatorId])

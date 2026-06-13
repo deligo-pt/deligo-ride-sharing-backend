@@ -83,7 +83,7 @@ model Ride {
   payment     Payment?
   reviews     Review[] // one per direction: customer→driver AND driver→customer
   tickets     SupportTicket[]
-  stops       RideStop[]      // intermediate waypoints for multi-stop rides
+  stops       RideStop[] // intermediate waypoints for multi-stop rides
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
@@ -112,18 +112,18 @@ model Payment {
 /// An intermediate waypoint within a multi-stop ride.
 /// sequence starts at 1; pickup is 0, dropoff is implied last.
 model RideStop {
-  id       String @id @default(uuid())
-  rideId   String
-  ride     Ride   @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  rideId String
+  ride   Ride   @relation(fields: [rideId], references: [id], onDelete: Cascade)
 
-  address  String
-  lat      Float
-  lng      Float
+  address String
+  lat     Float
+  lng     Float
 
   /// 1-based ordering of stops between pickup and final dropoff.
   sequence Int
 
-  status   RideStopStatus @default(PENDING)
+  status RideStopStatus @default(PENDING)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

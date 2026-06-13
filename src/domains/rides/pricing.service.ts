@@ -67,14 +67,14 @@ async function resolvePromoCode(code: string | undefined) {
       id: true,
       code: true,
       discountType: true,
-      discountPercent: true,
-      discountAmount: true,
-      maxUses: true,
-      usedCount: true,
-      validUntil: true,
+      discountValue: true,
+      maxDiscountCap: true,
+      minRideValue: true,
+      maxGlobalUses: true,
+      currentUses: true,
       validFrom: true,
+      validUntil: true,
       isActive: true,
-      minimumFareAmount: true,
     },
   });
 }
@@ -138,14 +138,17 @@ async function computeFare(
       promo.isActive &&
       promo.validFrom <= now &&
       promo.validUntil >= now &&
-      (promo.maxUses === null || promo.usedCount < promo.maxUses);
+      promo.currentUses < promo.maxGlobalUses;
 
     if (isValid) {
       appliedCode = promo.code;
-      if (promo.discountType === 'PERCENTAGE' && promo.discountPercent !== null) {
-        discount = round2((afterSurge + serviceFee + taxAmount) * (promo.discountPercent / 100));
-      } else if (promo.discountAmount !== null) {
-        discount = round2(Number(promo.discountAmount));
+      if (promo.discountType === 'PERCENTAGE') {
+        const pct = round2((afterSurge + serviceFee + taxAmount) * (promo.discountValue / 100));
+        discount = promo.maxDiscountCap ? Math.min(pct, promo.maxDiscountCap) : pct;
+        discount = round2(discount);
+      } else {
+        // FLAT discount
+        discount = round2(promo.discountValue);
       }
     }
   }
