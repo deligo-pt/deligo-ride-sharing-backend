@@ -72,13 +72,6 @@ import {
   GetTrendsQuerySchema,
   ExportReportQuerySchema,
 } from './admin.analytics.validation';
-import {
-  getReferralConfigHandler,
-  updateReferralConfigHandler,
-} from './admin.referrals.controller';
-import {
-  UpdateReferralCampaignSchema,
-} from '../customers/customers.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Router  —  PRD 5.x
@@ -281,28 +274,6 @@ router.get(
   requireAuth,
   validate({ query: ExportReportQuerySchema }),
   exportReportHandler,
-);
-
-// ── Referral Campaign (PRD 5.6) ─────────────────────────────────────────────
-
-/**
- * GET /api/v1/admin/referrals/config
- *
- * Returns the singleton ReferralCampaign configuration.
- */
-router.get('/referrals/config', requireAuth, getReferralConfigHandler);
-
-/**
- * PATCH /api/v1/admin/referrals/config
- *
- * Update referral bonus amounts and/or toggle the campaign on/off.
- * Body: { referrerBonusAmount?, refereeBonusAmount?, isActive? }
- */
-router.patch(
-  '/referrals/config',
-  requireAuth,
-  validate({ body: UpdateReferralCampaignSchema }),
-  updateReferralConfigHandler,
 );
 
 export default router;

@@ -4,12 +4,6 @@ enum UserRole {
   ADMIN
 }
 
-enum WalletTxType {
-  REFERRAL_BONUS
-  RIDE_PAYMENT
-  PROMO_CREDIT
-}
-
 enum UserStatus {
   ACTIVE
   SUSPENDED
@@ -37,16 +31,6 @@ model User {
   // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
   fcmToken String?
 
-  // ── Referral System ──────────────────────────────────────────────────────
-  /// Unique invite code — auto-generated on registration (e.g. "JOHN-A3X9").
-  /// The @default(cuid()) satisfies existing rows during migration; the real
-  /// code is always generated in the application layer via generateReferralCode().
-  referralCode String  @unique @default(cuid())
-  /// ID of the User who referred this user. Null if they signed up organically.
-  referredById String?
-  referredBy   User?   @relation("Referrals", fields: [referredById], references: [id])
-  referrals    User[]  @relation("Referrals")
-
   // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
@@ -56,20 +40,18 @@ model User {
   driverProfile         DriverProfile?
   adminProfile          AdminProfile?
   notificationsReceived Notification[]
-  reviewsGiven          Review[]            @relation("ReviewAuthor")
-  reviewsReceived       Review[]            @relation("ReviewTarget")
+  reviewsGiven          Review[]           @relation("ReviewAuthor")
+  reviewsReceived       Review[]           @relation("ReviewTarget")
   wallet                Wallet?
-  walletTransactions    WalletTransaction[]
   promoUsages           PromoUsage[]
   emergencyContacts     EmergencyContact[]
-  supportTickets        SupportTicket[]     @relation("TicketCreator")
-  assignedTickets       SupportTicket[]     @relation("TicketAdmin")
-  sosAlertsInitiated    EmergencyAlert[]    @relation("SosInitiator")
-  sosAlertsResolved     EmergencyAlert[]    @relation("SosResolver")
+  supportTickets        SupportTicket[]    @relation("TicketCreator")
+  assignedTickets       SupportTicket[]    @relation("TicketAdmin")
+  sosAlertsInitiated    EmergencyAlert[]   @relation("SosInitiator")
+  sosAlertsResolved     EmergencyAlert[]   @relation("SosResolver")
 
   @@index([email])
   @@index([phone])
-  @@index([referralCode])
   @@map("users")
 }
 
@@ -132,22 +114,17 @@ model Wallet {
 }
 
 model WalletTransaction {
-  id     String @id @default(uuid())
-  /// The user who earned / was charged this transaction.
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// Also linked to the Wallet for balance aggregation.
-  walletId String?
-  wallet   Wallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  id       String @id @default(uuid())
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   amount      Float
-  type        WalletTxType
-  description String
+  type        String // "CREDIT" | "DEBIT"
+  description String?
+  reference   String?
 
   createdAt DateTime @default(now())
 
-  @@index([userId])
   @@index([walletId])
   @@map("wallet_transactions")
 }
