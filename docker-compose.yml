@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: deligo-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: deligo_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d deligo_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: deligo-redis
+    command: redis-server --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migration:
+    build:
+      context: .
+      target: dependencies
+    container_name: deligo-migration
+    command: sh -c "npx prisma db push --accept-data-loss --url=\"postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public\" && npx prisma generate"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      DATABASE_URL: 'postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: dependencies
+    container_name: deligo-api
+    command: sh -c "npx prisma generate && npm run dev"
+    ports:
+      - '3000:3000'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: 'postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public'
+      REDIS_URL: 'redis://redis:6379'
+      ENABLE_WORKER: 'false'
+      JWT_SECRET: 'deligo_development_jwt_secret_key_at_least_32_chars_long'
+      JWT_REFRESH_SECRET: 'deligo_development_jwt_refresh_secret_at_least_32_chars'
+      CLOUDINARY_CLOUD_NAME: 'deligo-dev'
+      CLOUDINARY_API_KEY: '123456789012345'
+      CLOUDINARY_API_SECRET: 'mock_cloudinary_secret_key_12345'
+      ALLOWED_ORIGINS: 'http://localhost:3000,http://localhost:5173'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      target: dependencies
+    container_name: deligo-worker
+    command: sh -c "npx prisma generate && npm run dev:worker"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: 'postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public'
+      REDIS_URL: 'redis://redis:6379'
+      JWT_SECRET: 'deligo_development_jwt_secret_key_at_least_32_chars_long'
+      JWT_REFRESH_SECRET: 'deligo_development_jwt_refresh_secret_at_least_32_chars'
+      CLOUDINARY_CLOUD_NAME: 'deligo-dev'
+      CLOUDINARY_API_KEY: '123456789012345'
+      CLOUDINARY_API_SECRET: 'mock_cloudinary_secret_key_12345'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  redisdata:
