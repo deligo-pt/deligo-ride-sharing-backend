@@ -1,11 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
 import { uploadToCloudinary } from '../../utils/cloudinary';
-import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors';
 import {
-  getDriverDashboard,
-  getDriverTripHistory,
-  uploadDriverDocuments,
-} from './drivers.service';
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../../utils/errors';
+import { getDriverDashboard, getDriverTripHistory, uploadDriverDocuments } from './drivers.service';
 import {
   BulkExpiryDatesSchema,
   REQUIRED_DOCUMENT_TYPES,
@@ -125,8 +126,7 @@ export async function uploadDocumentsHandler(
     res.status(201).json({
       success: true,
       data: {
-        message:
-          'All 7 KYC documents uploaded successfully. Your application is now under review.',
+        message: 'All 7 KYC documents uploaded successfully. Your application is now under review.',
         document: savedDocument,
       },
     });

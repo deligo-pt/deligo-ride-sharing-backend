@@ -51,9 +51,7 @@ export function authorize(...allowedRoles: UserRole[]) {
     }
 
     if (!allowedRoles.includes(req.user.role as UserRole)) {
-      throw new ForbiddenError(
-        `Access denied. Required roles: ${allowedRoles.join(', ')}`,
-      );
+      throw new ForbiddenError(`Access denied. Required roles: ${allowedRoles.join(', ')}`);
     }
 
     next();

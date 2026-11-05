@@ -1,6 +1,9 @@
-import prisma from "../../config/db";
-import { ReviewDocumentInput, REQUIRED_KYC_DOCUMENTS, SingleDocumentPayload } from "./kyc.validation";
-
+import prisma from '../../config/db';
+import {
+  ReviewDocumentInput,
+  REQUIRED_KYC_DOCUMENTS,
+  SingleDocumentPayload,
+} from './kyc.validation';
 
 // ─── Shared document select shape ─────────────────────────────────────────────
 
@@ -27,38 +30,41 @@ const documentSelect = {
 // Helper to map an array of SingleDocumentPayload into the flattened schema format
 const buildFlattenedData = (documents: SingleDocumentPayload[]) => {
   const map = new Map(documents.map((d) => [d.documentType, d]));
-  
+
   return {
-    drivingLicenseUrl: map.get("DRIVING_LICENSE")?.documentUrl as string,
-    drivingLicenseExpiry: map.get("DRIVING_LICENSE")?.expiryDate ? new Date(map.get("DRIVING_LICENSE")!.expiryDate!) : null,
-    
-    nationalIdUrl: map.get("NATIONAL_ID")?.documentUrl as string,
-    
-    vehicleRegistrationUrl: map.get("VEHICLE_REGISTRATION")?.documentUrl as string,
-    vehicleRegistrationExpiry: map.get("VEHICLE_REGISTRATION")?.expiryDate ? new Date(map.get("VEHICLE_REGISTRATION")!.expiryDate!) : null,
-    
-    vehicleInsuranceUrl: map.get("VEHICLE_INSURANCE")?.documentUrl as string,
-    vehicleInsuranceExpiry: map.get("VEHICLE_INSURANCE")?.expiryDate ? new Date(map.get("VEHICLE_INSURANCE")!.expiryDate!) : null,
-    
-    driverSelfieUrl: map.get("DRIVER_SELFIE")?.documentUrl as string,
-    proofOfAddressUrl: map.get("PROOF_OF_ADDRESS")?.documentUrl as string,
-    taxIdUrl: map.get("TAX_ID")?.documentUrl as string,
+    drivingLicenseUrl: map.get('DRIVING_LICENSE')?.documentUrl as string,
+    drivingLicenseExpiry: map.get('DRIVING_LICENSE')?.expiryDate
+      ? new Date(map.get('DRIVING_LICENSE')!.expiryDate!)
+      : null,
+
+    nationalIdUrl: map.get('NATIONAL_ID')?.documentUrl as string,
+
+    vehicleRegistrationUrl: map.get('VEHICLE_REGISTRATION')?.documentUrl as string,
+    vehicleRegistrationExpiry: map.get('VEHICLE_REGISTRATION')?.expiryDate
+      ? new Date(map.get('VEHICLE_REGISTRATION')!.expiryDate!)
+      : null,
+
+    vehicleInsuranceUrl: map.get('VEHICLE_INSURANCE')?.documentUrl as string,
+    vehicleInsuranceExpiry: map.get('VEHICLE_INSURANCE')?.expiryDate
+      ? new Date(map.get('VEHICLE_INSURANCE')!.expiryDate!)
+      : null,
+
+    driverSelfieUrl: map.get('DRIVER_SELFIE')?.documentUrl as string,
+    proofOfAddressUrl: map.get('PROOF_OF_ADDRESS')?.documentUrl as string,
+    taxIdUrl: map.get('TAX_ID')?.documentUrl as string,
   };
 };
 
 // ─── POST /kyc/documents (BULK) ────────────────────────────────────────────────
 // Upserts the flattened DriverDocument row for a driver.
 
-export const uploadAllDocuments = async (
-  userId: string,
-  documents: SingleDocumentPayload[]
-) => {
+export const uploadAllDocuments = async (userId: string, documents: SingleDocumentPayload[]) => {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found. Only registered drivers can upload KYC documents.");
+    throw new Error('Driver profile not found. Only registered drivers can upload KYC documents.');
   }
 
   const flattenedData = buildFlattenedData(documents);
@@ -68,11 +74,11 @@ export const uploadAllDocuments = async (
     where: { driverProfileId: driverProfile.id },
     create: {
       driverProfileId: driverProfile.id,
-      verificationStatus: "PENDING",
+      verificationStatus: 'PENDING',
       ...flattenedData,
     },
     update: {
-      verificationStatus: "PENDING",
+      verificationStatus: 'PENDING',
       reviewNote: null,
       rejectionReason: null,
       reviewedAt: null,
@@ -82,12 +88,11 @@ export const uploadAllDocuments = async (
 
   await prisma.user.update({
     where: { id: userId },
-    data: { status: "PENDING_VERIFICATION" },
+    data: { status: 'PENDING_VERIFICATION' },
   });
 
   return upserted;
 };
-
 
 // ─── GET /kyc/status ─────────────────────────────────────────────────────────
 
@@ -100,14 +105,14 @@ export const getKycStatus = async (userId: string) => {
   });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found.");
+    throw new Error('Driver profile not found.');
   }
 
   const doc = driverProfile.document;
 
   return {
     isComplete: !!doc,
-    isFullyApproved: doc?.verificationStatus === "APPROVED",
+    isFullyApproved: doc?.verificationStatus === 'APPROVED',
     document: doc || null,
   };
 };
@@ -117,7 +122,7 @@ export const getKycStatus = async (userId: string) => {
 export const getPendingDocuments = async () => {
   return await prisma.driverProfile.findMany({
     where: {
-      document: { verificationStatus: "PENDING" },
+      document: { verificationStatus: 'PENDING' },
     },
     select: {
       id: true,
@@ -135,7 +140,7 @@ export const getPendingDocuments = async () => {
         select: documentSelect,
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: 'desc' },
   });
 };
 
@@ -162,7 +167,7 @@ export const getAllDocuments = async () => {
         select: documentSelect,
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: 'desc' },
   });
 };
 
@@ -180,7 +185,7 @@ export const reviewDocument = async (documentId: string, payload: ReviewDocument
   });
 
   if (!document) {
-    throw new Error("Document set not found.");
+    throw new Error('Document set not found.');
   }
 
   if (document.verificationStatus === payload.verificationStatus) {
@@ -192,25 +197,28 @@ export const reviewDocument = async (documentId: string, payload: ReviewDocument
     data: {
       verificationStatus: payload.verificationStatus,
       reviewNote: payload.reviewNote,
-      rejectionReason: payload.verificationStatus !== "APPROVED" ? payload.rejectionReason : null,
+      rejectionReason: payload.verificationStatus !== 'APPROVED' ? payload.rejectionReason : null,
       reviewedAt: new Date(),
     },
   });
 
-  if (payload.verificationStatus === "APPROVED") {
+  if (payload.verificationStatus === 'APPROVED') {
     await prisma.user.update({
       where: { id: document.driverProfile.userId },
-      data: { status: "ACTIVE" },
+      data: { status: 'ACTIVE' },
     });
-  } else if (payload.verificationStatus === "REJECTED") {
+  } else if (payload.verificationStatus === 'REJECTED') {
     await prisma.user.update({
       where: { id: document.driverProfile.userId },
-      data: { status: "PENDING_VERIFICATION" },
+      data: { status: 'PENDING_VERIFICATION' },
     });
-  } else if (payload.verificationStatus === "SUSPENDED" || payload.verificationStatus === "TEMPORARILY_BLOCKED") {
+  } else if (
+    payload.verificationStatus === 'SUSPENDED' ||
+    payload.verificationStatus === 'TEMPORARILY_BLOCKED'
+  ) {
     await prisma.user.update({
       where: { id: document.driverProfile.userId },
-      data: { status: "SUSPENDED" },
+      data: { status: 'SUSPENDED' },
     });
   }
 
@@ -225,7 +233,7 @@ export const getMyDocuments = async (userId: string) => {
   });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found.");
+    throw new Error('Driver profile not found.');
   }
 
   return await prisma.driverDocument.findUnique({

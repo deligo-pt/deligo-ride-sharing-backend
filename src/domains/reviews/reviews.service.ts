@@ -26,12 +26,12 @@ export async function createReview(
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     select: {
-      id:             true,
-      status:         true,
-      customerId:     true,      // CustomerProfile.id
-      driverProfileId: true,     // DriverProfile.id
+      id: true,
+      status: true,
+      customerId: true, // CustomerProfile.id
+      driverProfileId: true, // DriverProfile.id
       customerProfile: { select: { userId: true } },
-      driverProfile:   { select: { userId: true, id: true } },
+      driverProfile: { select: { userId: true, id: true } },
     },
   });
 
@@ -68,34 +68,34 @@ export async function createReview(
   const review = await prisma.review.create({
     data: {
       rideId,
-      authorId:  authorUserId,
-      targetId:  revieweeUserId,
+      authorId: authorUserId,
+      targetId: revieweeUserId,
       rating,
-      comment:   comment ?? null,
+      comment: comment ?? null,
     },
   });
 
   // ── 5. Recalculate reviewee's aggregate stats ──────────────────────────────
   const stats = await prisma.review.aggregate({
-    where:  { targetId: revieweeUserId },
-    _avg:   { rating: true },
+    where: { targetId: revieweeUserId },
+    _avg: { rating: true },
     _count: { id: true },
   });
 
-  const newAvg    = stats._avg.rating   ?? rating;
-  const newTotal  = stats._count.id;
+  const newAvg = stats._avg.rating ?? rating;
+  const newTotal = stats._count.id;
 
   if (role === 'CUSTOMER') {
     // Customer reviewed a Driver → update DriverProfile
     await prisma.driverProfile.update({
       where: { userId: revieweeUserId },
-      data:  { averageRating: newAvg, totalReviews: newTotal },
+      data: { averageRating: newAvg, totalReviews: newTotal },
     });
   } else {
     // Driver reviewed a Customer → update CustomerProfile
     await prisma.customerProfile.update({
       where: { userId: revieweeUserId },
-      data:  { averageRating: newAvg, totalReviews: newTotal },
+      data: { averageRating: newAvg, totalReviews: newTotal },
     });
   }
 
@@ -114,7 +114,7 @@ export async function createReview(
  */
 export async function getMyReviews(userId: string) {
   return prisma.review.findMany({
-    where:   { targetId: userId },
+    where: { targetId: userId },
     orderBy: { createdAt: 'desc' },
     include: {
       author: {
@@ -122,10 +122,10 @@ export async function getMyReviews(userId: string) {
       },
       ride: {
         select: {
-          id:             true,
-          pickupAddress:  true,
+          id: true,
+          pickupAddress: true,
           dropoffAddress: true,
-          completedAt:    true,
+          completedAt: true,
         },
       },
     },

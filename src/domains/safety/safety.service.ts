@@ -18,11 +18,7 @@ import type { TriggerSosDto, ResolveAlertDto } from './safety.validation';
  *  3. Emit `sos_alert` over Socket.io to the `admin_security_desk` room.
  *  4. Fetch the initiator's EmergencyContact records and SMS each one.
  */
-export async function triggerSos(
-  userId: string,
-  role: string,
-  dto: TriggerSosDto,
-) {
+export async function triggerSos(userId: string, role: string, dto: TriggerSosDto) {
   // 1. Fetch initiator profile
   const initiator = await prisma.user.findUnique({
     where: { id: userId },
@@ -46,12 +42,12 @@ export async function triggerSos(
   // 2. Create the EmergencyAlert record
   const alert = await prisma.emergencyAlert.create({
     data: {
-      initiatorId:   userId,
+      initiatorId: userId,
       initiatorRole,
-      rideId:        dto.rideId ?? null,
-      lat:           dto.lat,
-      lng:           dto.lng,
-      status:        'ACTIVE',
+      rideId: dto.rideId ?? null,
+      lat: dto.lat,
+      lng: dto.lng,
+      status: 'ACTIVE',
     },
     include: {
       initiator: {
@@ -70,7 +66,7 @@ export async function triggerSos(
     if (ride && ride.status !== 'COMPLETED' && ride.status !== 'CANCELLED') {
       await prisma.ride.update({
         where: { id: dto.rideId },
-        data:  { status: 'EMERGENCY' },
+        data: { status: 'EMERGENCY' },
       });
     }
   }
@@ -80,16 +76,16 @@ export async function triggerSos(
   if (io) {
     const mapsLink = `https://maps.google.com/?q=${dto.lat},${dto.lng}`;
     io.to('admin_security_desk').emit('sos_alert', {
-      alertId:       alert.id,
-      initiatorId:   userId,
+      alertId: alert.id,
+      initiatorId: userId,
       initiatorName,
       initiatorRole,
-      rideId:        dto.rideId ?? null,
-      lat:           dto.lat,
-      lng:           dto.lng,
+      rideId: dto.rideId ?? null,
+      lat: dto.lat,
+      lng: dto.lng,
       mapsLink,
-      status:        'ACTIVE',
-      createdAt:     alert.createdAt.toISOString(),
+      status: 'ACTIVE',
+      createdAt: alert.createdAt.toISOString(),
     });
     console.info(`[SAFETY] 🚨 sos_alert emitted to admin_security_desk | alertId=${alert.id}`);
   } else {
@@ -98,7 +94,7 @@ export async function triggerSos(
 
   // 5. SMS each emergency contact
   const mapsLink = `https://maps.google.com/?q=${dto.lat},${dto.lng}`;
-  const smsBody  =
+  const smsBody =
     `🚨 URGENT: ${initiatorName} has triggered an SOS alert on Deligo. ` +
     `Their live location: ${mapsLink}`;
 
@@ -125,7 +121,7 @@ export async function triggerSos(
  * The ride status is intentionally NOT auto-reset — the admin handles it manually.
  */
 export async function resolveAlert(
-  alertId: string,
+  alertId: string = '942255e5-a904-4cfe-9510-8417ce179645',
   adminId: string,
   dto: ResolveAlertDto,
 ) {
@@ -141,9 +137,9 @@ export async function resolveAlert(
   return prisma.emergencyAlert.update({
     where: { id: alertId },
     data: {
-      status:       dto.status,
+      status: dto.status,
       resolvedById: adminId,
-      notes:        dto.notes,
+      notes: dto.notes,
     },
     include: {
       initiator: {
@@ -165,7 +161,7 @@ export async function resolveAlert(
  */
 export async function getActiveAlerts() {
   return prisma.emergencyAlert.findMany({
-    where:   { status: 'ACTIVE' },
+    where: { status: 'ACTIVE' },
     orderBy: { createdAt: 'desc' },
     include: {
       initiator: {

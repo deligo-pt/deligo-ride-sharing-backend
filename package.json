@@ -13,7 +13,14 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test:customer": "ts-node customer-test.ts",
+    "test:driver": "ts-node driver-test.ts",
+    "test:admin": "ts-node admin-test.ts",
+    "test:pricing": "ts-node pricing-test.ts",
+    "test:notification": "ts-node notification-test.ts",
+    "test:notifications": "ts-node notification-test.ts",
+    "test:seed-all": "ts-node customer-test.ts && ts-node driver-test.ts && ts-node admin-test.ts && ts-node pricing-test.ts && ts-node notification-test.ts"
   },
   "keywords": [
     "ride-sharing",
@@ -56,7 +63,7 @@
     "@types/ioredis": "^4.28.10",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.1.0",
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.9",
     "@types/pg": "^8.20.0",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",

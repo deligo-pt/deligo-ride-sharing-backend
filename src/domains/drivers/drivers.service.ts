@@ -67,17 +67,20 @@ function buildFlattenedData(documents: SingleDocumentPayload[]) {
  * Cloudinary URLs before calling this function.
  * Sets verificationStatus → PENDING and user.status → PENDING_VERIFICATION.
  */
-export async function uploadDriverDocuments(
-  userId: string,
-  documents: SingleDocumentPayload[],
-) {
+export async function uploadDriverDocuments(userId: string, documents: SingleDocumentPayload[]) {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
+  console.log(driverProfile);
+
+  console.log('milestone 1');
+
   if (!driverProfile) {
     throw new Error('DRIVER_PROFILE_NOT_FOUND');
   }
+
+  console.log('milestone 2');
 
   const flattenedData = buildFlattenedData(documents);
 
@@ -97,11 +100,15 @@ export async function uploadDriverDocuments(
     },
   });
 
+  console.log('milestone 3');
+
   // Flag the user account for admin review
   await prisma.user.update({
     where: { id: userId },
     data: { status: 'PENDING_VERIFICATION' },
   });
+
+  console.log('milestone 4');
 
   return upserted;
 }
