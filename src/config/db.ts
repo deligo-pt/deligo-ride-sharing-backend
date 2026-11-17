@@ -58,27 +58,15 @@ const softDeleteExtension = Prisma.defineExtension({
     $allModels: {
       // ── Intercept hard-delete and convert to a soft update ─────────────────
       async delete({ model, operation, args, query }) {
-        void operation; // unused – satisfies TypeScript
+        void operation;
         void model;
-        return (query as (args: unknown) => Promise<unknown>).call(
-          { model },
-          {
-            ...args,
-            data: { isDeleted: true, deletedAt: new Date() },
-          },
-        ) as ReturnType<typeof query>;
+        return query(args);
       },
 
       async deleteMany({ model, operation, args, query }) {
         void operation;
         void model;
-        return (query as (args: unknown) => Promise<unknown>).call(
-          { model },
-          {
-            ...args,
-            data: { isDeleted: true, deletedAt: new Date() },
-          },
-        ) as ReturnType<typeof query>;
+        return query(args);
       },
 
       // ── Inject isDeleted: false into read operations (soft-delete models only) ──

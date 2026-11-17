@@ -15,7 +15,6 @@ import type {
 } from './rides.validation';
 import { generateAndSendReceipt } from './receipt.service';
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Service Functions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,8 +72,8 @@ export async function findNearbyDrivers(dto: SearchRideDto) {
  * if vehicleType is specified). Promo code is validated and applied inside
  * PricingEngine.
  */
-export async function estimateFare(dto: EstimateFareDto) {
-  return PricingEngine.calculateEstimate(
+export async function estimateFare(userId: string, dto: EstimateFareDto) {
+  const estimates = await PricingEngine.calculateEstimate(
     dto.pickupLat,
     dto.pickupLng,
     dto.dropoffLat,
@@ -82,8 +81,12 @@ export async function estimateFare(dto: EstimateFareDto) {
     dto.vehicleType,
     dto.promoCode,
     1.0,
-    dto.stops,   // pass intermediate stops for multi-stop pricing
+    dto.stops, // pass intermediate stops for multi-stop pricing
   );
+
+  await redis.set(`fare_estimate:${userId}`, JSON.stringify(estimates), 'EX', 300); // 5 min TTL
+
+  return estimates;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,10 +111,7 @@ export interface RequestRideResult {
  *  5. Return the Ride + the list of dispatched driver IDs (the caller /
  *     future socket layer uses these to push notifications).
  */
-export async function requestRide(
-  userId: string,
-  dto: RequestRideDto,
-): Promise<RequestRideResult> {
+export async function requestRide(userId: string, dto: RequestRideDto): Promise<RequestRideResult> {
   // 1. Resolve CustomerProfile
   const customerProfile = await prisma.customerProfile.findUnique({
     where: { userId },
@@ -122,10 +122,29 @@ export async function requestRide(
     throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
   }
 
+  const activeRide = await prisma.ride.findFirst({
+    where: {
+      customerId: customerProfile.id,
+      status: { in: ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS', 'DRIVER_ARRIVED'] },
+    },
+  });
+
+  if (activeRide) {
+    throw new Error('CUSTOMER_HAS_ACTIVE_RIDE');
+  }
+
+  const estimateKey = `fare_estimate:${userId}`;
+
+  const estimateCache = await redis.get(estimateKey);
+
+  if (dto.estimatedFare !== JSON.parse(estimateCache ?? 'null')?.[0]?.subtotal) {
+    throw new Error('ESTIMATED_FARE_MISMATCH');
+  }
+
   // 2. Build full coordinate chain and fetch cumulative route data
   const intermediateStops = dto.stops ?? [];
   const coordinates = [
-    { lat: dto.pickupLat,  lng: dto.pickupLng  },
+    { lat: dto.pickupLat, lng: dto.pickupLng },
     ...intermediateStops.map((s) => ({ lat: s.lat, lng: s.lng })),
     { lat: dto.dropoffLat, lng: dto.dropoffLng },
   ];
@@ -137,44 +156,37 @@ export async function requestRide(
   const isScheduled = dto.scheduledAt !== undefined;
 
   // 3. Persist Ride + RideStops atomically in a transaction
-  const ride = await prisma.$transaction(async (tx) => {
-    const createdRide = await tx.ride.create({
-      data: {
-        customerId:       customerProfile.id,
-        pickupAddress:    dto.pickupAddress,
-        pickupLatitude:   dto.pickupLat,
-        pickupLongitude:  dto.pickupLng,
-        dropoffAddress:   dto.dropoffAddress,
-        dropoffLatitude:  dto.dropoffLat,
-        dropoffLongitude: dto.dropoffLng,
-        vehicleType:      dto.vehicleType,
-        estimatedFare:    dto.estimatedFare,
-        estimatedDistance,
-        estimatedDuration,
-        status:      isScheduled ? 'SCHEDULED' : 'REQUESTED',
-        scheduledAt: dto.scheduledAt ?? null,
-      },
-      include: {
-        customerProfile: { select: { userId: true } },
-        stops: true,
-      },
-    });
-
-    // Insert intermediate stops with strict 1-based sequence ordering
-    if (intermediateStops.length > 0) {
-      await tx.rideStop.createMany({
-        data: intermediateStops.map((stop, idx) => ({
-          rideId:   createdRide.id,
-          address:  stop.address,
-          lat:      stop.lat,
-          lng:      stop.lng,
-          sequence: idx + 1,
-          status:   'PENDING' as const,
-        })),
-      });
-    }
-
-    return createdRide;
+  const ride = await prisma.ride.create({
+    data: {
+      customerId: customerProfile.id,
+      pickupAddress: dto.pickupAddress,
+      pickupLatitude: dto.pickupLat,
+      pickupLongitude: dto.pickupLng,
+      dropoffAddress: dto.dropoffAddress,
+      dropoffLatitude: dto.dropoffLat,
+      dropoffLongitude: dto.dropoffLng,
+      vehicleType: dto.vehicleType,
+      estimatedFare: dto.estimatedFare,
+      estimatedDistance,
+      estimatedDuration,
+      status: isScheduled ? 'SCHEDULED' : 'REQUESTED',
+      scheduledAt: dto.scheduledAt ?? null,
+      ...(intermediateStops.length > 0 && {
+        stops: {
+          create: intermediateStops.map((elm, idx) => ({
+            address: elm.address,
+            lat: elm.lat,
+            lng: elm.lng,
+            sequence: idx + 1,
+            status: 'PENDING' as const,
+          })),
+        },
+      }),
+    },
+    include: {
+      customerProfile: { select: { userId: true } },
+      stops: true,
+    },
   });
 
   // ── SCHEDULED path ──────────────────────────────────────────────────────────
@@ -184,11 +196,7 @@ export async function requestRide(
   }
 
   // ── ON-DEMAND path ────────────────────────────────────────────────────────
-  const candidateUserIds = await LocationService.findNearbyDrivers(
-    dto.pickupLng,
-    dto.pickupLat,
-    5,
-  );
+  const candidateUserIds = await LocationService.findNearbyDrivers(dto.pickupLng, dto.pickupLat, 5);
 
   let dispatchedDriverIds: string[] = [];
 
@@ -239,29 +247,36 @@ export async function acceptRide(driverUserId: string, rideId: string) {
 
   // 2. Resolve driver profile
   const driverProfile = await prisma.driverProfile.findUnique({
-    where: { userId: driverUserId },
+    where: { userId: driverUserId, isAvailable: true },
     select: { id: true },
   });
 
   if (!driverProfile) {
-    throw new Error('DRIVER_PROFILE_NOT_FOUND');
+    throw new Error('DRIVER_NOT_AVAILABLE');
   }
 
   // 3. Atomic transaction: claim ride + lock driver
-  const [updatedRide] = await prisma.$transaction([
-    prisma.ride.update({
+  const updatedRide = await prisma.$transaction(async (tx) => {
+    const update = await tx.ride.updateMany({
       where: { id: rideId },
       data: {
         status: 'ACCEPTED',
         driverProfileId: driverProfile.id,
         acceptedAt: new Date(),
       },
-    }),
-    prisma.driverProfile.update({
+    });
+
+    if (update.count === 0) {
+      throw new Error('RIDE_NOT_AVAILABLE');
+    }
+
+    await tx.driverProfile.update({
       where: { id: driverProfile.id },
       data: { isAvailable: false },
-    }),
-  ]);
+    });
+
+    return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
+  });
 
   return updatedRide;
 }
@@ -275,8 +290,8 @@ export async function acceptRide(driverUserId: string, rideId: string) {
  */
 const STATUS_TIMESTAMP_MAP = {
   DRIVER_ARRIVED: 'arrivedAt',
-  IN_PROGRESS:    'startedAt',
-  COMPLETED:      'completedAt',
+  IN_PROGRESS: 'startedAt',
+  COMPLETED: 'completedAt',
 } as const;
 
 /**
@@ -298,7 +313,7 @@ export async function updateRideStatus(
     include: { customerProfile: { select: { id: true } } },
   });
 
-  if (!ride) {
+  if (!ride || ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
     throw new Error('RIDE_NOT_FOUND');
   }
 
@@ -325,26 +340,29 @@ export async function updateRideStatus(
 
   if (dto.status !== 'COMPLETED') {
     // Simple status advance — single update
-    return { ride: await prisma.ride.update({ where: { id: rideId }, data: rideUpdateData }), fareBreakdown: null };
+    return {
+      ride: await prisma.ride.update({ where: { id: rideId }, data: rideUpdateData }),
+      fareBreakdown: null,
+    };
   }
 
   // 5. COMPLETED: calculate final fare via PricingEngine
-  const actualDistKm   = dto.actualDistanceKm ?? dto.finalDistanceKm ?? 1;
-  const actualDurMin   = dto.actualDurationMinutes ?? dto.finalDurationMinutes ?? 10;
+  const actualDistKm = dto.actualDistanceKm ?? dto.finalDistanceKm ?? 1;
+  const actualDurMin = dto.actualDurationMinutes ?? dto.finalDurationMinutes ?? 10;
 
   const fareBreakdown = await PricingEngine.calculateFinalFare(
     ride.vehicleType,
     actualDistKm,
     actualDurMin,
     {
-      tolls:              dto.tolls,
+      tolls: dto.tolls,
       waitingTimeMinutes: dto.waitingTimeMinutes,
     },
   );
 
   // 6. Persist final fare into rideUpdateData
-  rideUpdateData.finalFare    = fareBreakdown.grandTotal;
-  rideUpdateData.distanceKm   = fareBreakdown.distanceKm;
+  rideUpdateData.finalFare = fareBreakdown.grandTotal;
+  rideUpdateData.distanceKm = fareBreakdown.distanceKm;
   rideUpdateData.durationMinutes = fareBreakdown.estimatedDurationMinutes;
 
   // 7. Transaction: finalise ride + release driver + increment totalRides
@@ -374,18 +392,25 @@ export async function updateRideStatus(
  *
  * If a driver was already assigned, they are released back to the pool.
  */
-export async function cancelRide(
-  rideId: string,
-  dto: CancelRideDto,
-) {
+export async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
   // 1. Fetch the ride with just enough data for the teardown
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
-    select: { id: true, status: true, driverProfileId: true },
+    select: {
+      id: true,
+      status: true,
+      driverProfileId: true,
+      customerProfile: { select: { userId: true } },
+      driverProfile: { select: { userId: true } },
+    },
   });
 
   if (!ride) {
     throw new Error('RIDE_NOT_FOUND');
+  }
+
+  if (ride.customerProfile.userId !== userId && ride.driverProfile?.userId !== userId) {
+    throw new Error('RIDE_FORBIDDEN');
   }
 
   // Prevent cancelling an already-terminal ride
@@ -455,14 +480,14 @@ export async function shareRide(
   // 2. Verify ride ownership and active status
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
-    select: { id: true, customerId: true, status: true },
+    select: { id: true, customerProfile: { select: { userId: true } }, status: true },
   });
 
   if (!ride) {
     throw new Error('RIDE_NOT_FOUND');
   }
 
-  if (ride.customerId !== customerProfile.id) {
+  if (ride.customerProfile.userId !== userId) {
     throw new Error('RIDE_FORBIDDEN');
   }
 

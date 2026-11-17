@@ -24,9 +24,9 @@ export async function updateLocation(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // if (req.user!.role !== 'DRIVER') {
-    //   throw new ForbiddenError('Only drivers can update their location.');
-    // }
+    if (req.user!.role !== 'DRIVER') {
+      throw new ForbiddenError('Only drivers can update their location.');
+    }
 
     const parsed = UpdateLocationSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -84,7 +84,7 @@ export async function estimateFare(req: Request, res: Response, next: NextFuncti
       throw new BadRequestError('Validation failed', parsed.error.flatten().fieldErrors);
     }
 
-    const estimates = await ridesService.estimateFare(parsed.data);
+    const estimates = await ridesService.estimateFare(req.user!.id, parsed.data);
 
     res.status(200).json({ success: true, data: estimates });
   } catch (err) {
@@ -171,9 +171,9 @@ function mapRideError(err: unknown): Error {
  */
 export async function acceptRide(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    // if (req.user!.role !== 'DRIVER') {
-    //   throw new ForbiddenError('Only drivers can accept rides.');
-    // }
+    if (req.user!.role !== 'DRIVER') {
+      throw new ForbiddenError('Only drivers can accept rides.');
+    }
 
     const rideId = String(req.params.id);
     const ride = await ridesService.acceptRide(req.user!.id, rideId);
@@ -197,9 +197,9 @@ export async function updateRideStatus(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // if (req.user!.role !== 'DRIVER') {
-    //   throw new ForbiddenError('Only drivers can update ride status.');
-    // }
+    if (req.user!.role !== 'DRIVER') {
+      throw new ForbiddenError('Only drivers can update ride status.');
+    }
 
     const parsed = UpdateRideStatusSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -207,11 +207,7 @@ export async function updateRideStatus(
     }
 
     const rideId = String(req.params.id);
-    const result = await ridesService.updateRideStatus(
-      (req.user!.id = '30dc3605-d8d8-475d-be32-42c83b26e5ad'),
-      rideId,
-      parsed.data,
-    );
+    const result = await ridesService.updateRideStatus(req.user!.id, rideId, parsed.data);
 
     res.status(200).json({ success: true, data: result });
   } catch (err) {
@@ -238,7 +234,7 @@ export async function cancelRide(req: Request, res: Response, next: NextFunction
     }
 
     const rideId = String(req.params.id);
-    const ride = await ridesService.cancelRide(rideId, parsed.data);
+    const ride = await ridesService.cancelRide(req.user!.id, rideId, parsed.data);
 
     res.status(200).json({ success: true, data: { ride } });
   } catch (err) {

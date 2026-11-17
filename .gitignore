@@ -11,3 +11,7 @@ coverage/
 .nyc_output/
 agent.md
 firebase-service-account.json
+
+src/auth
+
+AUDIT_REPORT.md

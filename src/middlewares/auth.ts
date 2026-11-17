@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
 import { env } from '../config/env';
+import { config } from '../config';
+import { redis } from '../utils/redis';
 import { JwtPayload } from '../types/auth.types';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 
@@ -9,30 +11,55 @@ import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 // Authentication Middleware
 //
 // Verifies the Bearer JWT in the Authorization header and attaches the
-// decoded user payload to req.user. Throws UnauthorizedError if the token
-// is missing, malformed, or expired.
+// decoded user payload to req.user. Checks Redis blacklist to prevent revoked
+// tokens from being used. Throws UnauthorizedError if the token is missing,
+// malformed, expired, or revoked.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function authenticate(req: Request, _res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new UnauthorizedError('No bearer token provided');
-  }
-
-  const token = authHeader.slice(7);
-
+export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedError('No bearer token provided');
+    }
+
+    const token = authHeader.slice(7);
+    const secret = config.jwt.accessSecret || env.JWT_SECRET;
+    let payload: JwtPayload;
+
+    try {
+      payload = jwt.verify(token, secret) as JwtPayload;
+    } catch {
+      if (env.JWT_SECRET && env.JWT_SECRET !== secret) {
+        try {
+          payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+        } catch {
+          throw new UnauthorizedError('Invalid or expired token');
+        }
+      } else {
+        throw new UnauthorizedError('Invalid or expired token');
+      }
+    }
+
+    // Check Redis token blacklist
+    if (payload.jti) {
+      const isBlacklisted = await redis.get(`blacklist:token:${payload.jti}`);
+      if (isBlacklisted) {
+        throw new UnauthorizedError('Token has been revoked');
+      }
+    }
+
     req.user = {
       id: payload.sub,
-      email: payload.email,
+      email: payload.email ?? undefined,
       role: payload.role,
+      sessionId: payload.sessionId,
+      jti: payload.jti,
     };
     next();
-  } catch {
-    // JWT errors are handled by the global error handler
-    throw new UnauthorizedError('Invalid or expired token');
+  } catch (err) {
+    next(err);
   }
 }
 

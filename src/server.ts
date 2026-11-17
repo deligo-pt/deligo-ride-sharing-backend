@@ -6,6 +6,7 @@ import prisma from './config/db';
 import { env } from './config/env';
 import { NotificationEngine } from './domains/notifications/notifications.service';
 import { initSocketServer } from './sockets';
+import { rideWorker } from './queues/ride.worker';
 
 // Server Entry Point
 
@@ -20,7 +21,7 @@ async function bootstrap(): Promise<void> {
   }
 
   // ── 2. Create Express app + HTTP server + Socket.io ────────────────────────
-  const app    = createApp();
+  const app = createApp();
   const server = http.createServer(app);
 
   // Attach Socket.io to the same HTTP server (same port as REST)
@@ -33,7 +34,6 @@ async function bootstrap(): Promise<void> {
   // ── Optional: Embedded Worker (if not running dedicated worker container) ──
   let activeWorker: Worker | null = null;
   if (process.env.ENABLE_WORKER !== 'false') {
-    const { rideWorker } = await import('./queues/ride.worker.js');
     activeWorker = rideWorker;
     console.info('⚙️  Embedded BullMQ worker initialized in server process');
   } else {

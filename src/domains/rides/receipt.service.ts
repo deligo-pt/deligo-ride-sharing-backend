@@ -17,7 +17,7 @@ function buildReceiptHtml(ride: {
   durationMinutes: number | null;
   completedAt: Date | null;
   vehicleType: string;
-  user: { firstName: string | null; email: string };
+  user: { firstName: string | null; email: string | null };
 }): string {
   const fare     = ride.finalFare ? `$${Number(ride.finalFare).toFixed(2)}` : 'N/A';
   const distance = ride.distanceKm ? `${Number(ride.distanceKm).toFixed(2)} km` : 'N/A';

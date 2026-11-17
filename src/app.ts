@@ -1,5 +1,6 @@
 import compression from 'compression';
 import cors from 'cors';
+import cooikieParser from 'cookie-parser';
 import express, { Application, NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { env } from './config/env';
@@ -18,6 +19,7 @@ import safetyRouter from './domains/safety/safety.routes';
 import supportRouter from './domains/support/support.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 import adminRouter from './domains/admin/admin.routes';
+import authRouter from './domains/auth/auth.routes';
 
 // ── Inline micro-router for /api/v1/users ────────────────────────────────────
 // Keeps the users-related endpoints (e.g. FCM token) without needing a
@@ -37,6 +39,7 @@ export function createApp(): Application {
   const app = express();
 
   // ── Security Headers (helmet) ──────────────────────────────────────────────
+  app.use(cooikieParser());
   app.use(helmet());
 
   // ── CORS ──────────────────────────────────────────────────────────────────
@@ -84,6 +87,7 @@ export function createApp(): Application {
   const API_PREFIX = '/api/v1';
 
   // ── Domain Routers ────────────────────────────────────────────────────────
+  app.use(`${API_PREFIX}/auth`, authRouter);
   app.use(`${API_PREFIX}/rides`, ridesRouter);
   app.use(`${API_PREFIX}/drivers`, driversRouter);
   app.use(`${API_PREFIX}/vehicles`, vehicleRouter);
@@ -97,7 +101,6 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/users`, usersRouter);
   app.use(`${API_PREFIX}/admin`, adminRouter);
 
-  // Registers routes will be here
   // API root — health / welcome
   app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
     res.status(200).json({
