@@ -1,21 +1,13 @@
 import 'dotenv/config';
-import path from 'node:path';
+import process from 'node:process';
 import { defineConfig } from 'prisma/config';
 
-
 export default defineConfig({
-  schema: path.join('prisma', 'schema'),
+  schema: 'prisma/schema',
   datasource: {
-    url: process.env.DATABASE_URL,
+    url: process.env.DIRECT_URL || process.env.DATABASE_URL,
   },
-  migrate: {
-    async adapter() {
-      const { PrismaPg } = await import('@prisma/adapter-pg');
-      const connectionString = process.env.DATABASE_URL;
-      if (!connectionString) {
-        throw new Error('DATABASE_URL environment variable is not set');
-      }
-      return new PrismaPg({ connectionString });
-    },
+  migrations: {
+    path: 'prisma/migrations',
   },
 });

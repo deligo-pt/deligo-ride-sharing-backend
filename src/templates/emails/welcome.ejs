@@ -1,0 +1,35 @@
+<%
+  const isPt = preferredLanguage === 'PT';
+  const heading = isPt ? 'Bem-vindo ao Deligo!' : 'Welcome to Deligo!';
+  const greeting = name ? (isPt ? `Olá, ${name}!` : `Hello, ${name}!`) : (isPt ? 'Olá!' : 'Hello!');
+  const intro = isPt 
+    ? 'Estamos muito felizes em tê-lo conosco! Sua conta foi criada com sucesso e você já está pronto para solicitar suas viagens com conforto, rapidez e segurança.'
+    : "We're thrilled to have you with us! Your account has been successfully created and you're now ready to book fast, safe, and affordable rides.";
+  const referralHeading = isPt ? 'Seu Código de Indicação Exclusivo' : 'Your Unique Referral Code';
+  const referralDesc = isPt
+    ? 'Compartilhe seu código com amigos e familiares. Quando eles completarem a primeira viagem, ambos ganham descontos exclusivos!'
+    : 'Share your referral code with friends and family. When they complete their first trip, you both receive ride rewards!';
+  const getStartedText = isPt ? 'Pronto para começar?' : 'Ready to take your first ride?';
+  const ctaText = isPt ? 'Abrir Aplicativo Deligo' : 'Open Deligo App';
+%>
+
+<div style="text-align: left;">
+  <h2 style="font-size: 22px; font-weight: 700; color: #0f172a; margin-top: 0; margin-bottom: 16px;"><%= heading %></h2>
+  <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 16px;"><%= greeting %></p>
+  <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 28px;"><%= intro %></p>
+
+  <% if (referralCode) { %>
+    <div style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 24px; text-align: center; margin: 28px 0;">
+      <h3 style="font-size: 15px; font-weight: 600; color: #065f46; margin-top: 0; margin-bottom: 8px;"><%= referralHeading %></h3>
+      <p style="font-size: 13px; color: #047857; margin-bottom: 16px; line-height: 1.5;"><%= referralDesc %></p>
+      <div style="display: inline-block; background-color: #ffffff; border: 2px dashed #059669; border-radius: 6px; padding: 10px 24px;">
+        <span style="font-family: 'Courier New', Courier, monospace; font-size: 24px; font-weight: 800; letter-spacing: 4px; color: #065f46;"><%= referralCode %></span>
+      </div>
+    </div>
+  <% } %>
+
+  <div style="text-align: center; margin: 32px 0 16px 0;">
+    <p style="font-size: 15px; color: #334155; font-weight: 500; margin-bottom: 16px;"><%= getStartedText %></p>
+    <a href="#" style="display: inline-block; background-color: #10b981; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; padding: 12px 32px; border-radius: 6px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);"><%= ctaText %></a>
+  </div>
+</div>

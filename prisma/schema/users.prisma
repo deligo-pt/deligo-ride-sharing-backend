@@ -17,25 +17,67 @@ enum AccessLabel {
   REGIONAL
 }
 
-// USER — Core identity only. Authentication is handled by an external microservice.
+enum AuthProvider {
+  CREDENTIALS
+  GOOGLE
+  APPLE
+  FACEBOOK
+}
+
+enum PreferredLanguage {
+  EN
+  PT
+}
+
+model Account {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider          AuthProvider
+  providerAccountId String
+  email             String?
+  phone             String?
+  passwordHash      String?
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
 
 model User {
-  id        String     @id @default(uuid())
-  email     String     @unique
-  phone     String     @unique
-  firstName String?
-  lastName  String?
-  role      UserRole   @default(CUSTOMER)
-  status    UserStatus @default(ACTIVE)
+  id                String             @id @default(uuid())
+  email             String?            @unique
+  phone             String?            @unique
+  firstName         String?
+  lastName          String?
+  role              UserRole           @default(CUSTOMER)
+  status            UserStatus         @default(ACTIVE)
+  profilePicture    String?
+  preferredLanguage PreferredLanguage? @default(EN)
 
-  // Push notification token (set by the mobile app via PATCH /api/v1/users/fcm-token)
-  fcmToken String?
+  referralCode String  @unique
+  referrerId   String?
+  referrer     User?   @relation("UserReferrals", fields: [referrerId], references: [id], onDelete: SetNull)
+  referrals    User[]  @relation("UserReferrals")
 
-  // Soft delete
+  fcmToken  String?
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  // Relations
+  isEmailVerified Boolean @default(false)
+  isPhoneVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account               Account[]
+  sessions              Session[]
   customerProfile       CustomerProfile?
   driverProfile         DriverProfile?
   adminProfile          AdminProfile?
@@ -50,9 +92,26 @@ model User {
   sosAlertsInitiated    EmergencyAlert[]   @relation("SosInitiator")
   sosAlertsResolved     EmergencyAlert[]   @relation("SosResolver")
 
-  @@index([email])
-  @@index([phone])
+  @@index([referrerId])
   @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  rememberMe Boolean  @default(false)
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 // CUSTOMER PROFILE
@@ -83,7 +142,7 @@ model CustomerProfile {
 model AdminProfile {
   id             String      @id @default(uuid())
   userId         String      @unique
-  accessLabel    AccessLabel @default(SUPER_ADMIN)
+  accessLabel    AccessLabel @default(SUPPORT)
   assignedRegion String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -101,8 +160,8 @@ model Wallet {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  balance  Float  @default(0)
-  currency String @default("USD")
+  balance  Decimal @default(0) @db.Decimal(12, 2)
+  currency String  @default("USD")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -118,7 +177,7 @@ model WalletTransaction {
   walletId String
   wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
-  amount      Float
+  amount      Decimal @db.Decimal(12, 2)
   type        String // "CREDIT" | "DEBIT"
   description String?
   reference   String?

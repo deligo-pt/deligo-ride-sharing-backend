@@ -1,5 +1,13 @@
 import 'dotenv/config';
-import { PrismaClient, UserRole, UserStatus, AccessLabel, VehicleClass, VehicleType, ZoneType } from '@prisma/client';
+import {
+  PrismaClient,
+  UserRole,
+  UserStatus,
+  AccessLabel,
+  VehicleClass,
+  VehicleType,
+  ZoneType,
+} from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 const connectionString = process.env.DATABASE_URL;
@@ -33,12 +41,54 @@ async function main() {
   // Seed Pricing Rules
   await prisma.pricingRule.createMany({
     data: [
-      { vehicleType: VehicleType.Hatchback, baseFare: 2.00, perKmRate: 1.50, perMinRate: 0.10, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
-      { vehicleType: VehicleType.Micro, baseFare: 1.50, perKmRate: 1.20, perMinRate: 0.08, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
-      { vehicleType: VehicleType.Sedan, baseFare: 3.00, perKmRate: 2.00, perMinRate: 0.15, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
-      { vehicleType: VehicleType.SUV, baseFare: 5.00, perKmRate: 3.00, perMinRate: 0.25, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
-      { vehicleType: VehicleType.Motorcycle, baseFare: 1.00, perKmRate: 0.90, perMinRate: 0.06, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
-      { vehicleType: VehicleType.PickupTruck, baseFare: 4.00, perKmRate: 2.50, perMinRate: 0.20, surgeMultiplier: 1.0, adminFeePercentage: 20.0 },
+      {
+        vehicleType: VehicleType.Hatchback,
+        baseFare: 2.0,
+        perKmRate: 1.5,
+        perMinRate: 0.1,
+        surgeMultiplier: 1.0,
+        adminFeePercentage: 20.0,
+      },
+      {
+        vehicleType: VehicleType.Micro,
+        baseFare: 1.5,
+        perKmRate: 1.2,
+        perMinRate: 0.08,
+        surgeMultiplier: 1.0,
+        adminFeePercentage: 20.0,
+      },
+      {
+        vehicleType: VehicleType.Sedan,
+        baseFare: 3.0,
+        perKmRate: 2.0,
+        perMinRate: 0.15,
+        surgeMultiplier: 1.0,
+        adminFeePercentage: 20.0,
+      },
+      {
+        vehicleType: VehicleType.SUV,
+        baseFare: 5.0,
+        perKmRate: 3.0,
+        perMinRate: 0.25,
+        surgeMultiplier: 1.0,
+        adminFeePercentage: 20.0,
+      },
+      {
+        vehicleType: VehicleType.Motorcycle,
+        baseFare: 1.0,
+        perKmRate: 0.9,
+        perMinRate: 0.06,
+        surgeMultiplier: 1.0,
+        adminFeePercentage: 20.0,
+      },
+      {
+        vehicleType: VehicleType.PickupTruck,
+        baseFare: 4.0,
+        perKmRate: 2.5,
+        perMinRate: 0.2,
+        surgeMultiplier: 1.0,
+        adminFeePercentage: 20.0,
+      },
     ],
   });
   console.log('💰 Pricing Rules seeded successfully.');
@@ -49,39 +99,39 @@ async function main() {
       {
         name: 'Hazrat Shahjalal International Airport',
         type: ZoneType.SURCHARGE,
-        surchargeAmount: 5.00,
+        surchargeAmount: 5.0,
         polygon: [
-          [23.8450, 90.3979],
-          [23.8450, 90.4230],
-          [23.8280, 90.4230],
-          [23.8280, 90.3979]
+          [23.845, 90.3979],
+          [23.845, 90.423],
+          [23.828, 90.423],
+          [23.828, 90.3979],
         ],
         isActive: true,
       },
       {
         name: 'Kamalapur Railway Station',
         type: ZoneType.SURCHARGE,
-        surchargeAmount: 2.50,
+        surchargeAmount: 2.5,
         polygon: [
-          [23.7340, 90.4245],
-          [23.7340, 90.4300],
-          [23.7290, 90.4300],
-          [23.7290, 90.4245]
+          [23.734, 90.4245],
+          [23.734, 90.43],
+          [23.729, 90.43],
+          [23.729, 90.4245],
         ],
         isActive: true,
       },
       {
         name: 'Padma Bridge Toll Plaza',
         type: ZoneType.SURCHARGE,
-        surchargeAmount: 10.00,
+        surchargeAmount: 10.0,
         polygon: [
-          [23.4730, 90.2600],
-          [23.4730, 90.2700],
-          [23.4680, 90.2700],
-          [23.4680, 90.2600]
+          [23.473, 90.26],
+          [23.473, 90.27],
+          [23.468, 90.27],
+          [23.468, 90.26],
         ],
         isActive: true,
-      }
+      },
     ],
   });
   console.log('🌍 Geofencing Zones seeded successfully.');
@@ -90,6 +140,7 @@ async function main() {
   const customerUser = await prisma.user.create({
     data: {
       email: 'customer@example.com',
+      referralCode: 'SEED-CUSTOMER',
       phone: '+15550001111',
       firstName: 'Jane',
       lastName: 'Customer',
@@ -130,6 +181,7 @@ async function main() {
   const driverUser = await prisma.user.create({
     data: {
       email: 'driver@example.com',
+      referralCode: 'SEED-DRIVER',
       phone: '+15550002222',
       firstName: 'John',
       lastName: 'Driver',
@@ -183,11 +235,11 @@ async function main() {
       status: 'IN_PROGRESS',
       pickupAddress: '123 Main Street, New York, NY',
       pickupLatitude: 40.7128,
-      pickupLongitude: -74.0060,
+      pickupLongitude: -74.006,
       dropoffAddress: '456 Business Rd, New York, NY',
-      dropoffLatitude: 40.7200,
-      dropoffLongitude: -74.0100,
-      estimatedFare: 15.50,
+      dropoffLatitude: 40.72,
+      dropoffLongitude: -74.01,
+      estimatedFare: 15.5,
       estimatedDistance: 2.5,
       estimatedDuration: 10,
     },
@@ -198,6 +250,7 @@ async function main() {
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@example.com',
+      referralCode: 'SEED-ADMIN',
       phone: '+15550003333',
       firstName: 'Sarah',
       lastName: 'Admin',
@@ -227,7 +280,9 @@ async function main() {
   console.log(`  Email:      ${customerUser.email}`);
   console.log(`  Role:       ${customerUser.role}`);
   if (customerUser.emergencyContacts.length > 0) {
-    console.log(`  Emergency Contact: ${customerUser.emergencyContacts[0].name} (${customerUser.emergencyContacts[0].phoneNumber})`);
+    console.log(
+      `  Emergency Contact: ${customerUser.emergencyContacts[0].name} (${customerUser.emergencyContacts[0].phoneNumber})`,
+    );
   }
   console.log('--------------------------------------------------');
   console.log(`DRIVER:`);

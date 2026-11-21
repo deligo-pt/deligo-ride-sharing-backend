@@ -21,8 +21,8 @@ const lngField = (name: string) =>
 // ── Reusable intermediate stop schema ─────────────────────────────────────────
 export const StopSchema = z.object({
   address: z.string({ error: 'address is required' }).min(1, 'address cannot be empty'),
-  lat:     latField('stop.lat'),
-  lng:     lngField('stop.lng'),
+  lat: latField('stop.lat'),
+  lng: lngField('stop.lng'),
 });
 export type StopDto = z.infer<typeof StopSchema>;
 
@@ -46,9 +46,11 @@ export const EstimateFareSchema = z.object({
   pickupLng: lngField('pickupLng'),
   dropoffLat: latField('dropoffLat'),
   dropoffLng: lngField('dropoffLng'),
-  vehicleType: z.nativeEnum(VehicleType, {
-    error: `vehicleType must be one of: ${Object.values(VehicleType).join(', ')}`,
-  }).optional(),
+  vehicleType: z
+    .nativeEnum(VehicleType, {
+      error: `vehicleType must be one of: ${Object.values(VehicleType).join(', ')}`,
+    })
+    .optional(),
   promoCode: z.string().optional(),
   /** Optional intermediate stops for multi-stop fare estimation. */
   stops: z.array(StopSchema).max(5, 'A maximum of 5 intermediate stops is allowed').optional(),
@@ -59,10 +61,14 @@ export type EstimateFareDto = z.infer<typeof EstimateFareSchema>;
 export const RequestRideSchema = z.object({
   pickupLat: latField('pickupLat'),
   pickupLng: lngField('pickupLng'),
-  pickupAddress: z.string({ error: 'pickupAddress is required' }).min(1, 'pickupAddress cannot be empty'),
+  pickupAddress: z
+    .string({ error: 'pickupAddress is required' })
+    .min(1, 'pickupAddress cannot be empty'),
   dropoffLat: latField('dropoffLat'),
   dropoffLng: lngField('dropoffLng'),
-  dropoffAddress: z.string({ error: 'dropoffAddress is required' }).min(1, 'dropoffAddress cannot be empty'),
+  dropoffAddress: z
+    .string({ error: 'dropoffAddress is required' })
+    .min(1, 'dropoffAddress cannot be empty'),
   vehicleType: z.nativeEnum(VehicleType, {
     error: `vehicleType must be one of: ${Object.values(VehicleType).join(', ')}`,
   }),
@@ -78,10 +84,9 @@ export const RequestRideSchema = z.object({
   scheduledAt: z
     .string()
     .datetime({ message: 'scheduledAt must be a valid ISO 8601 datetime string' })
-    .refine(
-      (v) => new Date(v).getTime() > Date.now() + 30 * 60 * 1000,
-      { message: 'scheduledAt must be at least 30 minutes in the future' },
-    )
+    .refine((v) => new Date(v).getTime() > Date.now() + 31 * 60 * 1000, {
+      message: 'scheduledAt must be at least 30 minutes in the future',
+    })
     .transform((v) => new Date(v))
     .optional(),
 });
@@ -97,10 +102,17 @@ export const UpdateRideStatusSchema = z.object({
   }),
   // Legacy fields (kept for backwards compat)
   finalDistanceKm: z.number({ error: 'finalDistanceKm must be a number' }).positive().optional(),
-  finalDurationMinutes: z.number({ error: 'finalDurationMinutes must be a number' }).int().positive().optional(),
+  finalDurationMinutes: z
+    .number({ error: 'finalDurationMinutes must be a number' })
+    .int()
+    .positive()
+    .optional(),
   // PRD 3.7 actuals for final fare calculation
   actualDistanceKm: z.number({ error: 'actualDistanceKm must be a number' }).positive().optional(),
-  actualDurationMinutes: z.number({ error: 'actualDurationMinutes must be a number' }).positive().optional(),
+  actualDurationMinutes: z
+    .number({ error: 'actualDurationMinutes must be a number' })
+    .positive()
+    .optional(),
   tolls: z.number({ error: 'tolls must be a number' }).min(0).optional(),
   waitingTimeMinutes: z.number({ error: 'waitingTimeMinutes must be a number' }).min(0).optional(),
 });
