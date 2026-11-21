@@ -2,21 +2,63 @@
   "info": {
     "_postman_id": "e1d2c3b4-5678-490a-bcde-deligo000001",
     "name": "DeliGo Ride-Sharing API",
-    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication\nAuthentication is simulated via Mock Headers:\n- `x-mock-user-id`: Customer, Driver, or Admin UUID\n- `x-mock-role`: `CUSTOMER`, `DRIVER`, or `ADMIN`\n\n### Automatic Variable Extraction\nAll creation endpoints automatically capture IDs (such as `activeRideId`, `activeTicketId`, `activePromoId`, `activeVehicleId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
+    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nThe platform supports dual authentication architecture:\n1. **JWT Bearer Authentication**: Send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, or `Bearer {{adminAccessToken}}` on protected endpoints.\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n2. **Mock Identity Headers** (for rapid development, integration testing, and backward compatibility):\n   - `x-mock-user-id`: UUID of Customer (`{{mockUserId}}`), Driver (`{{mockDriverId}}`), or Admin (`{{mockAdminId}}`)\n   - `x-mock-role`: `CUSTOMER`, `DRIVER`, or `ADMIN`\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken`, `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000/api/v1",
+      "value": "http://localhost:5000/api/v1",
       "type": "string",
       "description": "API base URL"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT Access Token for Customer (auto-populated on login/OTP verify)"
+    },
+    {
+      "key": "driverAccessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT Access Token for Driver (auto-populated on driver login)"
+    },
+    {
+      "key": "adminAccessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT Access Token for Admin (auto-populated on admin login)"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT Refresh Token (auto-populated on login/OTP verify)"
+    },
+    {
+      "key": "signupSessionId",
+      "value": "",
+      "type": "string",
+      "description": "Signup Session UUID (auto-populated by initiate signup)"
+    },
+    {
+      "key": "otp",
+      "value": "123456",
+      "type": "string",
+      "description": "One-Time Password code for signup verification"
+    },
+    {
+      "key": "adminInviteToken",
+      "value": "",
+      "type": "string",
+      "description": "One-time invitation token for setting admin password"
     },
     {
       "key": "mockUserId",
       "value": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
       "type": "string",
-      "description": "Default mock user ID (Customer Jane Doe)"
+      "description": "Default mock Customer User ID (Jane Doe)"
     },
     {
       "key": "mockRole",
@@ -50,72 +92,849 @@
     },
     {
       "key": "activeVehicleId",
-      "value": "a9c68b45-1746-4b03-bd35-dd3024c2c4fb",
+      "value": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
       "type": "string",
-      "description": "Dynamically captured or active Vehicle UUID"
+      "description": "Dynamically captured Vehicle UUID"
     },
     {
       "key": "activeTicketId",
-      "value": "ba079c56-2857-4c14-ce46-ee4135d3d5ac",
+      "value": "f5e4d3c2-b1a0-4f9e-8d7c-6b5a4f3e2d1c",
       "type": "string",
-      "description": "Dynamically captured or active Support Ticket UUID"
+      "description": "Dynamically captured Support Ticket UUID"
     },
     {
       "key": "activePromoId",
-      "value": "cb18ad67-3968-4d25-df57-ff5246e4e6bd",
+      "value": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
       "type": "string",
-      "description": "Dynamically captured or active Promo Code UUID"
+      "description": "Dynamically captured Promotion UUID"
     },
     {
       "key": "activePromoCode",
-      "value": "SUMMER25",
+      "value": "DELIGO2026",
       "type": "string",
-      "description": "Dynamically captured Promo Code string"
+      "description": "Default or dynamically created Promo Code string"
     },
     {
       "key": "activeAlertId",
-      "value": "dc29be78-4a79-4e36-e068-006357f5f7ce",
+      "value": "9f8e7d6c-5b4a-4321-fedc-ba9876543210",
       "type": "string",
-      "description": "Dynamically captured or active Emergency SOS Alert UUID"
+      "description": "Dynamically captured Active Safety SOS Alert UUID"
     },
     {
       "key": "activeReviewId",
-      "value": "ed3acf89-5b80-4f47-f179-117468a6a8df",
+      "value": "8e7d6c5b-4a3b-4210-edcb-a98765432109",
       "type": "string",
       "description": "Dynamically captured Review UUID"
     },
     {
       "key": "activeEmergencyContactId",
-      "value": "fe4bd09a-6c91-4058-028a-228579b7b9ea",
+      "value": "7d6c5b4a-3b2a-4109-dcba-987654321098",
       "type": "string",
       "description": "Dynamically captured Emergency Contact UUID"
     },
     {
       "key": "driverProfileId",
-      "value": "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
+      "value": "3b4c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e",
       "type": "string",
-      "description": "Target Driver Profile UUID for admin KYC review"
+      "description": "Driver Profile UUID for admin KYC reviews"
     },
     {
       "key": "targetUserId",
       "value": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
       "type": "string",
-      "description": "Target User UUID for status updates"
+      "description": "Target User UUID for admin user management"
     },
     {
       "key": "notificationId",
-      "value": "11223344-5566-7788-99aa-bbccddeeff00",
+      "value": "4c5d6e7f-8a9b-0c1d-2e3f-4a5b6c7d8e9f",
       "type": "string",
-      "description": "Target Notification UUID"
+      "description": "Notification UUID for read operations"
     },
     {
       "key": "kycDocumentId",
-      "value": "22334455-6677-8899-aabb-ccddeeff0011",
+      "value": "5d6e7f8a-9b0c-1d2e-3f4a-5b6c7d8e9f0a",
       "type": "string",
-      "description": "Target KYC Document UUID for admin document review"
+      "description": "KYC Document UUID for document review"
     }
   ],
   "item": [
+    {
+      "name": "System",
+      "description": "Health checking and API root service discovery.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/health",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Returns server operational health, environment, process uptime, and timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "API Root & Welcome",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "Returns API status and welcome confirmation from Express router root."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "description": "Complete multi-role authentication module covering Customer, Driver, and Admin onboarding, credential and social login, OTP verification, invite flows, and token refresh.",
+      "item": [
+        {
+          "name": "Customer Auth",
+          "description": "End-to-end registration, OTP verification, and login for Customers.",
+          "item": [
+            {
+              "name": "1. Initiate Customer Signup",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.signupSessionId) {",
+                      "        pm.collectionVariables.set(\"signupSessionId\", json.data.signupSessionId);",
+                      "        console.log(\"Captured Customer signupSessionId:\", json.data.signupSessionId);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"email\": \"customer@example.com\",\n  \"phone\": \"+8801700000001\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\",\n  \"otpChannel\": \"EMAIL\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/initiate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "initiate"
+                  ]
+                },
+                "description": "Initiates customer signup. Validates credentials, creates a temporary signup session, and sends a 6-digit OTP code."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Verify Customer Signup OTP",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        console.log(\"Captured Customer accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
+                      "        console.log(\"Captured Customer mockUserId:\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"otp\": \"{{otp}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/verify-otp",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "verify-otp"
+                  ]
+                },
+                "description": "Verifies the 6-digit OTP from signup initiation. Persists the User, CustomerProfile, and Wallet in an atomic transaction, returns JWT access token, and sets the refreshToken HTTP-only cookie."
+              },
+              "response": []
+            },
+            {
+              "name": "3. Resend Customer Signup OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"channel\": \"EMAIL\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/resend-otp",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "resend-otp"
+                  ]
+                },
+                "description": "Resends a fresh OTP code for an active signup session with rate-limiting protection."
+              },
+              "response": []
+            },
+            {
+              "name": "4. Customer Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        console.log(\"Captured Customer accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
+                      "        console.log(\"Captured Customer mockUserId:\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"identifier\": \"customer@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "Authenticates a Customer with email or phone number and password. Issues access token and sets refresh token cookie."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Driver Auth",
+          "description": "Registration and login dedicated to the DRIVER role.",
+          "item": [
+            {
+              "name": "1. Initiate Driver Signup",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.signupSessionId) {",
+                      "        pm.collectionVariables.set(\"signupSessionId\", json.data.signupSessionId);",
+                      "        console.log(\"Captured Driver signupSessionId:\", json.data.signupSessionId);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Driver\",\n  \"email\": \"driver@example.com\",\n  \"phone\": \"+8801800000001\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\",\n  \"otpChannel\": \"EMAIL\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/driver/signup/initiate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "driver",
+                    "signup",
+                    "initiate"
+                  ]
+                },
+                "description": "Initiates driver registration. Creates signup session tied specifically to DRIVER role. Use \"Verify Customer Signup OTP\" endpoint to complete OTP verification."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Driver Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"driverAccessToken\", json.data.tokens.accessToken);",
+                      "        console.log(\"Captured Driver accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockDriverId\", json.data.user.id);",
+                      "        console.log(\"Captured Driver mockDriverId:\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"identifier\": \"driver@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/driver/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "driver",
+                    "login"
+                  ]
+                },
+                "description": "Authenticates a Driver. Enforces role verification (rejects non-drivers with 403 Forbidden). Captures driverAccessToken and mockDriverId."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Admin Auth",
+          "description": "Admin login and one-time invitation link creation & password setup.",
+          "item": [
+            {
+              "name": "1. Admin Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"adminAccessToken\", json.data.tokens.accessToken);",
+                      "        console.log(\"Captured Admin accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockAdminId\", json.data.user.id);",
+                      "        console.log(\"Captured Admin mockAdminId:\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"identifier\": \"admin@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/admin/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "admin",
+                    "login"
+                  ]
+                },
+                "description": "Authenticates an administrator. Rejects non-admin accounts. Stores adminAccessToken and mockAdminId in collection variables."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Create Sub-Admin (Invite)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 201\", function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "if (pm.response.code === 201) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.inviteToken) {",
+                      "        pm.collectionVariables.set(\"adminInviteToken\", json.data.inviteToken);",
+                      "        console.log(\"Captured adminInviteToken:\", json.data.inviteToken);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-mock-user-id",
+                    "value": "{{mockAdminId}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-mock-role",
+                    "value": "ADMIN",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Sub\",\n  \"lastName\": \"Admin\",\n  \"email\": \"subadmin@example.com\",\n  \"role\": \"ADMIN\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/admin/create",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "admin",
+                    "create"
+                  ]
+                },
+                "description": "Requires an authenticated ADMIN or SUPER_ADMIN bearer token. Generates a secure 32-byte one-time token stored in Redis and returns the invite link."
+              },
+              "response": []
+            },
+            {
+              "name": "3. Set Admin Password",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{adminInviteToken}}\",\n  \"password\": \"NewAdminPassword123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/admin/set-password",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "admin",
+                    "set-password"
+                  ]
+                },
+                "description": "Consumes the one-time invite token from Redis, activates the admin account, creates the AdminProfile, and sets the password."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Social Auth",
+          "description": "One-click sign-in and account linking for Google, Facebook, and Apple.",
+          "item": [
+            {
+              "name": "1. Google Sign-In",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idToken\": \"google-id-token-placeholder\",\n  \"rememberMe\": true,\n  \"referralCode\": \"\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/google",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "google"
+                  ]
+                },
+                "description": "Verifies a Google ID token using google-auth-library with pre-account takeover protection and automatic profile creation."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Facebook Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"accessToken\": \"facebook-access-token-placeholder\",\n  \"rememberMe\": true,\n  \"referralCode\": \"\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/facebook",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "facebook"
+                  ]
+                },
+                "description": "Verifies a Facebook user access token with Graph API, inspects app_id and validity, and issues session tokens."
+              },
+              "response": []
+            },
+            {
+              "name": "3. Apple Sign-In",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"idToken\": \"apple-id-token-or-demo-sub\",\n  \"user\": {\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\"\n  },\n  \"rememberMe\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/apple",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "apple"
+                  ]
+                },
+                "description": "Verifies an Apple Sign-In identity token (supports demo mode in development when credentials are placeholders)."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Session & Tokens",
+          "description": "Silent refresh rotation and session termination.",
+          "item": [
+            {
+              "name": "1. Refresh Access Token",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.accessToken);",
+                      "        console.log(\"Refreshed Customer accessToken\");",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/refresh-token",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "refresh-token"
+                  ]
+                },
+                "description": "Performs token rotation using the refreshToken cookie or request body. Enforces token-family reuse detection."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Logout",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/logout",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "logout"
+                  ]
+                },
+                "description": "Revokes the active session, blacklists the JTI in Redis, and clears the refreshToken HTTP-only cookie."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
     {
       "name": "Rides",
       "description": "Ride lifecycle operations: GPS location tracking, nearby driver discovery, fare estimation, ride dispatch, recurring rides, driver trip progress, and tracking tokens.",
@@ -157,13 +976,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -226,13 +1050,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -295,13 +1124,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -370,13 +1204,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -445,13 +1284,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -513,13 +1357,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -573,13 +1422,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -633,13 +1487,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -701,13 +1560,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -769,13 +1633,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -835,13 +1704,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -912,13 +1786,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -986,13 +1865,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1046,13 +1930,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1114,13 +2003,18 @@
             "method": "POST",
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1242,13 +2136,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1310,13 +2209,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1370,13 +2274,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1433,13 +2342,18 @@
             "method": "POST",
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1503,13 +2417,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -1569,13 +2488,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -1692,13 +2616,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1747,13 +2676,18 @@
             "method": "POST",
             "header": [
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1862,13 +2796,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockDriverId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -1923,13 +2862,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -1984,13 +2928,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -2045,13 +2994,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -2118,13 +3072,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2183,13 +3142,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2232,13 +3196,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2365,13 +3334,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -2432,13 +3406,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2503,13 +3482,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2560,13 +3544,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2622,13 +3611,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2680,13 +3674,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2729,13 +3728,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2794,13 +3798,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2852,13 +3861,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2901,13 +3915,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -2985,13 +4004,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3042,13 +4066,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -3111,13 +4140,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3195,13 +4229,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3256,13 +4295,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3333,13 +4377,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3415,13 +4464,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3493,13 +4547,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3576,13 +4635,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3654,13 +4718,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3733,13 +4802,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3810,13 +4884,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3888,13 +4967,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3958,13 +5042,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4018,13 +5107,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4095,13 +5189,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4167,13 +5266,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4244,13 +5348,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4317,13 +5426,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4378,13 +5492,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4454,13 +5573,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
+                "value": "{{mockAdminId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4517,13 +5641,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -4575,13 +5704,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -4624,13 +5758,18 @@
                 "type": "text"
               },
               {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
                 "key": "x-mock-user-id",
                 "value": "{{mockUserId}}",
                 "type": "text"
               },
               {
                 "key": "x-mock-role",
-                "value": "{{mockRole}}",
+                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
