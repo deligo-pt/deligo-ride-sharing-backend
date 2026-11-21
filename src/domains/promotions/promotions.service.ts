@@ -22,15 +22,15 @@ export interface ValidatePromoResult {
 export async function createPromoCode(dto: CreatePromoCodeDto) {
   return prisma.promoCode.create({
     data: {
-      code:          dto.code,
-      discountType:  dto.discountType,
+      code: dto.code,
+      discountType: dto.discountType,
       discountValue: dto.discountValue,
       maxDiscountCap: dto.maxDiscountCap ?? null,
-      minRideValue:  dto.minRideValue,
+      minRideValue: dto.minRideValue,
       maxGlobalUses: dto.maxGlobalUses,
-      validFrom:     dto.validFrom,
-      validUntil:    dto.validUntil,
-      isActive:      dto.isActive,
+      validFrom: dto.validFrom,
+      validUntil: dto.validUntil,
+      isActive: dto.isActive,
     },
   });
 }
@@ -111,9 +111,7 @@ export async function validatePromoCode(
   // Ensure the discount never exceeds the fare itself
   discountAmount = Math.min(discountAmount, dto.estimatedFare);
 
-  const finalEstimatedFare = parseFloat(
-    (dto.estimatedFare - discountAmount).toFixed(2),
-  );
+  const finalEstimatedFare = parseFloat((dto.estimatedFare - discountAmount).toFixed(2));
 
   return {
     discountAmount: parseFloat(discountAmount.toFixed(2)),
@@ -125,12 +123,12 @@ export async function validatePromoCode(
 // ─────────────────────────────────────────────────────────────────────────────
 // PRD 3.10 — PricingEngine Integration Note
 // ─────────────────────────────────────────────────────────────────────────────
-//
+
 // When a ride transitions to COMPLETED and a promoCodeId is present on the
 // Ride record, PricingEngine.calculateFinalFare() (or the updateRideStatus
 // service function in rides.service.ts) must execute the following two
 // operations inside the same $transaction that settles the final fare:
-//
+
 //  1. Insert a PromoUsage record:
 //       prisma.promoUsage.create({
 //         data: {
@@ -140,16 +138,16 @@ export async function validatePromoCode(
 //           discountApplied: <actual discount subtracted from finalFare>,
 //         },
 //       })
-//
+
 //  2. Increment PromoCode.currentUses by 1:
 //       prisma.promoCode.update({
 //         where: { id: ride.promoCodeId },
 //         data:  { currentUses: { increment: 1 } },
 //       })
-//
+
 // Both operations must be part of the same atomic $transaction to prevent
 // counter drift if the ride update fails after the usage record is written.
-//
+
 // The recommended approach is to extend the transaction array in
 // `updateRideStatus` (rides.service.ts, step 7) when `ride.promoCodeId`
 // is truthy.

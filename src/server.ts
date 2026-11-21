@@ -1,5 +1,6 @@
 import 'dotenv/config'; // Must be the VERY FIRST import to load .env
 import http from 'http';
+import type { Worker } from 'bullmq';
 import { createApp } from './app';
 import prisma from './config/db';
 import { env } from './config/env';
@@ -20,7 +21,7 @@ async function bootstrap(): Promise<void> {
   }
 
   // ── 2. Create Express app + HTTP server + Socket.io ────────────────────────
-  const app    = createApp();
+  const app = createApp();
   const server = http.createServer(app);
 
   // Attach Socket.io to the same HTTP server (same port as REST)
@@ -29,6 +30,15 @@ async function bootstrap(): Promise<void> {
   // Give NotificationEngine access to the io instance so it can push
   // real-time notifications to user rooms from anywhere in the codebase.
   NotificationEngine.setIo(io);
+
+  // ── Optional: Embedded Worker (if not running dedicated worker container) ──
+  let activeWorker: Worker | null = null;
+  if (process.env.ENABLE_WORKER !== 'false') {
+    activeWorker = rideWorker;
+    console.info('⚙️  Embedded BullMQ worker initialized in server process');
+  } else {
+    console.info('ℹ️  Embedded BullMQ worker disabled (ENABLE_WORKER=false)');
+  }
 
   server.listen(env.PORT, () => {
     console.info(`🚀 Server running on http://localhost:${env.PORT}`);
@@ -45,8 +55,10 @@ async function bootstrap(): Promise<void> {
     server.close(async () => {
       console.info('   HTTP server closed');
       try {
-        await rideWorker.close();
-        console.info('   BullMQ worker closed');
+        if (activeWorker) {
+          await activeWorker.close();
+          console.info('   BullMQ worker closed');
+        }
         await prisma.$disconnect();
         console.info('   Database disconnected');
       } catch (err) {

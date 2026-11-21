@@ -16,9 +16,6 @@ const documentSelect = {
   driverSelfieUrl: true,
   proofOfAddressUrl: true,
   taxIdUrl: true,
-  drivingLicenseExpiry: true,
-  vehicleRegistrationExpiry: true,
-  vehicleInsuranceExpiry: true,
   verificationStatus: true,
   reviewNote: true,
   rejectionReason: true,
@@ -38,22 +35,9 @@ function buildFlattenedData(documents: SingleDocumentPayload[]) {
 
   return {
     drivingLicenseUrl: map.get('DRIVING_LICENSE')?.documentUrl as string,
-    drivingLicenseExpiry: map.get('DRIVING_LICENSE')?.expiryDate
-      ? new Date(map.get('DRIVING_LICENSE')!.expiryDate!)
-      : null,
-
     nationalIdUrl: map.get('NATIONAL_ID')?.documentUrl as string,
-
     vehicleRegistrationUrl: map.get('VEHICLE_REGISTRATION')?.documentUrl as string,
-    vehicleRegistrationExpiry: map.get('VEHICLE_REGISTRATION')?.expiryDate
-      ? new Date(map.get('VEHICLE_REGISTRATION')!.expiryDate!)
-      : null,
-
     vehicleInsuranceUrl: map.get('VEHICLE_INSURANCE')?.documentUrl as string,
-    vehicleInsuranceExpiry: map.get('VEHICLE_INSURANCE')?.expiryDate
-      ? new Date(map.get('VEHICLE_INSURANCE')!.expiryDate!)
-      : null,
-
     driverSelfieUrl: map.get('DRIVER_SELFIE')?.documentUrl as string,
     proofOfAddressUrl: map.get('PROOF_OF_ADDRESS')?.documentUrl as string,
     taxIdUrl: map.get('TAX_ID')?.documentUrl as string,
@@ -67,17 +51,20 @@ function buildFlattenedData(documents: SingleDocumentPayload[]) {
  * Cloudinary URLs before calling this function.
  * Sets verificationStatus → PENDING and user.status → PENDING_VERIFICATION.
  */
-export async function uploadDriverDocuments(
-  userId: string,
-  documents: SingleDocumentPayload[],
-) {
+export async function uploadDriverDocuments(userId: string, documents: SingleDocumentPayload[]) {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
+  console.log(driverProfile);
+
+  console.log('milestone 1');
+
   if (!driverProfile) {
     throw new Error('DRIVER_PROFILE_NOT_FOUND');
   }
+
+  console.log('milestone 2');
 
   const flattenedData = buildFlattenedData(documents);
 
@@ -97,11 +84,15 @@ export async function uploadDriverDocuments(
     },
   });
 
+  console.log('milestone 3');
+
   // Flag the user account for admin review
   await prisma.user.update({
     where: { id: userId },
     data: { status: 'PENDING_VERIFICATION' },
   });
+
+  console.log('milestone 4');
 
   return upserted;
 }

@@ -1,5 +1,10 @@
 import { NextFunction, Request, Response } from 'express';
-import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../../utils/errors';
 import { getActiveAlerts, resolveAlert, triggerSos } from './safety.service';
 import { ResolveAlertSchema, TriggerSosSchema } from './safety.validation';
 
@@ -15,9 +20,7 @@ function mapError(err: unknown): unknown {
       case 'ALERT_NOT_FOUND':
         return new NotFoundError('Emergency alert');
       case 'ALERT_ALREADY_RESOLVED':
-        return new BadRequestError(
-          'This alert has already been resolved or dismissed.',
-        );
+        return new BadRequestError('This alert has already been resolved or dismissed.');
       case 'FORBIDDEN':
         return new ForbiddenError('You do not have permission to perform this action');
     }

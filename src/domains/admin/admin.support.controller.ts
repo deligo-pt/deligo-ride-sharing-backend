@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { successResponse } from '../../types/api.types';
 import { assertAdmin } from './admin.utils';
-import {
-  listSupportTickets,
-  updateSupportTicket,
-  addTicketMessage,
-} from './admin.support.service';
+import { listSupportTickets, updateSupportTicket, addTicketMessage } from './admin.support.service';
 
-export const getTicketsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const getTicketsHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
   try {
     assertAdmin(req);
     const { tickets, meta } = await listSupportTickets(req.query as never);
@@ -17,7 +17,11 @@ export const getTicketsHandler = async (req: Request, res: Response, next: NextF
   }
 };
 
-export const updateTicketHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const updateTicketHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
   try {
     assertAdmin(req);
     const adminId = req.user!.id;
@@ -29,7 +33,11 @@ export const updateTicketHandler = async (req: Request, res: Response, next: Nex
   }
 };
 
-export const addTicketMessageHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const addTicketMessageHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
   try {
     assertAdmin(req);
     const adminId = req.user!.id;
