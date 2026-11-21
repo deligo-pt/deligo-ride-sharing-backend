@@ -41,7 +41,6 @@ export function createApp(): Application {
   // ── Security Headers (helmet) ──────────────────────────────────────────────
   app.use(cooikieParser());
   app.use(helmet());
-
   // ── CORS ──────────────────────────────────────────────────────────────────
   const allowedOrigins = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
   app.use(

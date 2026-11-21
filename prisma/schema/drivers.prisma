@@ -29,8 +29,8 @@ model DriverProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  licenseNumber    String    @unique
-  licenseExpiresAt DateTime
+  licenseNumber    String?   @unique
+  licenseExpiresAt DateTime?
   totalRides       Int       @default(0)
   totalReviews     Int       @default(0)
   averageRating    Float     @default(5.0)
@@ -88,17 +88,13 @@ model DriverDocument {
   driverProfileId String        @unique
   driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
 
-  drivingLicenseUrl      String
-  nationalIdUrl          String
-  vehicleRegistrationUrl String
-  vehicleInsuranceUrl    String
-  driverSelfieUrl        String
-  proofOfAddressUrl      String
-  taxIdUrl               String
-
-  drivingLicenseExpiry      DateTime?
-  vehicleRegistrationExpiry DateTime?
-  vehicleInsuranceExpiry    DateTime?
+  drivingLicenseUrl      String?
+  nationalIdUrl          String?
+  vehicleRegistrationUrl String?
+  vehicleInsuranceUrl    String?
+  driverSelfieUrl        String?
+  proofOfAddressUrl      String?
+  taxIdUrl               String?
 
   verificationStatus DocumentStatus @default(PENDING)
   reviewNote         String?

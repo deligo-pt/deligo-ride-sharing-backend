@@ -13,5 +13,6 @@ agent.md
 firebase-service-account.json
 
 src/auth
+client
 
 AUDIT_REPORT.md

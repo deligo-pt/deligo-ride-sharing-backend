@@ -94,3 +94,37 @@ export const RefreshTokenSchema = z.object({
 });
 
 export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
+
+export const GoogleLoginSchema = z.object({
+  idToken: z.string().min(1, 'Google ID token is required'),
+  referralCode: z.string().trim().optional(),
+  preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
+  rememberMe: z.boolean().optional().default(true),
+});
+
+export type GoogleLoginInput = z.infer<typeof GoogleLoginSchema>;
+
+export const FacebookLoginSchema = z.object({
+  accessToken: z.string().min(1, 'Facebook access token is required'),
+  referralCode: z.string().trim().optional(),
+  preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
+  rememberMe: z.boolean().optional().default(true),
+});
+
+export type FacebookLoginInput = z.infer<typeof FacebookLoginSchema>;
+
+export const AppleLoginSchema = z.object({
+  idToken: z.string().min(1, 'Apple ID token is required'),
+  user: z
+    .object({
+      firstName: z.string().trim().optional(),
+      lastName: z.string().trim().optional(),
+    })
+    .optional(),
+  referralCode: z.string().trim().optional(),
+  preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
+  rememberMe: z.boolean().optional().default(true),
+});
+
+export type AppleLoginInput = z.infer<typeof AppleLoginSchema>;
+

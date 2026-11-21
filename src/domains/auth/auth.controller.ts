@@ -1,19 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
-import { config } from '../../config';
 import {
   initiateSignup,
   resendSignupOtp,
   verifySignupOtp,
   login,
+  googleLogin,
+  facebookLogin,
+  appleLogin,
   refreshAccessToken,
   logoutUser,
-  ClientInfo,
 } from './auth.service';
 import {
   InitiateSignupSchema,
   ResendOtpSchema,
   VerifyOtpSchema,
   LoginSchema,
+  GoogleLoginSchema,
+  FacebookLoginSchema,
+  AppleLoginSchema,
   RefreshTokenSchema,
 } from './auth.validation';
 
@@ -21,43 +25,21 @@ import {
 // Auth Controller
 // ─────────────────────────────────────────────────────────────────────────────
 
-function getClientInfo(req: Request): ClientInfo {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  const ipAddress = Array.isArray(forwardedFor)
-    ? forwardedFor[0]
-    : typeof forwardedFor === 'string'
-      ? forwardedFor.split(',')[0]?.trim()
-      : req.ip || req.socket.remoteAddress;
+import {
+  getClientInfo,
+  setRefreshTokenCookie,
+  clearRefreshTokenCookie,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+} from './auth.utils';
 
-  return {
-    userAgent: req.headers['user-agent'],
-    ipAddress,
-  };
-}
-
-function parseCookies(cookieHeader?: string): Record<string, string> {
-  const list: Record<string, string> = {};
-  if (!cookieHeader) return list;
-
-  cookieHeader.split(';').forEach((cookie) => {
-    const [name, ...rest] = cookie.split('=');
-    const trimmedName = name?.trim();
-    if (!trimmedName) return;
-    list[trimmedName] = decodeURIComponent(rest.join('=').trim());
-  });
-
-  return list;
-}
-
-function setRefreshTokenCookie(res: Response, token: string, maxAgeDays = 30): void {
-  res.cookie('refreshToken', token, {
-    httpOnly: true,
-    secure: config.isProduction,
-    sameSite: 'lax',
-    path: '/api/v1/auth',
-    maxAge: maxAgeDays * 24 * 60 * 60 * 1000,
-  });
-}
+export {
+  getClientInfo,
+  setRefreshTokenCookie,
+  clearRefreshTokenCookie,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+};
 
 /**
  * POST /api/v1/auth/signup/initiate
@@ -69,7 +51,7 @@ export async function initiateSignupHandler(
 ): Promise<void> {
   try {
     const validatedData = InitiateSignupSchema.parse(req.body);
-    const result = await initiateSignup(validatedData);
+    const result = await initiateSignup(validatedData, 'CUSTOMER');
 
     res.status(200).json({
       success: true,
@@ -132,7 +114,82 @@ export async function loginHandler(req: Request, res: Response, next: NextFuncti
   try {
     const validatedData = LoginSchema.parse(req.body);
     const clientInfo = getClientInfo(req);
-    const result = await login(validatedData, clientInfo);
+    const result = await login(validatedData, clientInfo, ['CUSTOMER']);
+
+    const cookieDays = validatedData.rememberMe ? 30 : 1;
+    setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/auth/google
+ */
+export async function googleLoginHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const validatedData = GoogleLoginSchema.parse(req.body);
+    const clientInfo = getClientInfo(req);
+    const result = await googleLogin(validatedData, clientInfo);
+
+    const cookieDays = validatedData.rememberMe ? 30 : 1;
+    setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/auth/facebook
+ */
+export async function facebookLoginHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const validatedData = FacebookLoginSchema.parse(req.body);
+    const clientInfo = getClientInfo(req);
+    const result = await facebookLogin(validatedData, clientInfo);
+
+    const cookieDays = validatedData.rememberMe ? 30 : 1;
+    setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/auth/apple
+ */
+export async function appleLoginHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const validatedData = AppleLoginSchema.parse(req.body);
+    const clientInfo = getClientInfo(req);
+    const result = await appleLogin(validatedData, clientInfo);
 
     const cookieDays = validatedData.rememberMe ? 30 : 1;
     setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
@@ -148,6 +205,7 @@ export async function loginHandler(req: Request, res: Response, next: NextFuncti
 
 /**
  * POST /api/v1/auth/refresh-token
+ * Accepts refresh token from either JSON body (mobile clients) or httpOnly cookie (web clients).
  */
 export async function refreshTokenHandler(
   req: Request,
@@ -155,14 +213,15 @@ export async function refreshTokenHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const cookies = parseCookies(req.headers.cookie);
-    const validatedBody = RefreshTokenSchema.parse(req.body);
+    const cookies = req.cookies || {};
+    // Fallback to empty object so cookie-only requests without a JSON body do not fail Zod parsing
+    const validatedBody = RefreshTokenSchema.parse(req.body || {});
+    const token = validatedBody.refreshToken || cookies[REFRESH_COOKIE_NAME];
 
-    const token = validatedBody.refreshToken || cookies['refreshToken'];
+    const { tokens, rememberMe } = await refreshAccessToken(token || '');
 
-    const tokens = await refreshAccessToken(token || '');
-
-    setRefreshTokenCookie(res, tokens.refreshToken, 30);
+    // Preserve the session's original rememberMe duration (30 days vs 1 day)
+    setRefreshTokenCookie(res, tokens.refreshToken, rememberMe ? 30 : 1);
 
     res.status(200).json({
       success: true,
@@ -182,23 +241,21 @@ export async function logoutHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const cookies = parseCookies(req.headers.cookie);
-    const refreshToken = (req.body?.refreshToken as string | undefined) || cookies['refreshToken'];
+    const cookies = req.cookies || {};
+    const refreshToken =
+      (req.body?.refreshToken as string | undefined) || cookies[REFRESH_COOKIE_NAME];
 
-    // If authenticated via Bearer token:
+    // If authenticated via Bearer token, forward sessionId and jti for revocation & blacklisting
     const sessionId = req.user?.sessionId;
     const jti = req.user?.jti;
 
-    // Optional decode if jti was not set on req.user (e.g. if logout called without auth middleware or with expired header)
     const result = await logoutUser({
       sessionId,
       jti,
       refreshToken,
     });
 
-    res.clearCookie('refreshToken', {
-      path: '/api/v1/auth',
-    });
+    clearRefreshTokenCookie(res);
 
     res.status(200).json({
       success: true,

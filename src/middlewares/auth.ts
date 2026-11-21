@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
+import prisma from '../config/db';
 import { env } from '../config/env';
 import { config } from '../config';
 import { redis } from '../utils/redis';
@@ -82,5 +83,38 @@ export function authorize(...allowedRoles: UserRole[]) {
     }
 
     next();
+  };
+}
+
+/**
+ * Role-checking middleware supporting extended roles (e.g. 'ADMIN', 'SUPER_ADMIN').
+ * Resolves effective role from AdminProfile if the user has role 'ADMIN'.
+ */
+export function requireRole(...allowedRoles: string[]) {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError('Authentication required');
+      }
+
+      let effectiveRole = req.user.role;
+      if (effectiveRole === 'ADMIN' && allowedRoles.includes('SUPER_ADMIN')) {
+        const adminProfile = await prisma.adminProfile.findUnique({
+          where: { userId: req.user.id },
+        });
+        if (adminProfile?.accessLabel === 'SUPER_ADMIN') {
+          effectiveRole = 'SUPER_ADMIN';
+        }
+      }
+
+      if (!allowedRoles.includes(effectiveRole) && !allowedRoles.includes(req.user.role)) {
+        throw new ForbiddenError(`Access denied. Required roles: ${allowedRoles.join(', ')}`);
+      }
+
+      req.user.role = effectiveRole;
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }

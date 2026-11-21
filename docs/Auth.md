@@ -88,6 +88,45 @@ sequenceDiagram
     API-->>Client: 200 OK { message: "Successfully logged out" }
 ```
 
+### C. Google Sign-In Flow (Account Linking & Pre-Account Takeover Protection)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    participant API as Express API
+    participant Google as Google OAuth2 (google-auth-library)
+    participant DB as PostgreSQL (Prisma)
+
+    Client->>API: POST /api/v1/auth/google { idToken, referralCode?, preferredLanguage?, rememberMe? }
+    API->>Google: verifyIdToken({ idToken, audience })
+    Google-->>API: Valid TokenPayload (sub, email, email_verified: true, name, picture)
+
+    alt Case A: Existing Google Account (provider: GOOGLE, sub)
+        API->>DB: Find Account by [provider: GOOGLE, providerAccountId: sub]
+        API->>API: Enforce status check (SUSPENDED / DEACTIVATED -> 403)
+        API->>DB: Create Session row
+        API-->>Client: 200 OK { user, tokens }
+    else Case B: Existing User by Email, Not Linked to Google
+        API->>DB: Find User by email
+        API->>API: Enforce status check (SUSPENDED / DEACTIVATED -> 403)
+        API->>DB: prisma.$transaction:
+        Note over API,DB: Link Google Account + Mark isEmailVerified: true<br/>Invalidate squatted unverified CREDENTIALS accounts<br/>Backfill picture if missing
+        API->>DB: Create Session row
+        API-->>Client: 200 OK { user, tokens }
+    else Case C: Brand New User
+        opt Referral code provided
+            API->>DB: Validate referrer exists & not deleted
+        end
+        API->>API: Generate unique referralCode (DLXXXXXX)
+        API->>DB: prisma.$transaction:
+        Note over API,DB: Create User (isEmailVerified: true) +<br/>Google Account + CustomerProfile + Wallet ($0)
+        API->>API: Non-blocking welcome email dispatch
+        API->>DB: Create Session row
+        API-->>Client: 200 OK { user, tokens }
+    end
+```
+
 ---
 
 ## 3. Environment Variables Reference
@@ -114,6 +153,12 @@ SMTP_USER="your_email@gmail.com"
 SMTP_PASS="your_app_password"
 EMAIL_FROM_NAME="Deligo Ride"
 EMAIL_FROM_ADDRESS="noreply@deligo.com"
+
+# Google OAuth
+GOOGLE_CLIENT_ID="your_google_client_id.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="your_google_client_secret"
+GOOGLE_ANDROID_CLIENT_ID="your_android_client_id_optional"
+GOOGLE_IOS_CLIENT_ID="your_ios_client_id_optional"
 ```
 
 ---
@@ -259,7 +304,130 @@ Base path: `/api/v1/auth`
 
 ---
 
-### 5. Rotate Refresh Token
+### 5. Driver Signup Initiation
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/driver/signup/initiate`
+- **Auth**: Public
+- **Request Body**:
+```json
+{
+  "firstName": "John",
+  "lastName": "Driver",
+  "email": "john.driver@example.com",
+  "phone": "+15559876543",
+  "password": "Password123!",
+  "preferredLanguage": "EN",
+  "referralCode": "DL123456",
+  "otpChannel": "EMAIL"
+}
+```
+*Note: The server strictly hardcodes `role: "DRIVER"` in the Redis session and never trusts role input from the client. After OTP verification via `/auth/signup/verify-otp`, a `DriverProfile` row is created automatically and `User.status` is set to `ACTIVE`.*
+
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "signupSessionId": "4bf729bc-4b36-47b1-9f93-c423cb11210a",
+    "channel": "EMAIL",
+    "maskedTarget": "j***r@example.com",
+    "expiresIn": 300
+  }
+}
+```
+
+---
+
+### 6. Driver Login
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/driver/login`
+- **Auth**: Public
+- **Request Body**:
+```json
+{
+  "identifier": "john.driver@example.com",
+  "password": "Password123!",
+  "rememberMe": true
+}
+```
+*Note: Validates driver credentials and enforces role isolation. Non-driver accounts attempting to sign in here are rejected with `403 Forbidden` (`This account is not authorized to sign in to this app.`) after timing-safe password verification.*
+
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "8dcc91ec-0b15-4293-b15a-39649139c226",
+      "email": "john.driver@example.com",
+      "phone": "+15559876543",
+      "firstName": "John",
+      "lastName": "Driver",
+      "role": "DRIVER",
+      "status": "ACTIVE",
+      "referralCode": "DL99XYZ1",
+      "isEmailVerified": true,
+      "isPhoneVerified": false,
+      "createdAt": "2026-11-21T08:00:00.000Z"
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
+      "expiresIn": 900
+    }
+  }
+}
+```
+*(Sets `refreshToken` in `httpOnly` secure cookie).*
+
+---
+
+### 7. Google Sign-In
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/google`
+- **Auth**: Public
+- **Request Body**:
+```json
+{
+  "idToken": "<GOOGLE_ID_TOKEN_FROM_CLIENT_SDK>",
+  "referralCode": "DLABC123",
+  "preferredLanguage": "EN",
+  "rememberMe": true
+}
+```
+*Note: `idToken` is verified against configured Google Client IDs using `google-auth-library`. `rememberMe` defaults to `true` (30 days).*
+
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "3665278e-5acf-41e9-939d-1d9f81514a5b",
+      "email": "user@gmail.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "role": "CUSTOMER",
+      "status": "ACTIVE",
+      "profilePicture": "https://lh3.googleusercontent.com/photo.jpg",
+      "preferredLanguage": "EN",
+      "referralCode": "DLFKCZ3G",
+      "isEmailVerified": true,
+      "isPhoneVerified": false,
+      "createdAt": "2026-11-18T08:00:00.000Z"
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
+      "expiresIn": 900
+    }
+  }
+}
+```
+
+---
+
+### 6. Rotate Refresh Token
 - **Method**: `POST`
 - **Path**: `/api/v1/auth/refresh-token`
 - **Auth**: Public (Requires refresh token in cookie or body)
@@ -286,7 +454,7 @@ Base path: `/api/v1/auth`
 
 ---
 
-### 6. Logout
+### 7. Logout
 - **Method**: `POST`
 - **Path**: `/api/v1/auth/logout`
 - **Headers**: `Authorization: Bearer <accessToken>`
@@ -297,6 +465,121 @@ Base path: `/api/v1/auth`
   "success": true,
   "data": {
     "message": "Successfully logged out"
+  }
+}
+```
+
+---
+
+### 8. Admin Login
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/admin/login`
+- **Auth**: Public
+- **Request Body**:
+```json
+{
+  "identifier": "admin@deligo.com",
+  "password": "AdminPassword123!",
+  "rememberMe": true
+}
+```
+*Note: Only accounts with `role: "ADMIN"` (including `SUPER_ADMIN` and `SUPPORT` access labels) are authorized to log in through this endpoint. Non-admin users attempting to log in are rejected with `403 Forbidden` (`This account is not authorized to sign in to this app.`) after password verification.*
+
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "e4b5c7d8-1111-4293-b15a-39649139c226",
+      "email": "admin@deligo.com",
+      "firstName": "Super",
+      "lastName": "Admin",
+      "role": "ADMIN",
+      "status": "ACTIVE",
+      "referralCode": "AD123456",
+      "isEmailVerified": true,
+      "isPhoneVerified": false,
+      "createdAt": "2026-11-21T08:00:00.000Z"
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
+      "expiresIn": 900
+    }
+  }
+}
+```
+*(Sets `refreshToken` in `httpOnly` secure cookie).*
+
+---
+
+### 9. Admin Invitation (Create Admin)
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/admin/create`
+- **Auth**: Authenticated (`ADMIN` or `SUPER_ADMIN`)
+- **Headers**: `Authorization: Bearer <adminAccessToken>`
+- **Request Body**:
+```json
+{
+  "firstName": "Claire",
+  "lastName": "Underwood",
+  "email": "claire.underwood@deligo.com",
+  "role": "ADMIN"
+}
+```
+*Security & Business Rules:*
+1. **Privilege Escalation Protection**: An `ADMIN` can only invite another `ADMIN` (`SUPPORT`). Only a `SUPER_ADMIN` can invite a `SUPER_ADMIN`. An `ADMIN` attempting to invite a `SUPER_ADMIN` is rejected with `403 Forbidden`.
+2. **Account Status**: Created with `status: "PENDING_VERIFICATION"` and `isEmailVerified: false`. Login is prevented until the setup link is completed.
+3. **Audit Trail**: The creator's user ID is saved in `referrerId`.
+4. **One-Time Token**: A cryptographically secure 32-byte hex token is generated. Its SHA-256 hash is stored in Redis (`admin:invite:${tokenHash}`) with a 24-hour TTL (`86400`s). A setup link containing the raw token is emailed to the invitee using the `admin-invite` EJS template.
+
+- **Response (201 Created)**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "c1f7a28e-3241-45f8-bca7-817c1825fae1",
+      "email": "claire.underwood@deligo.com",
+      "firstName": "Claire",
+      "lastName": "Underwood",
+      "role": "ADMIN",
+      "status": "PENDING_VERIFICATION",
+      "referralCode": "CL123456",
+      "referrerId": "e4b5c7d8-1111-4293-b15a-39649139c226",
+      "isEmailVerified": false,
+      "createdAt": "2026-11-21T08:00:00.000Z"
+    },
+    "message": "Admin created. Invitation link sent to email."
+  }
+}
+```
+
+---
+
+### 10. Admin Set Password (One-Time Invite Link)
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/admin/set-password`
+- **Auth**: Public
+- **Request Body**:
+```json
+{
+  "token": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b",
+  "password": "StrongAdminPassword123!"
+}
+```
+*Security Rules:*
+1. **Token Validation**: The raw token is hashed via SHA-256 and matched against Redis (`admin:invite:${tokenHash}`). Rejects with `400 Bad Request` if invalid or expired.
+2. **Replay Protection**: The Redis key is deleted immediately upon successful password configuration to prevent reuse.
+3. **Activation**: Atomically activates the user (`status: "ACTIVE"`, `isEmailVerified: true`) and creates/updates their `CREDENTIALS` `Account`.
+
+- **Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Password set successfully. You can now log in."
   }
 }
 ```
@@ -335,10 +618,22 @@ await sendEmail({
 ## 6. Testing Guide
 
 ### Automated End-to-End Test Suite
-An automated integration test script covers all 11 core verification scenarios:
+Automated integration test scripts cover all authentication scenarios:
 ```bash
-# Run the complete test suite
+# 1. Run the Registration, OTP, Login, Refresh, and Logout test suite:
 npx ts-node scripts/test-auth-e2e.ts
+
+# 2. Run the Driver Authentication test suite (Role Isolation, KYC status, Customer vs. Driver guard):
+npx ts-node scripts/test-driver-auth.ts
+
+# 3. Run the Admin Authentication & Invite Setup test suite (Privilege escalation, 1-time token, activation):
+npx ts-node scripts/test-admin-auth.ts
+
+# 4. Run the Google Sign-In test suite (Cases A, B, C & Pre-Account Takeover Protection):
+npx ts-node scripts/test-google-auth.ts
+
+# 5. Run the Facebook & Apple Social Sign-In test suite:
+npx ts-node scripts/test-social-auth.ts
 ```
 
 ### Manual cURL Commands
@@ -389,7 +684,26 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
   }'
 ```
 
-#### 5. Refresh Token
+#### 5. Google Sign-In
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/google \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idToken": "<GOOGLE_ID_TOKEN>",
+    "preferredLanguage": "EN",
+    "rememberMe": true
+  }'
+```
+
+##### How to obtain a live Google ID Token for manual testing:
+1. Navigate to [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/).
+2. In the top right gear icon (⚙️), check **"Use your own OAuth credentials"** and enter your `OAuth Client ID` and `OAuth Client secret`.
+3. Under **Step 1 (Select & authorize APIs)**, select `Google OAuth2 API v2` and check `email`, `profile`, `openid`.
+4. Click **Authorize APIs** and sign in with your Google account.
+5. In **Step 2 (Exchange authorization code for tokens)**, click **Exchange authorization code for tokens**.
+6. Copy the returned `id_token` (JWT string) and paste it into the `idToken` field in the request body above.
+
+#### 6. Refresh Token
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/refresh-token \
   -H "Content-Type: application/json" \
@@ -398,7 +712,7 @@ curl -X POST http://localhost:3000/api/v1/auth/refresh-token \
   }'
 ```
 
-#### 6. Logout
+#### 7. Logout
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/logout \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \

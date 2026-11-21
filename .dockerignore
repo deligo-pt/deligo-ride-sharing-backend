@@ -37,3 +37,5 @@ deligo-postman-collection.json
 *.swo
 .DS_Store
 
+src/auth
+client

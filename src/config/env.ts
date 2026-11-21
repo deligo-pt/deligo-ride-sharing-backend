@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  SAMESITE_COOKIE: z.enum(['lax', 'strict', 'none']).default('lax'),
   PORT: z.coerce.number().positive().default(3000),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL must be set'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
@@ -46,6 +47,22 @@ const envSchema = z.object({
   // Obtain from https://portal.bulkgate.com → Administration → Applications
   BULKGATE_APPLICATION_ID: z.string().optional(),
   BULKGATE_APPLICATION_TOKEN: z.string().optional(),
+  // Google OAuth
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
+  GOOGLE_IOS_CLIENT_ID: z.string().optional(),
+  // Facebook OAuth
+  FACEBOOK_APP_ID: z.string().optional(),
+  FACEBOOK_APP_SECRET: z.string().optional(),
+  META_APP_ID: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
+  // Apple Sign-In
+  APPLE_CLIENT_ID: z.string().optional().default('com.deligo.web.demo'),
+  APPLE_BUNDLE_ID: z.string().optional().default('com.deligo.app.demo'),
+  APPLE_DEMO_MODE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
+  // Admin Frontend
+  ADMIN_FRONTEND_URL: z.string().optional().default('http://localhost:3000/admin'),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
