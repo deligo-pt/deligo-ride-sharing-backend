@@ -155,6 +155,18 @@
       "value": "5d6e7f8a-9b0c-1d2e-3f4a-5b6c7d8e9f0a",
       "type": "string",
       "description": "KYC Document UUID for document review"
+    },
+    {
+      "key": "fleetAccessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT Access Token for Fleet Manager (auto-populated on fleet login)"
+    },
+    {
+      "key": "mockFleetId",
+      "value": "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a",
+      "type": "string",
+      "description": "Mock Fleet Manager User ID (Carlos Fleet)"
     }
   ],
   "item": [
@@ -512,6 +524,120 @@
                   ]
                 },
                 "description": "Authenticates a Driver. Enforces role verification (rejects non-drivers with 403 Forbidden). Captures driverAccessToken and mockDriverId."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Fleet Manager Auth",
+          "description": "Registration and login dedicated to the FLEET_MANAGER role.",
+          "item": [
+            {
+              "name": "1. Initiate Fleet Manager Signup",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.signupSessionId) {",
+                      "        pm.collectionVariables.set(\"signupSessionId\", json.data.signupSessionId);",
+                      "        console.log(\"Captured Fleet Manager signupSessionId:\", json.data.signupSessionId);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Carlos\",\n  \"lastName\": \"Fleet\",\n  \"email\": \"fleet@example.com\",\n  \"phone\": \"+8801900000001\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\",\n  \"otpChannel\": \"EMAIL\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/fleet/signup/initiate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "fleet",
+                    "signup",
+                    "initiate"
+                  ]
+                },
+                "description": "Initiates Fleet Manager registration. Creates signup session tied specifically to FLEET_MANAGER role. Use \"Verify Customer Signup OTP\" endpoint to complete OTP verification."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Fleet Manager Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"fleetAccessToken\", json.data.tokens.accessToken);",
+                      "        console.log(\"Captured Fleet Manager accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockFleetId\", json.data.user.id);",
+                      "        console.log(\"Captured Fleet Manager mockFleetId:\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"identifier\": \"fleet@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/fleet/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "fleet",
+                    "login"
+                  ]
+                },
+                "description": "Authenticates a Fleet Manager. Enforces role verification (rejects non-fleet managers with 403 Forbidden). Captures fleetAccessToken and mockFleetId."
               },
               "response": []
             }
@@ -2759,6 +2885,218 @@
             },
             "description": "Admin marks single document as APPROVED, REJECTED, SUSPENDED, or TEMPORARILY_BLOCKED."
           }
+        }
+      ]
+    },
+    {
+      "name": "Fleet Onboarding",
+      "description": "Fleet Manager multi-step onboarding lifecycle (Steps 3–7) and verification status check.",
+      "item": [
+        {
+          "name": "Get Onboarding Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{fleetAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/fleet/onboarding/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fleet",
+                "onboarding",
+                "status"
+              ]
+            },
+            "description": "Fetches the Fleet Manager profile and computed completedSteps object."
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3: Update Business Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{fleetAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"Express Fleet Solutions Ltd\",\n  \"legalBusinessName\": \"Express Fleet Solutions Limited\",\n  \"licenseNumber\": \"FL-2026-98765\",\n  \"nifNumber\": \"509876543\",\n  \"businessEmail\": \"contact@expressfleet.com\",\n  \"businessPhone\": \"+351912345678\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/onboarding/business",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fleet",
+                "onboarding",
+                "business"
+              ]
+            },
+            "description": "Updates business name, legal name, license number, and NIF number."
+          },
+          "response": []
+        },
+        {
+          "name": "Step 4: Update Location Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{fleetAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 38.7223,\n  \"longitude\": -9.1393,\n  \"street\": \"Avenida da Liberdade 100\",\n  \"city\": \"Lisbon\",\n  \"district\": \"Lisbon\",\n  \"state\": \"Lisbon\",\n  \"postalCode\": \"1250-096\",\n  \"country\": \"Portugal\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/onboarding/location",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fleet",
+                "onboarding",
+                "location"
+              ]
+            },
+            "description": "Updates fleet operational coordinates and registered office address."
+          },
+          "response": []
+        },
+        {
+          "name": "Step 5: Update Bank Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{fleetAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountHolderName\": \"Express Fleet Solutions Ltd\",\n  \"iban\": \"PT50000000000000000000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/onboarding/bank",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fleet",
+                "onboarding",
+                "bank"
+              ]
+            },
+            "description": "Updates bank payout details with normalized IBAN validation."
+          },
+          "response": []
+        },
+        {
+          "name": "Step 6: Update Documents",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{fleetAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"photoUrl\": \"https://res.cloudinary.com/demo/image/upload/photo.jpg\",\n  \"businessLicenseUrl\": \"https://res.cloudinary.com/demo/image/upload/license.pdf\",\n  \"idProofFrontUrl\": \"https://res.cloudinary.com/demo/image/upload/id_front.jpg\",\n  \"idProofBackUrl\": \"https://res.cloudinary.com/demo/image/upload/id_back.jpg\",\n  \"addressProofUrl\": \"https://res.cloudinary.com/demo/image/upload/address.pdf\",\n  \"activityDocumentUrl\": \"https://res.cloudinary.com/demo/image/upload/activity.pdf\",\n  \"ibanProofUrl\": \"https://res.cloudinary.com/demo/image/upload/iban.pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/onboarding/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fleet",
+                "onboarding",
+                "documents"
+              ]
+            },
+            "description": "Incrementally updates verification document URLs without clearing unsupplied fields."
+          },
+          "response": []
+        },
+        {
+          "name": "Step 7: Submit Onboarding",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{fleetAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signerType\": \"MYSELF\",\n  \"signatureUrl\": \"https://res.cloudinary.com/demo/image/upload/signature.png\",\n  \"termsAccepted\": true,\n  \"privacyAccepted\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fleet/onboarding/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fleet",
+                "onboarding",
+                "submit"
+              ]
+            },
+            "description": "Validates completeness across Steps 3–6, records signature & terms acceptance, and moves status to UNDER_REVIEW."
+          },
+          "response": []
         }
       ]
     },

@@ -49,7 +49,7 @@ interface SignupRedisSession {
     preferredLanguage: 'EN' | 'PT';
     referralCode: string | null;
     referrerId: string | null;
-    role: 'CUSTOMER' | 'DRIVER';
+    role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER';
   };
   otp: {
     codeHash: string;
@@ -393,7 +393,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GooglePayloa
 
 export async function initiateSignup(
   input: InitiateSignupInput,
-  role: 'CUSTOMER' | 'DRIVER' = 'CUSTOMER',
+  role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER' = 'CUSTOMER',
 ): Promise<{
   signupSessionId: string;
   channel: 'EMAIL' | 'PHONE';
@@ -657,13 +657,20 @@ export async function verifySignupOtp(
         },
       });
 
-      // 3. Conditionally create CustomerProfile or DriverProfile based on role
+      // 3. Conditionally create CustomerProfile, DriverProfile, or FleetManagerProfile based on role
       if (session.payload.role === 'DRIVER') {
         await tx.driverProfile.create({
           data: {
             userId: user.id,
             kycStatus: 'NOT_SUBMITTED',
             isAvailable: false,
+          },
+        });
+      } else if (session.payload.role === 'FLEET_MANAGER') {
+        await tx.fleetManagerProfile.create({
+          data: {
+            userId: user.id,
+            verificationStatus: 'PENDING_VERIFICATION',
           },
         });
       } else {
@@ -708,7 +715,7 @@ export async function verifySignupOtp(
 export async function login(
   input: LoginInput,
   clientInfo: ClientInfo,
-  allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN')[],
+  allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
   const identifier = input.identifier.trim();
 

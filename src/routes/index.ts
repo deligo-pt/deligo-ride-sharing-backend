@@ -12,6 +12,7 @@ import supportRouter from '../modules/support/support.route';
 import safetyRouter from '../modules/safety/safety.route';
 import adminRouter from '../modules/admin/admin.route';
 import userRouter from '../modules/user/user.route';
+import fleetOnboardingRouter from '../modules/fleet/fleet-onboarding.route';
 
 interface ModuleRoute {
   path: string;
@@ -33,6 +34,7 @@ const moduleRoutes: ModuleRoute[] = [
   { path: '/safety', route: safetyRouter },
   { path: '/users', route: userRouter },
   { path: '/admin', route: adminRouter },
+  { path: '/fleet/onboarding', route: fleetOnboardingRouter },
 ];
 
 const router: Router = Router();

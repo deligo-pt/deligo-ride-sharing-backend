@@ -24,6 +24,7 @@ import {
 } from './auth.validation';
 import driverAuthRouter from './driver-auth.route';
 import adminAuthRouter from './admin-auth.route';
+import fleetAuthRouter from './fleet-auth.route';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auth Router
@@ -48,9 +49,11 @@ async function optionalAuthenticate(
   next();
 }
 
-// ── Driver & Admin Auth Sub-Routers ──────────────────────────────────────────
+// ── Driver, Admin & Fleet Auth Sub-Routers ────────────────────────────────────
 router.use('/driver', authRateLimiter, driverAuthRouter);
 router.use('/admin', authRateLimiter, adminAuthRouter);
+router.use('/fleet', authRateLimiter, fleetAuthRouter);
+router.use('/fleet-manager', authRateLimiter, fleetAuthRouter);
 
 // ── Registration Flow ────────────────────────────────────────────────────────
 router.post('/signup/initiate', authRateLimiter, validate({ body: InitiateSignupSchema }), initiateSignupHandler);
