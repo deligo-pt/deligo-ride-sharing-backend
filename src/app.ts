@@ -8,31 +8,9 @@ import { config } from './config';
 import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './utils/errors';
 
-// ─── Route Imports ────────────────────────────────────────────────────────────
-import driversRouter from './domains/drivers/drivers.routes';
-import kycRouter from './domains/kyc/kyc.routes';
-import notificationsRouter from './domains/notifications/notifications.routes';
-import profileRouter from './domains/profile/profile.routes';
-import promotionsRouter from './domains/promotions/promotions.routes';
-import reviewsRouter from './domains/reviews/reviews.routes';
-import ridesRouter from './domains/rides/rides.routes';
-import safetyRouter from './domains/safety/safety.routes';
-import supportRouter from './domains/support/support.routes';
-import vehicleRouter from './domains/vehicle/vehicle.routes';
-import adminRouter from './domains/admin/admin.routes';
-import authRouter from './domains/auth/auth.routes';
-
-// ── Inline micro-router for /api/v1/users ────────────────────────────────────
-// Keeps the users-related endpoints (e.g. FCM token) without needing a
-// full domain folder for a single route.
-import { Router } from 'express';
-import { authenticate } from './middlewares/auth';
-import { saveFcmTokenHandler } from './domains/notifications/notifications.controller';
+import apiRouter from './routes';
 import { sendResponse } from './utils/sendResponse';
 import { generalRateLimiter } from './middlewares/rateLimiter';
-const usersRouter = Router();
-/** PATCH /api/v1/users/fcm-token — save/replace FCM push token (any role) */
-usersRouter.patch('/fcm-token', authenticate, saveFcmTokenHandler);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Express Application Factory
@@ -93,20 +71,8 @@ export function createApp(): Application {
   // General per-IP rate limit for the whole API (health checks live outside this prefix)
   app.use(API_PREFIX, generalRateLimiter);
 
-  // ── Domain Routers ────────────────────────────────────────────────────────
-  app.use(`${API_PREFIX}/auth`, authRouter);
-  app.use(`${API_PREFIX}/rides`, ridesRouter);
-  app.use(`${API_PREFIX}/drivers`, driversRouter);
-  app.use(`${API_PREFIX}/vehicles`, vehicleRouter);
-  app.use(`${API_PREFIX}/profile`, profileRouter);
-  app.use(`${API_PREFIX}/kyc`, kycRouter);
-  app.use(`${API_PREFIX}/notifications`, notificationsRouter);
-  app.use(`${API_PREFIX}/promotions`, promotionsRouter);
-  app.use(`${API_PREFIX}/reviews`, reviewsRouter);
-  app.use(`${API_PREFIX}/support`, supportRouter);
-  app.use(`${API_PREFIX}/safety`, safetyRouter);
-  app.use(`${API_PREFIX}/users`, usersRouter);
-  app.use(`${API_PREFIX}/admin`, adminRouter);
+  // ── Domain Routers (registry: src/routes/index.ts) ────────────────────────
+  app.use(API_PREFIX, apiRouter);
 
   // API root — health / welcome
   app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
