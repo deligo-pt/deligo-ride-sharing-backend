@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { validate } from '../../middlewares/validate';
 import { authenticate } from '../../middlewares/auth';
+import { authRateLimiter } from '../../middlewares/rateLimiter';
 import {
   initiateSignupHandler,
   resendOtpHandler,
@@ -29,7 +30,7 @@ import adminAuthRouter from './admin/adminAuth.router';
 // Mounted at: /api/v1/auth (see app.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
 
 // Middleware that attaches user identity if Bearer token is provided,
 // but allows unauthenticated / expired requests to proceed to handler (e.g. for cookie-based logout).
@@ -48,19 +49,19 @@ async function optionalAuthenticate(
 }
 
 // ── Driver & Admin Auth Sub-Routers ──────────────────────────────────────────
-router.use('/driver', driverAuthRouter);
-router.use('/admin', adminAuthRouter);
+router.use('/driver', authRateLimiter, driverAuthRouter);
+router.use('/admin', authRateLimiter, adminAuthRouter);
 
 // ── Registration Flow ────────────────────────────────────────────────────────
-router.post('/signup/initiate', validate({ body: InitiateSignupSchema }), initiateSignupHandler);
-router.post('/signup/resend-otp', validate({ body: ResendOtpSchema }), resendOtpHandler);
-router.post('/signup/verify-otp', validate({ body: VerifyOtpSchema }), verifyOtpHandler);
+router.post('/signup/initiate', authRateLimiter, validate({ body: InitiateSignupSchema }), initiateSignupHandler);
+router.post('/signup/resend-otp', authRateLimiter, validate({ body: ResendOtpSchema }), resendOtpHandler);
+router.post('/signup/verify-otp', authRateLimiter, validate({ body: VerifyOtpSchema }), verifyOtpHandler);
 
 // ── Login, Token Refresh & Logout Flow ───────────────────────────────────────
-router.post('/login', validate({ body: LoginSchema }), loginHandler);
-router.post('/google', validate({ body: GoogleLoginSchema }), googleLoginHandler);
-router.post('/facebook', validate({ body: FacebookLoginSchema }), facebookLoginHandler);
-router.post('/apple', validate({ body: AppleLoginSchema }), appleLoginHandler);
+router.post('/login', authRateLimiter, validate({ body: LoginSchema }), loginHandler);
+router.post('/google', authRateLimiter, validate({ body: GoogleLoginSchema }), googleLoginHandler);
+router.post('/facebook', authRateLimiter, validate({ body: FacebookLoginSchema }), facebookLoginHandler);
+router.post('/apple', authRateLimiter, validate({ body: AppleLoginSchema }), appleLoginHandler);
 router.post('/refresh-token', refreshTokenHandler);
 router.post('/logout', optionalAuthenticate, logoutHandler);
 

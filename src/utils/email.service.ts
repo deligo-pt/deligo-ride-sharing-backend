@@ -18,7 +18,7 @@ import { config } from '../config';
 export interface SendEmailOptions<T = Record<string, unknown>> {
   to: string;
   subject: string;
-  template: 'otp-verification' | 'welcome' | string;
+  template: string; // e.g. 'otp-verification' | 'welcome'
   data: T;
 }
 

@@ -1,18 +1,19 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import { GetLedgerQuery } from './admin.finances.validation';
 
 export const getFinancialLedger = async (query: GetLedgerQuery) => {
   const { startDate, endDate } = query;
 
-  const where: any = {
+  const where: Prisma.RideWhereInput = {
     status: 'COMPLETED',
+    ...((startDate || endDate) && {
+      createdAt: {
+        ...(startDate && { gte: new Date(startDate) }),
+        ...(endDate && { lte: new Date(endDate) }),
+      },
+    }),
   };
-
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
 
   // 1. Calculate total revenue using Prisma aggregate
   const aggregation = await prisma.ride.aggregate({

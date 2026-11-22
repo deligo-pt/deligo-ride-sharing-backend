@@ -8,6 +8,25 @@ import { env } from './env';
 // transformations (like parsing comma-separated origins) once at boot.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const DEV_FALLBACK_ORIGINS = ['http://localhost:3000', 'http://localhost:5173'];
+
+/**
+ * Origins allowed by CORS (REST and Socket.IO).
+ *   1. CORS_ORIGIN (comma-separated), else legacy ALLOWED_ORIGINS
+ *   2. Otherwise: local dev origins in development/test, and NO browser origins
+ *      in production (fail closed — non-browser clients are unaffected).
+ */
+function resolveAllowedOrigins(): string[] {
+  const raw = env.CORS_ORIGIN ?? env.ALLOWED_ORIGINS ?? '';
+  const configured = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (configured.length > 0) return configured;
+  return env.NODE_ENV === 'production' ? [] : DEV_FALLBACK_ORIGINS;
+}
+
 export const config = {
   env: env.NODE_ENV,
   isProduction: env.NODE_ENV === 'production',
@@ -51,7 +70,7 @@ export const config = {
   },
 
   cors: {
-    allowedOrigins: env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()),
+    allowedOrigins: resolveAllowedOrigins(),
   },
 
   google: {

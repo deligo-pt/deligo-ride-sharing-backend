@@ -72,22 +72,22 @@ const softDeleteExtension = Prisma.defineExtension({
       // ── Inject isDeleted: false into read operations (soft-delete models only) ──
       async findUnique({ model, operation, args, query }) {
         void operation;
-        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args) as typeof args);
       },
 
       async findFirst({ model, operation, args, query }) {
         void operation;
-        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args));
       },
 
       async findMany({ model, operation, args, query }) {
         void operation;
-        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args));
       },
 
       async count({ model, operation, args, query }) {
         void operation;
-        return query(withNotDeleted(model, args as Record<string, unknown>) as typeof args);
+        return query(withNotDeleted(model, args));
       },
     },
   },
@@ -107,7 +107,6 @@ type ExtendedPrismaClient = ReturnType<typeof buildExtendedClient>;
 // ── Global singleton declaration ──────────────────────────────────────────────
 
 declare global {
-  // eslint-disable-next-line no-var
   var __prisma: ExtendedPrismaClient | undefined;
 }
 

@@ -53,7 +53,7 @@ export async function createReview(
     if (ride.driverProfile?.userId !== authorUserId) {
       throw new Error('RIDE_FORBIDDEN');
     }
-    revieweeUserId = ride.customerProfile!.userId;
+    revieweeUserId = ride.customerProfile.userId;
   } else {
     throw new Error('INVALID_ROLE');
   }

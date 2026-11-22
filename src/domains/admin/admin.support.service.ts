@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import { NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
@@ -42,10 +43,10 @@ export const updateSupportTicket = async (ticketId: string, adminId: string, pay
   }
 
   // If updating for the first time, automatically set adminId to claim the ticket
-  const dataToUpdate: any = { ...payload };
-  if (!ticket.adminId) {
-    dataToUpdate.adminId = adminId;
-  }
+  const dataToUpdate: Prisma.SupportTicketUncheckedUpdateInput = {
+    ...payload,
+    ...(!ticket.adminId && { adminId }),
+  };
 
   return prisma.supportTicket.update({
     where: { id: ticketId },
@@ -85,7 +86,7 @@ export const addTicketMessage = async (ticketId: string, adminId: string, payloa
   }
 
   // Dispatch notification to the user
-  NotificationEngine.dispatch({
+  void NotificationEngine.dispatch({
     userId: ticket.userId,
     type: 'SYSTEM',
     title: `New reply on Support Ticket #${ticketId.slice(0, 8)}`,

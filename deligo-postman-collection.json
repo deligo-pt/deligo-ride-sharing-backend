@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e1d2c3b4-5678-490a-bcde-deligo000001",
     "name": "DeliGo Ride-Sharing API",
-    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nThe platform supports dual authentication architecture:\n1. **JWT Bearer Authentication**: Send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, or `Bearer {{adminAccessToken}}` on protected endpoints.\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n2. **Mock Identity Headers** (for rapid development, integration testing, and backward compatibility):\n   - `x-mock-user-id`: UUID of Customer (`{{mockUserId}}`), Driver (`{{mockDriverId}}`), or Admin (`{{mockAdminId}}`)\n   - `x-mock-role`: `CUSTOMER`, `DRIVER`, or `ADMIN`\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken`, `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
+    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nAll protected endpoints (REST and Socket.IO) require a JWT: send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, or `Bearer {{adminAccessToken}}`. For Socket.IO pass the same token as `auth.token` in the handshake (or the `Authorization` header).\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n   - The legacy `x-mock-user-id` / `x-mock-role` headers are no longer supported.\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken`, `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -612,16 +612,6 @@
                     "key": "Authorization",
                     "value": "Bearer {{adminAccessToken}}",
                     "type": "text"
-                  },
-                  {
-                    "key": "x-mock-user-id",
-                    "value": "{{mockAdminId}}",
-                    "type": "text"
-                  },
-                  {
-                    "key": "x-mock-role",
-                    "value": "ADMIN",
-                    "type": "text"
                   }
                 ],
                 "body": {
@@ -979,16 +969,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "body": {
@@ -1053,16 +1033,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -1126,16 +1096,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -1207,16 +1167,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -1287,16 +1237,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -1360,16 +1300,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -1425,16 +1355,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -1489,16 +1409,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -1563,16 +1473,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "url": {
@@ -1636,16 +1536,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "body": {
@@ -1706,16 +1596,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -1789,16 +1669,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -1868,16 +1738,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "url": {
@@ -1932,16 +1792,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -2005,16 +1855,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -2139,16 +1979,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "body": {
@@ -2212,16 +2042,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "url": {
@@ -2276,16 +2096,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -2344,16 +2154,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -2420,16 +2220,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -2490,16 +2280,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -2619,16 +2399,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "url": {
@@ -2678,16 +2448,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
                 "type": "text"
               }
             ],
@@ -2799,16 +2559,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockDriverId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "DRIVER",
-                "type": "text"
               }
             ],
             "url": {
@@ -2864,16 +2614,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -2931,16 +2671,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -2996,16 +2726,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -3075,16 +2795,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -3145,16 +2855,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -3198,16 +2898,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -3337,16 +3027,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "body": {
@@ -3408,16 +3088,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -3485,16 +3155,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -3546,16 +3206,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -3614,16 +3264,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -3677,16 +3317,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -3730,16 +3360,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -3801,16 +3421,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -3864,16 +3474,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -3917,16 +3517,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -4007,16 +3597,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -4068,16 +3648,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],
@@ -4142,16 +3712,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4232,16 +3792,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -4297,16 +3847,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4379,16 +3919,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4467,16 +3997,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "body": {
@@ -4549,16 +4069,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4638,16 +4148,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "body": {
@@ -4720,16 +4220,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4805,16 +4295,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -4886,16 +4366,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -4970,16 +4440,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "body": {
@@ -5045,16 +4505,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -5109,16 +4559,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -5192,16 +4632,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -5268,16 +4698,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -5351,16 +4771,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -5429,16 +4839,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -5494,16 +4894,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
                 "type": "text"
               }
             ],
@@ -5576,16 +4966,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{adminAccessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockAdminId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "ADMIN",
-                "type": "text"
               }
             ],
             "url": {
@@ -5644,16 +5024,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "body": {
@@ -5707,16 +5077,6 @@
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
                 "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
-                "type": "text"
               }
             ],
             "url": {
@@ -5760,16 +5120,6 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-user-id",
-                "value": "{{mockUserId}}",
-                "type": "text"
-              },
-              {
-                "key": "x-mock-role",
-                "value": "CUSTOMER",
                 "type": "text"
               }
             ],

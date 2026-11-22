@@ -37,7 +37,9 @@ services:
       context: .
       target: dependencies
     container_name: deligo-migration
-    command: sh -c "npx prisma db push --accept-data-loss --url=\"postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public\" && npx prisma generate"
+    # Applies committed migrations only — never drops or rewrites data.
+    # The datasource URL comes from DATABASE_URL (see prisma.config.ts).
+    command: sh -c "npx prisma migrate deploy && npx prisma generate"
     volumes:
       - .:/app
       - /app/node_modules
@@ -70,7 +72,7 @@ services:
       CLOUDINARY_CLOUD_NAME: 'deligo-dev'
       CLOUDINARY_API_KEY: '123456789012345'
       CLOUDINARY_API_SECRET: 'mock_cloudinary_secret_key_12345'
-      ALLOWED_ORIGINS: 'http://localhost:3000,http://localhost:5173'
+      CORS_ORIGIN: 'http://localhost:3000,http://localhost:5173'
     depends_on:
       postgres:
         condition: service_healthy

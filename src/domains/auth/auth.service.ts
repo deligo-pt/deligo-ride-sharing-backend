@@ -7,6 +7,8 @@ import { config } from '../../config';
 import { redis } from '../../utils/redis';
 import { sendEmail } from '../../utils/email.service';
 import { sendBulkGateSms } from '../../utils/bulkgate';
+import { disconnectSessionSockets, disconnectUserSockets } from '../../sockets/socket.control';
+import { revokeSessionAccessTokens, revokeUserAccessTokens } from '../../utils/revocation';
 import { OAuth2Client } from 'google-auth-library';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import {
@@ -503,7 +505,7 @@ export async function resendSignupOtp(input: ResendOtpInput): Promise<{
     throw new NotFoundError('Signup session expired or not found. Please restart signup.');
   }
 
-  const session: SignupRedisSession = JSON.parse(rawData);
+  const session = JSON.parse(rawData) as SignupRedisSession;
   const targetChannel = input.channel || session.otp.channel;
 
   if (targetChannel === 'EMAIL' && !session.payload.email) {
@@ -587,7 +589,7 @@ export async function verifySignupOtp(
     throw new NotFoundError('Signup session expired or not found. Please restart signup.');
   }
 
-  const session: SignupRedisSession = JSON.parse(rawData);
+  const session = JSON.parse(rawData) as SignupRedisSession;
 
   // Check OTP expiration
   if (Date.now() > session.otp.expiresAt) {
@@ -746,7 +748,7 @@ export async function login(
   if (
     allowedRoles &&
     allowedRoles.length > 0 &&
-    !allowedRoles.includes(user.role as 'CUSTOMER' | 'DRIVER' | 'ADMIN')
+    !allowedRoles.includes(user.role)
   ) {
     throw new ForbiddenError('This account is not authorized to sign in to this app.');
   }
@@ -1232,10 +1234,7 @@ export async function refreshAccessToken(
   // Token reuse breach detection:
   // Because rotated tokens are retained as isRevoked: true, reusing any old token triggers full revocation
   if (session.isRevoked) {
-    await prisma.session.updateMany({
-      where: { userId: session.userId },
-      data: { isRevoked: true },
-    });
+    await revokeAllUserSessions(session.userId);
     throw new UnauthorizedError('Session revoked due to detected token reuse security violation');
   }
 
@@ -1326,6 +1325,28 @@ export async function refreshAccessToken(
   };
 }
 
+/**
+ * Revokes every login session of a user and force-disconnects their sockets.
+ * Use on password change, admin suspension / ban, or detected token theft.
+ */
+export async function revokeAllUserSessions(userId: string): Promise<void> {
+  await prisma.session.updateMany({
+    where: { userId, isRevoked: false },
+    data: { isRevoked: true },
+  });
+
+  // Make already-issued access tokens fail on the very next REST request.
+  // Best-effort: the DB revocation above already blocks refresh, so a Redis hiccup
+  // must not make an admin ban / password change fail half-way — but log it loudly.
+  try {
+    await revokeUserAccessTokens(userId);
+  } catch (err) {
+    console.error(`[AUTH] Failed to write revoked:user marker for ${userId}:`, err);
+  }
+
+  disconnectUserSockets(userId);
+}
+
 export async function logoutUser(options: {
   sessionId?: string;
   jti?: string;
@@ -1333,6 +1354,7 @@ export async function logoutUser(options: {
   refreshToken?: string;
 }): Promise<{ message: string }> {
   // 1. Revoke session in Postgres
+  let revokedSessionId = options.sessionId;
   if (options.sessionId) {
     await prisma.session.updateMany({
       where: { id: options.sessionId },
@@ -1340,13 +1362,28 @@ export async function logoutUser(options: {
     });
   } else if (options.refreshToken) {
     const tokenHash = hashSha256(options.refreshToken);
+    const session = await prisma.session.findUnique({
+      where: { tokenHash },
+      select: { id: true },
+    });
+    revokedSessionId = session?.id;
     await prisma.session.updateMany({
       where: { tokenHash },
       data: { isRevoked: true },
     });
   }
 
-  // 2. Blacklist Access Token jti in Redis until its natural expiry
+  // 2. Invalidate this session's access tokens immediately and close its live sockets
+  if (revokedSessionId) {
+    try {
+      await revokeSessionAccessTokens(revokedSessionId);
+    } catch (err) {
+      console.error(`[AUTH] Failed to write revoked:session marker for ${revokedSessionId}:`, err);
+    }
+    disconnectSessionSockets(revokedSessionId);
+  }
+
+  // 3. Blacklist Access Token jti in Redis until its natural expiry
   if (options.jti) {
     const nowSec = Math.floor(Date.now() / 1000);
     const remainingSec = options.exp ? Math.max(1, options.exp - nowSec) : 900;

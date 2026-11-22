@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodType, ZodError } from 'zod';
-import { errorResponse } from '../types/api.types';
+import { ZodType } from 'zod';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod Validation Middleware Factory
@@ -17,7 +16,7 @@ interface ValidationTargets {
 }
 
 export function validate(schemas: ValidationTargets) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
       if (schemas.body) {
         req.body = await schemas.body.parseAsync(req.body);
@@ -40,12 +39,7 @@ export function validate(schemas: ValidationTargets) {
       }
       next();
     } catch (err) {
-      if (err instanceof ZodError) {
-        res.status(422).json(
-          errorResponse('Validation failed', 'VALIDATION_ERROR', err.flatten().fieldErrors),
-        );
-        return;
-      }
+      // ZodError is mapped to a 422 by the global errorHandler.
       next(err);
     }
   };

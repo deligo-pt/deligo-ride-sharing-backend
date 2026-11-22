@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middlewares/mockAuth';
+import { authenticate } from '../../middlewares/auth';
 import {
   addEmergencyContactHandler,
   addTicketMessageHandler,
@@ -14,7 +14,7 @@ import {
 // Mounted at: /api/v1/support  (see app.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
 
 // ── Emergency Contacts ────────────────────────────────────────────────────────
 
@@ -23,14 +23,14 @@ const router = Router();
  * Add an emergency contact (max 3 per user).
  * Role: any authenticated user
  */
-router.post('/emergency-contacts', requireAuth, addEmergencyContactHandler);
+router.post('/emergency-contacts', authenticate, addEmergencyContactHandler);
 
 /**
  * GET /api/v1/support/emergency-contacts
  * List the authenticated user's emergency contacts.
  * Role: any authenticated user
  */
-router.get('/emergency-contacts', requireAuth, getEmergencyContactsHandler);
+router.get('/emergency-contacts', authenticate, getEmergencyContactsHandler);
 
 // ── SOS ───────────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ router.get('/emergency-contacts', requireAuth, getEmergencyContactsHandler);
  * and flips the linked ride to EMERGENCY status.
  * Role: any authenticated user
  */
-router.post('/sos', requireAuth, triggerSosHandler);
+router.post('/sos', authenticate, triggerSosHandler);
 
 // ── Ticketing System ──────────────────────────────────────────────────────────
 
@@ -49,14 +49,14 @@ router.post('/sos', requireAuth, triggerSosHandler);
  * Create a new support ticket.
  * Role: any authenticated user
  */
-router.post('/tickets', requireAuth, createTicketHandler);
+router.post('/tickets', authenticate, createTicketHandler);
 
 /**
  * GET /api/v1/support/tickets
  * Return all tickets created by the authenticated user.
  * Role: any authenticated user
  */
-router.get('/tickets', requireAuth, getMyTicketsHandler);
+router.get('/tickets', authenticate, getMyTicketsHandler);
 
 /**
  * POST /api/v1/support/tickets/:id/messages
@@ -64,6 +64,6 @@ router.get('/tickets', requireAuth, getMyTicketsHandler);
  * Role: ticket owner OR ADMIN
  * NOTE: /:id routes must come AFTER any specific named sub-paths.
  */
-router.post('/tickets/:id/messages', requireAuth, addTicketMessageHandler);
+router.post('/tickets/:id/messages', authenticate, addTicketMessageHandler);
 
 export default router;

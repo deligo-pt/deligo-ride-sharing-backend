@@ -7,6 +7,7 @@ import {
 } from '../../utils/errors';
 import { getActiveAlerts, resolveAlert, triggerSos } from './safety.service';
 import { ResolveAlertSchema, TriggerSosSchema } from './safety.validation';
+import { sendResponse } from '../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safety Controller  —  PRD 3.13 / 4.13
@@ -58,7 +59,12 @@ export async function triggerSosHandler(
 
     const result = await triggerSos(req.user!.id, role, parsed.data);
 
-    res.status(201).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'SOS alert triggered successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -95,7 +101,12 @@ export async function resolveAlertHandler(
 
     const updatedAlert = await resolveAlert(alertId, req.user!.id, parsed.data);
 
-    res.status(200).json({ success: true, data: { alert: updatedAlert } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Safety alert resolved successfully',
+      data: { alert: updatedAlert },
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -121,8 +132,10 @@ export async function getActiveAlertsHandler(
 
     const alerts = await getActiveAlerts();
 
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Active safety alerts retrieved successfully',
       data: { alerts, total: alerts.length },
     });
   } catch (err) {

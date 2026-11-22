@@ -9,7 +9,9 @@ import { Socket } from 'socket.io';
 
 export interface SocketUser {
   id: string;
-  role: string; // 'DRIVER' | 'CUSTOMER' | 'ADMIN' | 'GUEST'
+  role: string; // 'DRIVER' | 'CUSTOMER' | 'ADMIN'
+  email?: string;
+  sessionId: string;
 }
 
 /**

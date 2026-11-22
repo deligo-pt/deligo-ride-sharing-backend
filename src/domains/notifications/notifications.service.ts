@@ -1,4 +1,4 @@
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import type { Server as SocketIoServer } from 'socket.io';
 import admin from '../../utils/firebase';
 import prisma from '../../config/db';
@@ -68,7 +68,7 @@ async function persistInApp(
       body:    opts.message,
       type:    opts.type,
       // Prisma's InputJsonValue doesn't accept plain Record — cast via JSON
-      data:    opts.data ? JSON.parse(JSON.stringify(opts.data)) : undefined,
+      data:    opts.data ? (JSON.parse(JSON.stringify(opts.data)) as Prisma.InputJsonValue) : undefined,
       isRead:  false,
     },
   });
@@ -184,7 +184,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
   try {
     const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({ from: fromAddr, to, subject, html });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     console.info(`[EMAIL] ✅ Sent | id=${data?.id} | to=${to}`);
   } catch (err) {
     console.error(`[EMAIL] ❌ Failed to send to ${to}:`, err);

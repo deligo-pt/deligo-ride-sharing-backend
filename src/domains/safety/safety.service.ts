@@ -2,6 +2,7 @@ import prisma from '../../config/db';
 import { getIo } from '../notifications/notifications.service';
 import { sendSMS } from '../notifications/notifications.service';
 import type { TriggerSosDto, ResolveAlertDto } from './safety.validation';
+import { assertCanRaiseEmergency, escalateRideToEmergency } from '../rides/rides.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safety Service  —  PRD 3.13 / 4.13: Emergency SOS & Real-Time Safety Escalation
@@ -33,6 +34,12 @@ export async function triggerSos(userId: string, role: string, dto: TriggerSosDt
 
   if (!initiator) throw new Error('USER_NOT_FOUND');
 
+  // Ownership: only the ride's customer / assigned driver (or an admin) may flag it.
+  // Checked before any alert is created or anyone is notified.
+  const emergencyRide = dto.rideId
+    ? await assertCanRaiseEmergency({ id: userId, role }, dto.rideId)
+    : null;
+
   const initiatorName =
     `${initiator.firstName ?? ''} ${initiator.lastName ?? ''}`.trim() || 'Unknown User';
 
@@ -56,20 +63,8 @@ export async function triggerSos(userId: string, role: string, dto: TriggerSosDt
     },
   });
 
-  // 3. If rideId supplied → flip Ride to EMERGENCY
-  if (dto.rideId) {
-    const ride = await prisma.ride.findUnique({
-      where: { id: dto.rideId },
-      select: { id: true, status: true },
-    });
-
-    if (ride && ride.status !== 'COMPLETED' && ride.status !== 'CANCELLED') {
-      await prisma.ride.update({
-        where: { id: dto.rideId },
-        data: { status: 'EMERGENCY' },
-      });
-    }
-  }
+  // 3. If rideId supplied → flip Ride to EMERGENCY (state-machine + conditional write)
+  const rideStatusUpdated = emergencyRide ? await escalateRideToEmergency(emergencyRide) : false;
 
   // 4. WebSocket → broadcast to admin security desk room
   const io = getIo();
@@ -108,7 +103,7 @@ export async function triggerSos(userId: string, role: string, dto: TriggerSosDt
   return {
     alert,
     smsSentTo: initiator.emergencyContacts.length,
-    rideStatusUpdated: !!dto.rideId,
+    rideStatusUpdated,
   };
 }
 

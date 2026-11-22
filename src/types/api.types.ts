@@ -1,29 +1,33 @@
+import { TMeta } from '../utils/sendResponse';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Unified API error shape. Shares `{ success, statusCode, message }` with the
+// success envelope produced by `sendResponse`.
+//
+//   {
+//     success: false,
+//     statusCode: 422,
+//     message: 'Validation failed',
+//     code: 'VALIDATION_ERROR',                        // machine-readable code
+//     errorSources: [{ path: 'email', message: '…' }],  // field-level problems
+//     details: { … },                                   // extra structured info
+//     stack: '…'                                        // development only
+//   }
+// ─────────────────────────────────────────────────────────────────────────────
 
-export interface ApiSuccessResponse<T> {
-  success: true;
-  data: T;
-  meta?: PaginationMeta;
+export interface ErrorSource {
+  path: string;
+  message: string;
 }
 
 export interface ApiErrorResponse {
   success: false;
-  error: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
-
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
-
-export interface PaginationMeta {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
+  statusCode: number;
+  message: string;
+  code: string;
+  errorSources?: ErrorSource[];
+  details?: unknown;
+  stack?: string;
 }
 
 export interface PaginationQuery {
@@ -31,39 +35,35 @@ export interface PaginationQuery {
   limit?: number;
 }
 
-// Helper factory functions for building standard responses
-
-export function successResponse<T>(data: T, meta?: PaginationMeta): ApiSuccessResponse<T> {
-  return { success: true, data, ...(meta && { meta }) };
+export interface ErrorResponseOptions {
+  errorSources?: ErrorSource[];
+  details?: unknown;
+  stack?: string;
 }
 
 export function errorResponse(
+  statusCode: number,
   message: string,
   code: string,
-  details?: unknown,
+  options: ErrorResponseOptions = {},
 ): ApiErrorResponse {
+  const { errorSources, details, stack } = options;
   return {
     success: false,
-    error: {
-      code,
-      message,
-      ...(details !== undefined && { details }),
-    },
+    statusCode,
+    message,
+    code,
+    ...(errorSources !== undefined && { errorSources }),
+    ...(details !== undefined && { details }),
+    ...(stack !== undefined && { stack }),
   };
 }
 
-export function buildPaginationMeta(
-  total: number,
-  page: number,
-  limit: number,
-): PaginationMeta {
-  const totalPages = Math.ceil(total / limit);
+export function buildPaginationMeta(total: number, page: number, limit: number): TMeta {
   return {
     page,
     limit,
     total,
-    totalPages,
-    hasNextPage: page < totalPages,
-    hasPrevPage: page > 1,
+    totalPage: Math.ceil(total / limit),
   };
 }

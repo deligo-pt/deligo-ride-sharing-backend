@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
+import { env } from '../config/env';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ride Scheduling Queue
@@ -21,18 +22,29 @@ export interface ScheduledRideJobData {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BullMQ needs plain ConnectionOptions (host/port), not a shared ioredis
-// instance, because BullMQ bundles its own pinned version of ioredis.
+// BullMQ needs plain ConnectionOptions (host/port/auth/TLS), not a shared
+// ioredis instance, because BullMQ bundles its own pinned version of ioredis.
+// Built from REDIS_URL with the native URL parser, so usernames, passwords and
+// rediss:// (TLS) URLs from managed Redis providers work.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function parseBullMQConnection(): ConnectionOptions {
-  const raw = process.env.REDIS_URL ?? '127.0.0.1:6379';
-  // Support both 'host:port' and 'redis://host:port' formats
-  const stripped = raw.replace(/^redis:\/\//, '');
-  const [host, portStr] = stripped.split(':');
+export function parseBullMQConnection(redisUrl: string = env.REDIS_URL): ConnectionOptions {
+  // Tolerate a bare "host:port" (no scheme) so legacy configs keep working.
+  const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(redisUrl) ? redisUrl : `redis://${redisUrl}`;
+  const url = new URL(normalized);
+
+  const dbPath = url.pathname.replace(/^\//, '');
+  const db = dbPath ? parseInt(dbPath, 10) : undefined;
+
   return {
-    host: host || '127.0.0.1',
-    port: parseInt(portStr ?? '6379', 10),
+    host: url.hostname || '127.0.0.1',
+    port: url.port ? parseInt(url.port, 10) : 6379,
+    // WHATWG URL leaves userinfo percent-encoded — decode before use.
+    ...(url.username && { username: decodeURIComponent(url.username) }),
+    ...(url.password && { password: decodeURIComponent(url.password) }),
+    ...(db !== undefined && !Number.isNaN(db) && { db }),
+    // rediss:// → TLS (managed Redis: Upstash, ElastiCache in-transit encryption, …)
+    ...(url.protocol === 'rediss:' && { tls: { servername: url.hostname } }),
   };
 }
 

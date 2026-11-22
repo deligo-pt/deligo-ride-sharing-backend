@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middlewares/mockAuth';
+import { authenticate } from '../../middlewares/auth';
 import * as promotionsController from './promotions.controller';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7,14 +7,14 @@ import * as promotionsController from './promotions.controller';
 // Mounted at: /api/v1/promotions  (see app.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * POST /api/v1/promotions
  * Create a new promo code.
  * Role: ADMIN
  */
-router.post('/', requireAuth, promotionsController.createPromoCodeHandler);
+router.post('/', authenticate, promotionsController.createPromoCodeHandler);
 
 /**
  * POST /api/v1/promotions/validate
@@ -22,6 +22,6 @@ router.post('/', requireAuth, promotionsController.createPromoCodeHandler);
  * Role: CUSTOMER
  * Note: Must be declared before any future /:id routes to avoid param shadowing.
  */
-router.post('/validate', requireAuth, promotionsController.validatePromoCodeHandler);
+router.post('/validate', authenticate, promotionsController.validatePromoCodeHandler);
 
 export default router;

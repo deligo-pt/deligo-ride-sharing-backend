@@ -89,10 +89,10 @@ async function runTests() {
       }),
     });
     const wrongOtpJson = (await wrongOtpRes.json()) as any;
-    if (wrongOtpRes.status !== 400 || wrongOtpJson.error.code !== 'BAD_REQUEST') {
+    if (wrongOtpRes.status !== 400 || wrongOtpJson.code !== 'BAD_REQUEST') {
       throw new Error(`Expected 400 for wrong OTP, got: ${wrongOtpRes.status}`);
     }
-    console.log(`  ✅ Wrong OTP rejected: ${wrongOtpJson.error.message}, remaining: ${wrongOtpJson.error.details?.remainingAttempts}`);
+    console.log(`  ✅ Wrong OTP rejected: ${wrongOtpJson.message}, remaining: ${wrongOtpJson.details?.remainingAttempts}`);
 
     // ── Test 4: POST /signup/verify-otp (Valid OTP) ───────────────────────────
     console.log('\n▶ Test 4: POST /signup/verify-otp with valid OTP');
@@ -252,7 +252,7 @@ async function runTests() {
       },
     });
     const blacklistJson = (await testBlacklistRes.json()) as any;
-    if (testBlacklistRes.status !== 401 || !blacklistJson.error.message.includes('revoked')) {
+    if (testBlacklistRes.status !== 401 || !blacklistJson.message.includes('revoked')) {
       throw new Error(`Expected 401 revoked token, got: ${JSON.stringify(blacklistJson)}`);
     }
     console.log('  ✅ Blacklisted Access Token rejected by auth middleware (Token has been revoked)');

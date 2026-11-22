@@ -19,6 +19,7 @@ import {
   CreateTicketSchema,
   SosSchema,
 } from './support.validation';
+import { sendResponse } from '../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Support Controller  —  PRD 3.x
@@ -64,7 +65,12 @@ export async function addEmergencyContactHandler(
       throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
     }
     const contact = await addEmergencyContact(req.user!.id, parsed.data);
-    res.status(201).json({ success: true, data: { contact } });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Emergency contact added successfully',
+      data: { contact },
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -84,7 +90,12 @@ export async function getEmergencyContactsHandler(
 ): Promise<void> {
   try {
     const contacts = await getEmergencyContacts(req.user!.id);
-    res.status(200).json({ success: true, data: { contacts, total: contacts.length } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Emergency contacts retrieved successfully',
+      data: { contacts, total: contacts.length },
+    });
   } catch (err) {
     next(err);
   }
@@ -111,8 +122,13 @@ export async function triggerSosHandler(
     if (!parsed.success) {
       throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
     }
-    const result = await triggerSos(req.user!.id, parsed.data);
-    res.status(200).json({ success: true, data: result });
+    const result = await triggerSos(req.user!.id, req.user!.role, parsed.data);
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'SOS alert triggered successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -136,7 +152,12 @@ export async function createTicketHandler(
       throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
     }
     const ticket = await createTicket(req.user!.id, parsed.data);
-    res.status(201).json({ success: true, data: { ticket } });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Support ticket created successfully',
+      data: { ticket },
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -156,7 +177,12 @@ export async function getMyTicketsHandler(
 ): Promise<void> {
   try {
     const tickets = await getMyTickets(req.user!.id);
-    res.status(200).json({ success: true, data: { tickets, total: tickets.length } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Support tickets retrieved successfully',
+      data: { tickets, total: tickets.length },
+    });
   } catch (err) {
     next(err);
   }
@@ -198,7 +224,12 @@ export async function addTicketMessageHandler(
       parsed.data,
     );
 
-    res.status(201).json({ success: true, data: { message: savedMessage } });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Ticket message sent successfully',
+      data: { message: savedMessage },
+    });
   } catch (err) {
     next(mapError(err));
   }

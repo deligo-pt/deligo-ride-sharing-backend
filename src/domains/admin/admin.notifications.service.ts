@@ -16,7 +16,7 @@ export const broadcastNotification = async (payload: BroadcastNotificationInput)
   let sentCount = 0;
 
   for (const user of users) {
-    NotificationEngine.dispatch({
+    void NotificationEngine.dispatch({
       userId: user.id,
       type: 'SYSTEM',
       title: payload.title,

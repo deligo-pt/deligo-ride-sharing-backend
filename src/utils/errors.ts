@@ -1,3 +1,5 @@
+import { ZodError } from 'zod';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom Application Error Hierarchy
 //
@@ -35,8 +37,8 @@ export class AppError extends Error {
 
 // ─── 400 Bad Request ─────────────────────────────────────────────────────────
 export class BadRequestError extends AppError {
-  constructor(message = 'Bad Request', details?: unknown) {
-    super(message, 400, 'BAD_REQUEST', details);
+  constructor(message = 'Bad Request', details?: unknown, code = 'BAD_REQUEST') {
+    super(message, 400, code, details);
   }
 }
 
@@ -56,8 +58,10 @@ export class ForbiddenError extends AppError {
 
 // ─── 404 Not Found ───────────────────────────────────────────────────────────
 export class NotFoundError extends AppError {
-  constructor(resource = 'Resource') {
-    super(`${resource} not found`, 404, 'NOT_FOUND');
+  // `options.message` replaces the default "<resource> not found" text, and
+  // `options.code` lets a domain use a more specific machine-readable code.
+  constructor(resource = 'Resource', options: { message?: string; code?: string } = {}) {
+    super(options.message ?? `${resource} not found`, 404, options.code ?? 'NOT_FOUND');
   }
 }
 
@@ -84,7 +88,45 @@ export class RateLimitError extends AppError {
 
 // ─── 500 Internal Server Error ───────────────────────────────────────────────
 export class InternalError extends AppError {
-  constructor(message = 'An unexpected error occurred') {
-    super(message, 500, 'INTERNAL_SERVER_ERROR', undefined, false);
+  constructor(message = 'An unexpected error occurred', code = 'INTERNAL_SERVER_ERROR') {
+    super(message, 500, code, undefined, false);
+  }
+}
+
+// ─── Controller helper ───────────────────────────────────────────────────────
+// For handlers that call services which throw plain `Error`s. Converts whatever
+// was caught into an AppError so it can be forwarded with `next(...)` to the
+// global error handler:
+//   - an AppError is returned untouched
+//   - a ZodError becomes a 400 BadRequestError (VALIDATION_ERROR)
+//   - anything else becomes the AppError subclass for `failure.statusCode`,
+//     keeping the original error message when it has one.
+
+export interface ControllerFailure {
+  statusCode: 400 | 404 | 500;
+  code: string;
+  message: string;
+}
+
+export function toAppError(error: unknown, failure: ControllerFailure): AppError {
+  if (error instanceof AppError) return error;
+
+  if (error instanceof ZodError) {
+    return new BadRequestError(
+      error.issues[0]?.message ?? 'Validation failed',
+      error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+      'VALIDATION_ERROR',
+    );
+  }
+
+  const message = (error as { message?: string } | null)?.message ?? failure.message;
+
+  switch (failure.statusCode) {
+    case 404:
+      return new NotFoundError('Resource', { message, code: failure.code });
+    case 500:
+      return new InternalError(message, failure.code);
+    default:
+      return new BadRequestError(message, undefined, failure.code);
   }
 }

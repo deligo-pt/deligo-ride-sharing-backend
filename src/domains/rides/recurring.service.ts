@@ -2,7 +2,6 @@ import prisma from '../../config/db';
 import { addScheduledRideJob } from '../../queues/ride.queue';
 import { getMultiStopRouteData } from '../../utils/map.service';
 import { PricingEngine } from './pricing.service';
-import type { VehicleType } from '@prisma/client';
 import { z } from 'zod';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,7 +82,7 @@ export async function createRecurringProfile(
   return prisma.recurringRideProfile.create({
     data: {
       userId,
-      vehicleType:   dto.vehicleType as VehicleType,
+      vehicleType:   dto.vehicleType,
       pickupAddress: dto.pickupAddress,
       pickupLat:     dto.pickupLat,
       pickupLng:     dto.pickupLng,

@@ -19,13 +19,15 @@ export interface JwtPayload {
 // ─────────────────────────────────────────────────────────────────────────────
 export interface AuthenticatedUser {
   id: string;
-  email?: string; // optional — not available in mock auth context
-  role: string; // string (not enum) so mock headers work without enum casting
+  email?: string;
+  role: string; // string (not enum): requireRole() may widen it to 'SUPER_ADMIN'
   sessionId?: string;
   jti?: string;
 }
 
 declare global {
+  // Augmenting Express.Request requires a namespace declaration.
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: AuthenticatedUser;

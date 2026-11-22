@@ -9,6 +9,7 @@ import {
   hashSha256,
   sanitizeUser,
   generateUniqueReferralCode,
+  revokeAllUserSessions,
   SanitizedUser,
 } from '../auth.service';
 import { CreateAdminInput, SetAdminPasswordInput } from './adminAuth.validation';
@@ -211,6 +212,9 @@ export async function setAdminPassword(
 
   // 5. Immediately delete Redis key to prevent token reuse
   await redis.del(redisKey);
+
+  // 6. Password changed → invalidate every existing session and live socket
+  await revokeAllUserSessions(user.id);
 
   return { message: 'Password set successfully. You can now log in.' };
 }

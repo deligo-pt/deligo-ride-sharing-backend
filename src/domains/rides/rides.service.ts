@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, RideStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import prisma from '../../config/db';
 import { LocationService, redis } from '../../utils/redis';
@@ -14,6 +14,7 @@ import type {
   CancelRideDto,
 } from './rides.validation';
 import { generateAndSendReceipt } from './receipt.service';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service Functions
@@ -137,7 +138,8 @@ export async function requestRide(userId: string, dto: RequestRideDto): Promise<
 
   const estimateCache = await redis.get(estimateKey);
 
-  if (dto.estimatedFare !== JSON.parse(estimateCache ?? 'null')?.[0]?.subtotal) {
+  const cachedEstimates = JSON.parse(estimateCache ?? 'null') as { subtotal?: number }[] | null;
+  if (dto.estimatedFare !== cachedEstimates?.[0]?.subtotal) {
     throw new Error('ESTIMATED_FARE_MISMATCH');
   }
 
@@ -223,42 +225,106 @@ export async function requestRide(userId: string, dto: RequestRideDto): Promise<
 // Phase 3: Driver Acceptance
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ride State Machine
+//
+// The only legal status transitions. Every mutation below goes through
+// assertRideTransition() AND a conditional write (`updateMany` whose WHERE
+// pins the status we validated), so a concurrent request can never push a ride
+// through an illegal or duplicated transition.
+//
+//   SCHEDULED ─▶ REQUESTED ─▶ ACCEPTED ─▶ DRIVER_ARRIVED ─▶ IN_PROGRESS ─▶ COMPLETED
+//        │            │           │              │               │
+//        └────────────┴───────────┴──────────────┴───────────────┴──▶ CANCELLED
+//                                 └──────────────┴───────────────┴──▶ EMERGENCY ─▶ COMPLETED | CANCELLED
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RIDE_TRANSITIONS: Record<RideStatus, readonly RideStatus[]> = {
+  SCHEDULED: ['REQUESTED', 'CANCELLED'],
+  REQUESTED: ['ACCEPTED', 'CANCELLED'],
+  ACCEPTED: ['DRIVER_ARRIVED', 'CANCELLED', 'EMERGENCY'],
+  DRIVER_ARRIVED: ['IN_PROGRESS', 'CANCELLED', 'EMERGENCY'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED', 'EMERGENCY'],
+  EMERGENCY: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+
+export function canTransitionRide(from: RideStatus, to: RideStatus): boolean {
+  return RIDE_TRANSITIONS[from].includes(to);
+}
+
+export function assertRideTransition(from: RideStatus, to: RideStatus): void {
+  if (!canTransitionRide(from, to)) {
+    throw new BadRequestError(`Invalid ride status transition: ${from} → ${to}.`);
+  }
+}
+
+/** Thrown when a conditional write loses a race with another request. */
+const rideStateConflict = () =>
+  new ConflictError('The ride was modified by another request. Please refresh and try again.');
+
 /**
  * Atomically accept a ride and mark the driver as unavailable.
  *
- * Uses a Prisma interactive transaction so both writes succeed or both fail —
- * preventing a ghost acceptance where the ride is claimed but the driver
- * stays available (or vice-versa).
+ * Eligibility: the driver must have an APPROVED KYC status, a non-deleted
+ * profile and an ACTIVE (not suspended / deactivated) user account — otherwise a
+ * ForbiddenError is thrown. The same conditions are repeated inside the
+ * driver-lock UPDATE, so a suspension that lands mid-request is still honoured.
+ *
+ * Concurrency: the ride is claimed with a single conditional UPDATE
+ * (`WHERE id = ? AND status = 'REQUESTED' AND driverProfileId IS NULL`). Postgres
+ * row-locks the target, so when two drivers race only one UPDATE matches a row —
+ * the loser sees count = 0 and the whole transaction (including the driver lock)
+ * rolls back. The driver is claimed the same way (`isAvailable = true` in the
+ * WHERE), so one driver cannot accept two rides at once either.
  */
 export async function acceptRide(driverUserId: string, rideId: string) {
-  // 1. Verify ride exists and is still REQUESTED
-  const ride = await prisma.ride.findUnique({
-    where: { id: rideId },
-    select: { id: true, status: true },
-  });
+  return prisma.$transaction(async (tx) => {
+    // 1. Resolve the driver profile + eligibility (404 vs 403 vs "busy" decided here)
+    const driverProfile = await tx.driverProfile.findUnique({
+      where: { userId: driverUserId },
+      select: {
+        id: true,
+        kycStatus: true,
+        isDeleted: true,
+        user: { select: { status: true } },
+      },
+    });
 
-  if (!ride) {
-    throw new Error('RIDE_NOT_FOUND');
-  }
+    if (!driverProfile) {
+      throw new Error('DRIVER_PROFILE_NOT_FOUND');
+    }
 
-  if (ride.status !== 'REQUESTED') {
-    throw new Error('RIDE_NOT_AVAILABLE');
-  }
+    if (
+      driverProfile.isDeleted ||
+      driverProfile.kycStatus !== 'APPROVED' ||
+      driverProfile.user.status !== 'ACTIVE'
+    ) {
+      throw new ForbiddenError(
+        'Your driver account is not approved to accept rides. Complete KYC verification or contact support.',
+      );
+    }
 
-  // 2. Resolve driver profile
-  const driverProfile = await prisma.driverProfile.findUnique({
-    where: { userId: driverUserId, isAvailable: true },
-    select: { id: true },
-  });
+    // 2. Lock the driver (eligibility re-checked atomically)
+    const driverLock = await tx.driverProfile.updateMany({
+      where: {
+        id: driverProfile.id,
+        isAvailable: true,
+        isDeleted: false,
+        kycStatus: 'APPROVED',
+        user: { status: 'ACTIVE' },
+      },
+      data: { isAvailable: false },
+    });
 
-  if (!driverProfile) {
-    throw new Error('DRIVER_NOT_AVAILABLE');
-  }
+    if (driverLock.count === 0) {
+      throw new Error('DRIVER_NOT_AVAILABLE');
+    }
 
-  // 3. Atomic transaction: claim ride + lock driver
-  const updatedRide = await prisma.$transaction(async (tx) => {
-    const update = await tx.ride.updateMany({
-      where: { id: rideId },
+    // 3. Claim the ride
+    const claim = await tx.ride.updateMany({
+      where: { id: rideId, status: 'REQUESTED', driverProfileId: null, isDeleted: false },
       data: {
         status: 'ACCEPTED',
         driverProfileId: driverProfile.id,
@@ -266,19 +332,14 @@ export async function acceptRide(driverUserId: string, rideId: string) {
       },
     });
 
-    if (update.count === 0) {
-      throw new Error('RIDE_NOT_AVAILABLE');
+    if (claim.count === 0) {
+      // Throwing rolls back the driver lock above.
+      const exists = await tx.ride.findUnique({ where: { id: rideId }, select: { id: true } });
+      throw new Error(exists ? 'RIDE_NOT_AVAILABLE' : 'RIDE_NOT_FOUND');
     }
-
-    await tx.driverProfile.update({
-      where: { id: driverProfile.id },
-      data: { isAvailable: false },
-    });
 
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
-
-  return updatedRide;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,9 +359,11 @@ const STATUS_TIMESTAMP_MAP = {
  * Advance the ride through its lifecycle.
  *
  * - Verifies the requesting driver is the one assigned to the ride.
- * - Sets the appropriate timestamp for the new status.
+ * - Validates the transition against the state machine.
+ * - Writes with a conditional UPDATE pinned to the status that was validated, so
+ *   a concurrent cancel / duplicate request cannot slip through (→ 409).
  * - On COMPLETED: puts the driver back on the map and increments totalRides
- *   for both the driver and the customer.
+ *   for both the driver and the customer — in the same transaction, exactly once.
  */
 export async function updateRideStatus(
   driverUserId: string,
@@ -313,11 +376,11 @@ export async function updateRideStatus(
     include: { customerProfile: { select: { id: true } } },
   });
 
-  if (!ride || ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
+  if (!ride || ride.isDeleted) {
     throw new Error('RIDE_NOT_FOUND');
   }
 
-  // 2. Resolve driver profile and verify ownership
+  // 2. Resolve driver profile and verify ownership (before revealing any state)
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId: driverUserId },
     select: { id: true },
@@ -327,26 +390,35 @@ export async function updateRideStatus(
     throw new Error('RIDE_FORBIDDEN');
   }
 
-  // 3. Build the timestamp field to set
+  // 3. State machine check
+  assertRideTransition(ride.status, dto.status);
+
+  // 4. Build the timestamp field to set
   const timestampField = STATUS_TIMESTAMP_MAP[dto.status];
 
-  // 4. Base ride update payload
-  const rideUpdateData: Parameters<typeof prisma.ride.update>[0]['data'] = {
+  // 5. Base ride update payload
+  const rideUpdateData: Prisma.RideUpdateManyMutationInput = {
     status: dto.status,
     [timestampField]: new Date(),
     ...(dto.finalDistanceKm !== undefined && { distanceKm: dto.finalDistanceKm }),
     ...(dto.finalDurationMinutes !== undefined && { durationMinutes: dto.finalDurationMinutes }),
   };
 
+  // Optimistic lock: only apply if the ride is still in the state we validated
+  // and still belongs to this driver.
+  const guard = { id: rideId, status: ride.status, driverProfileId: driverProfile.id };
+
   if (dto.status !== 'COMPLETED') {
-    // Simple status advance — single update
-    return {
-      ride: await prisma.ride.update({ where: { id: rideId }, data: rideUpdateData }),
-      fareBreakdown: null,
-    };
+    // Simple status advance — single conditional update
+    const updatedRide = await prisma.$transaction(async (tx) => {
+      const result = await tx.ride.updateMany({ where: guard, data: rideUpdateData });
+      if (result.count === 0) throw rideStateConflict();
+      return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
+    });
+    return { ride: updatedRide, fareBreakdown: null };
   }
 
-  // 5. COMPLETED: calculate final fare via PricingEngine
+  // 6. COMPLETED: calculate final fare via PricingEngine
   const actualDistKm = dto.actualDistanceKm ?? dto.finalDistanceKm ?? 1;
   const actualDurMin = dto.actualDurationMinutes ?? dto.finalDurationMinutes ?? 10;
 
@@ -360,23 +432,28 @@ export async function updateRideStatus(
     },
   );
 
-  // 6. Persist final fare into rideUpdateData
+  // 7. Persist final fare into rideUpdateData
   rideUpdateData.finalFare = fareBreakdown.grandTotal;
   rideUpdateData.distanceKm = fareBreakdown.distanceKm;
   rideUpdateData.durationMinutes = fareBreakdown.estimatedDurationMinutes;
 
-  // 7. Transaction: finalise ride + release driver + increment totalRides
-  const [updatedRide] = await prisma.$transaction([
-    prisma.ride.update({ where: { id: rideId }, data: rideUpdateData }),
-    prisma.driverProfile.update({
+  // 8. Transaction: finalise ride + release driver + increment totalRides.
+  //    The conditional update guarantees the counters are bumped at most once.
+  const updatedRide = await prisma.$transaction(async (tx) => {
+    const result = await tx.ride.updateMany({ where: guard, data: rideUpdateData });
+    if (result.count === 0) throw rideStateConflict();
+
+    await tx.driverProfile.update({
       where: { id: driverProfile.id },
       data: { isAvailable: true, totalRides: { increment: 1 } },
-    }),
-    prisma.customerProfile.update({
+    });
+    await tx.customerProfile.update({
       where: { id: ride.customerProfile.id },
       data: { totalRides: { increment: 1 } },
-    }),
-  ]);
+    });
+
+    return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
+  });
 
   // Fire-and-forget: send receipt email + SMS — does NOT block the API response
   void generateAndSendReceipt(rideId);
@@ -390,7 +467,10 @@ export async function updateRideStatus(
 /**
  * Cancel a ride (by either the customer or an assigned driver).
  *
- * If a driver was already assigned, they are released back to the pool.
+ * Only the ride's own customer or its assigned driver may cancel. The status
+ * change and the driver release happen in one transaction, guarded by a
+ * conditional UPDATE so a ride that was completed/cancelled/re-assigned in the
+ * meantime is never overwritten (→ 409).
  */
 export async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
   // 1. Fetch the ride with just enough data for the teardown
@@ -400,15 +480,17 @@ export async function cancelRide(userId: string, rideId: string, dto: CancelRide
       id: true,
       status: true,
       driverProfileId: true,
+      isDeleted: true,
       customerProfile: { select: { userId: true } },
       driverProfile: { select: { userId: true } },
     },
   });
 
-  if (!ride) {
+  if (!ride || ride.isDeleted) {
     throw new Error('RIDE_NOT_FOUND');
   }
 
+  // Actor ownership: only this ride's customer or assigned driver
   if (ride.customerProfile.userId !== userId && ride.driverProfile?.userId !== userId) {
     throw new Error('RIDE_FORBIDDEN');
   }
@@ -418,30 +500,86 @@ export async function cancelRide(userId: string, rideId: string, dto: CancelRide
     throw new Error('RIDE_ALREADY_TERMINAL');
   }
 
-  // 2. Ride update is always required — build a typed PrismaPromise array
-  const updates: Prisma.PrismaPromise<unknown>[] = [
-    prisma.ride.update({
-      where: { id: rideId },
+  assertRideTransition(ride.status, 'CANCELLED');
+
+  return prisma.$transaction(async (tx) => {
+    // Pin both the status and the assigned driver we validated above.
+    const result = await tx.ride.updateMany({
+      where: { id: rideId, status: ride.status, driverProfileId: ride.driverProfileId },
       data: {
         status: 'CANCELLED',
         cancelledAt: new Date(),
         cancellationReason: dto.reason,
       },
-    }),
-  ];
+    });
 
-  // 3. Release the driver back to the pool only if one was assigned
-  if (ride.driverProfileId) {
-    updates.push(
-      prisma.driverProfile.update({
+    if (result.count === 0) throw rideStateConflict();
+
+    // Release the driver back to the pool only if one was assigned
+    if (ride.driverProfileId) {
+      await tx.driverProfile.update({
         where: { id: ride.driverProfileId },
         data: { isAvailable: true },
-      }),
-    );
+      });
+    }
+
+    return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Emergency escalation (shared by the SOS flows in support + safety)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Confirms the requester may raise an emergency on this ride: they must be its
+ * customer, its assigned driver, or an ADMIN. Call this BEFORE creating alerts
+ * or notifying anyone, so a request for someone else's ride has no side effects.
+ */
+export async function assertCanRaiseEmergency(
+  requester: { id: string; role: string },
+  rideId: string,
+): Promise<{ id: string; status: RideStatus }> {
+  const ride = await prisma.ride.findFirst({
+    where: { id: rideId, isDeleted: false },
+    select: {
+      id: true,
+      status: true,
+      customerProfile: { select: { userId: true } },
+      driverProfile: { select: { userId: true } },
+    },
+  });
+
+  if (!ride) {
+    throw new NotFoundError('Ride');
   }
 
-  const results = await prisma.$transaction(updates);
-  return results[0];
+  const isParticipant =
+    ride.customerProfile.userId === requester.id || ride.driverProfile?.userId === requester.id;
+
+  if (!isParticipant && requester.role !== 'ADMIN') {
+    throw new ForbiddenError('You can only raise an emergency on your own ride.');
+  }
+
+  return { id: ride.id, status: ride.status };
+}
+
+/**
+ * Flips a ride to EMERGENCY if the state machine allows it from the status that
+ * was read. Conditional write — a ride that changed state in the meantime is
+ * left alone. Returns whether the ride was actually updated.
+ */
+export async function escalateRideToEmergency(ride: {
+  id: string;
+  status: RideStatus;
+}): Promise<boolean> {
+  if (!canTransitionRide(ride.status, 'EMERGENCY')) return false;
+
+  const result = await prisma.ride.updateMany({
+    where: { id: ride.id, status: ride.status },
+    data: { status: 'EMERGENCY' },
+  });
+  return result.count > 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/erro
 import { getInbox, markAllAsRead, markAsRead, saveFcmToken } from './notifications.service';
 import { ListNotificationsSchema, SaveFcmTokenSchema } from './notifications.validation';
 import { sendBulkGateSms } from '../../utils/bulkgate';
+import { sendResponse } from '../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notifications Controller  — PRD 3.12
@@ -37,7 +38,12 @@ export async function listNotifications(
     }
 
     const result = await getInbox(req.user!.id, parsed.data);
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Notifications retrieved successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -58,7 +64,12 @@ export async function readNotification(
       (req.user!.id = 'c46ca1ad-c7b0-4f5e-85a9-9d5807ae5e39'),
       notificationId,
     );
-    res.status(200).json({ success: true, data: { notification } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Notification marked as read',
+      data: { notification },
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -75,7 +86,12 @@ export async function readAllNotifications(
 ): Promise<void> {
   try {
     const result = await markAllAsRead(req.user!.id);
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'All notifications marked as read',
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
@@ -99,7 +115,12 @@ export async function saveFcmTokenHandler(
     }
 
     const result = await saveFcmToken(req.user!.id, parsed.data.fcmToken);
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'FCM token saved successfully',
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
@@ -115,7 +136,7 @@ export async function testSmsHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { phone, message } = req.body;
+    const { phone, message } = req.body as { phone?: string; message?: string };
     if (!phone || !message) {
       throw new BadRequestError('phone and message are required');
     }
@@ -123,8 +144,10 @@ export async function testSmsHandler(
     // Call our new utility
     await sendBulkGateSms(phone, message);
 
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'SMS dispatched successfully',
       data: { message: `SMS request dispatched to ${phone}` },
     });
   } catch (err) {

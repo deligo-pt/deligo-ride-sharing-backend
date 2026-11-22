@@ -29,14 +29,14 @@ interface BulkGatePayload {
 
 /** Partial shape of a successful BulkGate API response */
 interface BulkGateSuccessResponse {
-  status: 'accepted' | string;
+  status: string; // 'accepted' on success
   sms_id?: string;
   part_id?: string;
 }
 
 /** Partial shape of a BulkGate API error response */
 interface BulkGateErrorResponse {
-  status: 'error' | string;
+  status: string; // 'error' on failure
   error?: string;
   message?: string;
 }

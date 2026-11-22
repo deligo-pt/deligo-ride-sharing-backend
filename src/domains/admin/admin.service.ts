@@ -2,6 +2,7 @@ import prisma from '../../config/db';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin.validation';
 import { buildPaginationMeta } from '../../types/api.types';
+import { revokeAllUserSessions } from '../auth/auth.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Service  —  PRD 5.x
@@ -211,7 +212,7 @@ export const updateUserStatus = async (userId: string, payload: UpdateUserStatus
     throw new BadRequestError(`User is already ${payload.status}.`);
   }
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: { status: payload.status },
     select: {
@@ -221,4 +222,11 @@ export const updateUserStatus = async (userId: string, payload: UpdateUserStatus
       status: true,
     },
   });
+
+  // Suspension / deactivation: kill refresh sessions and live sockets immediately.
+  if (payload.status !== 'ACTIVE') {
+    await revokeAllUserSessions(userId);
+  }
+
+  return updated;
 };

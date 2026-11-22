@@ -87,6 +87,8 @@ model Ride {
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
+  @@index([status, scheduledAt])
+  @@index([status, createdAt])
   @@map("rides")
 }
 

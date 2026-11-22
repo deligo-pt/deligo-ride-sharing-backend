@@ -4,6 +4,7 @@ import { LoginSchema } from '../auth.validation';
 import { getClientInfo, setRefreshTokenCookie } from '../auth.utils';
 import { createAdmin, setAdminPassword } from './adminAuth.service';
 import { CreateAdminSchema, SetAdminPasswordSchema } from './adminAuth.validation';
+import { sendResponse } from '../../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Auth Controller
@@ -30,8 +31,10 @@ export async function adminLoginHandler(
     const cookieDays = validatedData.rememberMe ? 30 : 1;
     setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
 
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Admin login successful',
       data: result,
     });
   } catch (err) {
@@ -53,8 +56,10 @@ export async function createAdminHandler(
     const creator = { id: req.user!.id, role: req.user!.role };
     const result = await createAdmin(validatedData, creator);
 
-    res.status(201).json({
+    sendResponse(res, {
+      statusCode: 201,
       success: true,
+      message: 'Admin invitation sent successfully',
       data: result,
     });
   } catch (err) {
@@ -75,8 +80,10 @@ export async function setAdminPasswordHandler(
     const validatedData = SetAdminPasswordSchema.parse(req.body);
     const result = await setAdminPassword(validatedData);
 
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Admin password set successfully',
       data: result,
     });
   } catch (err) {

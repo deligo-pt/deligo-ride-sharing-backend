@@ -23,7 +23,10 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN_DEFAULT: z.string().default('1d'),
   JWT_REFRESH_EXPIRES_IN_REMEMBER: z.string().default('30d'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().min(10).max(14).default(12),
-  ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
+  // Comma-separated list of browser origins allowed by CORS (REST + Socket.IO).
+  // CORS_ORIGIN is preferred; ALLOWED_ORIGINS is kept as a legacy fallback.
+  CORS_ORIGIN: z.string().optional(),
+  ALLOWED_ORIGINS: z.string().optional(),
   // OTP & Signup Session
   OTP_EXPIRES_IN_SECONDS: z.coerce.number().default(300),
   SIGNUP_SESSION_TTL_SECONDS: z.coerce.number().default(900),

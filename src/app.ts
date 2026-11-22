@@ -4,6 +4,7 @@ import cooikieParser from 'cookie-parser';
 import express, { Application, NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { env } from './config/env';
+import { config } from './config';
 import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './utils/errors';
 
@@ -25,11 +26,13 @@ import authRouter from './domains/auth/auth.routes';
 // Keeps the users-related endpoints (e.g. FCM token) without needing a
 // full domain folder for a single route.
 import { Router } from 'express';
-import { requireAuth } from './middlewares/mockAuth';
+import { authenticate } from './middlewares/auth';
 import { saveFcmTokenHandler } from './domains/notifications/notifications.controller';
+import { sendResponse } from './utils/sendResponse';
+import { generalRateLimiter } from './middlewares/rateLimiter';
 const usersRouter = Router();
 /** PATCH /api/v1/users/fcm-token — save/replace FCM push token (any role) */
-usersRouter.patch('/fcm-token', requireAuth, saveFcmTokenHandler);
+usersRouter.patch('/fcm-token', authenticate, saveFcmTokenHandler);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Express Application Factory
@@ -42,7 +45,7 @@ export function createApp(): Application {
   app.use(cooikieParser());
   app.use(helmet());
   // ── CORS ──────────────────────────────────────────────────────────────────
-  const allowedOrigins = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+  const allowedOrigins = config.cors.allowedOrigins;
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -54,7 +57,7 @@ export function createApp(): Application {
         }
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-mock-user-id', 'x-mock-role'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
       credentials: true,
     }),
   );
@@ -71,8 +74,10 @@ export function createApp(): Application {
 
   // ── Health Check ──────────────────────────────────────────────────────────
   app.get('/health', (_req: Request, res: Response) => {
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Service is healthy',
       data: {
         status: 'ok',
         environment: env.NODE_ENV,
@@ -84,6 +89,9 @@ export function createApp(): Application {
 
   // ── API Routes ────────────────────────────────────────────────────────────
   const API_PREFIX = '/api/v1';
+
+  // General per-IP rate limit for the whole API (health checks live outside this prefix)
+  app.use(API_PREFIX, generalRateLimiter);
 
   // ── Domain Routers ────────────────────────────────────────────────────────
   app.use(`${API_PREFIX}/auth`, authRouter);
@@ -102,8 +110,10 @@ export function createApp(): Application {
 
   // API root — health / welcome
   app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Ride-Sharing API v1 is running',
       data: { message: 'Ride-Sharing API v1 is running 🚀' },
     });
   });

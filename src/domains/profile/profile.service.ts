@@ -1,6 +1,19 @@
 import prisma from "../../config/db";
 import { UpdateCustomerProfileInput, UpdateDriverProfileInput } from "./profile.validation";
 
+type ProfileData = Record<string, unknown>;
+
+interface UserWithProfiles {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    role: string;
+    customerProfile?: ProfileData | null;
+    driverProfile?: ProfileData | null;
+}
+
 // ─── GET PROFILE ────────────────────────────────────────────────────────────
 
 export const getMyProfile = async (userId: string, userRole: string) => {
@@ -39,7 +52,8 @@ export const getMyProfile = async (userId: string, userRole: string) => {
         throw new Error("User not found.");
     }
 
-    const { customerProfile, driverProfile, ...userBase } = user as any;
+    // The select above only includes the profile relation matching the caller's role.
+    const { customerProfile, driverProfile, ...userBase } = user as unknown as UserWithProfiles;
 
     return {
         ...userBase,
@@ -54,7 +68,8 @@ export const updateMyProfile = async (
     userRole: string,
     payload: UpdateCustomerProfileInput | UpdateDriverProfileInput
 ) => {
-    const { firstName, lastName, phone, ...profileFields } = payload as any;
+    const { firstName, lastName, phone, ...profileFields } = payload as UpdateCustomerProfileInput &
+        UpdateDriverProfileInput;
 
     // Update base User fields if provided
     const userUpdateData: Record<string, string> = {};

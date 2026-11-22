@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middlewares/mockAuth';
+import { authenticate, authorize } from '../../middlewares/auth';
 import { validate } from '../../middlewares/validate';
 import {
   getPendingKycHandler,
@@ -77,12 +77,13 @@ import {
 // Admin Router  —  PRD 5.x
 // Mounted at: /api/v1/admin  (see app.ts)
 //
-// All routes require:
-//   x-mock-user-id  —  UUID of an existing admin user
-//   x-mock-role     —  must be "ADMIN"
+// All routes require a valid Bearer JWT with role ADMIN (enforced via router.use below).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
+
+// Every admin endpoint requires a valid JWT belonging to an ADMIN user.
+router.use(authenticate, authorize('ADMIN'));
 
 // ── KYC Review ───────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ const router = Router();
  * Returns all DriverProfiles whose kycStatus is UNDER_REVIEW or PENDING_DOCS,
  * including full user info and the submitted document URLs for review.
  */
-router.get('/kyc/pending', requireAuth, getPendingKycHandler);
+router.get('/kyc/pending', getPendingKycHandler);
 
 /**
  * PATCH /api/v1/admin/kyc/:driverProfileId
@@ -110,7 +111,6 @@ router.get('/kyc/pending', requireAuth, getPendingKycHandler);
  */
 router.patch(
   '/kyc/:driverProfileId',
-  requireAuth,
   validate({
     params: DriverProfileIdParamSchema,
     body: ReviewKycSchema,
@@ -134,7 +134,6 @@ router.patch(
  */
 router.get(
   '/users',
-  requireAuth,
   validate({ query: ListUsersQuerySchema }),
   listUsersHandler,
 );
@@ -147,7 +146,6 @@ router.get(
  */
 router.patch(
   '/users/:userId/status',
-  requireAuth,
   validate({
     params: UserIdParamSchema,
     body: UpdateUserStatusSchema,
@@ -159,14 +157,12 @@ router.patch(
 
 router.get(
   '/support/tickets',
-  requireAuth,
   validate({ query: ListTicketsQuerySchema }),
   getTicketsHandler,
 );
 
 router.patch(
   '/support/tickets/:id',
-  requireAuth,
   validate({
     params: TicketIdParamSchema,
     body: UpdateTicketSchema,
@@ -176,7 +172,6 @@ router.patch(
 
 router.post(
   '/support/tickets/:id/messages',
-  requireAuth,
   validate({
     params: TicketIdParamSchema,
     body: AddTicketMessageSchema,
@@ -188,14 +183,12 @@ router.post(
 
 router.get(
   '/rides',
-  requireAuth,
   validate({ query: ListRidesQuerySchema }),
   getRidesHandler,
 );
 
 router.patch(
   '/rides/:id/cancel',
-  requireAuth,
   validate({
     params: RideIdParamSchema,
     body: CancelRideSchema,
@@ -207,7 +200,6 @@ router.patch(
 
 router.post(
   '/notifications/broadcast',
-  requireAuth,
   validate({ body: BroadcastNotificationSchema }),
   broadcastNotificationHandler,
 );
@@ -216,13 +208,11 @@ router.post(
 
 router.get(
   '/pricing',
-  requireAuth,
   getPricingRulesHandler,
 );
 
 router.patch(
   '/pricing/:vehicleType',
-  requireAuth,
   validate({
     params: VehicleTypeParamSchema,
     body: UpdatePricingRuleSchema,
@@ -232,14 +222,12 @@ router.patch(
 
 router.get(
   '/promotions',
-  requireAuth,
   validate({ query: ListPromotionsQuerySchema }),
   getPromotionsHandler,
 );
 
 router.patch(
   '/promotions/:id',
-  requireAuth,
   validate({
     params: PromoIdParamSchema,
     body: DeactivatePromotionSchema,
@@ -249,7 +237,6 @@ router.patch(
 
 router.get(
   '/finances/ledger',
-  requireAuth,
   validate({ query: GetLedgerQuerySchema }),
   getLedgerHandler,
 );
@@ -258,20 +245,17 @@ router.get(
 
 router.get(
   '/analytics/dashboard',
-  requireAuth,
   getDashboardHandler,
 );
 
 router.get(
   '/analytics/trends',
-  requireAuth,
   validate({ query: GetTrendsQuerySchema }),
   getTrendsHandler,
 );
 
 router.get(
   '/analytics/export',
-  requireAuth,
   validate({ query: ExportReportQuerySchema }),
   exportReportHandler,
 );

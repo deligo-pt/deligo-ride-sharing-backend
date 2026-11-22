@@ -1,29 +1,41 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { getMyProfile, updateMyProfile } from "./profile.service";
 import { updateCustomerProfileSchema, updateDriverProfileSchema } from "./profile.validation";
+import { sendResponse } from "../../utils/sendResponse";
+import { toAppError } from "../../utils/errors";
 
-export const handleGetMyProfile = async (req: Request, res: Response): Promise<void> => {
+export const handleGetMyProfile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+): Promise<void> => {
     try {
         const { id, role } = req.user!;
 
         const profile = await getMyProfile(id, role);
 
-        res.status(200).json({
+        sendResponse(res, {
+            statusCode: 200,
             success: true,
+            message: 'Profile retrieved successfully',
             data: profile,
         });
-    } catch (error: any) {
-        res.status(404).json({
-            success: false,
-            error: {
+    } catch (error: unknown) {
+        next(
+            toAppError(error, {
+                statusCode: 404,
                 code: "PROFILE_NOT_FOUND",
-                message: error.message || "Failed to retrieve profile",
-            },
-        });
+                message: "Failed to retrieve profile",
+            }),
+        );
     }
 };
 
-export const handleUpdateMyProfile = async (req: Request, res: Response): Promise<void> => {
+export const handleUpdateMyProfile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+): Promise<void> => {
     try {
         const { id, role } = req.user!;
 
@@ -32,35 +44,26 @@ export const handleUpdateMyProfile = async (req: Request, res: Response): Promis
             ? updateDriverProfileSchema
             : updateCustomerProfileSchema;
 
-        const validatedData = schema.parse({ body: req.body }).body;
+        const validatedData = schema.parse({ body: req.body as unknown }).body;
 
         await updateMyProfile(id, role, validatedData);
 
         // Re-fetch updated profile to return fresh data
         const updatedProfile = await getMyProfile(id, role);
 
-        res.status(200).json({
+        sendResponse(res, {
+            statusCode: 200,
             success: true,
+            message: 'Profile updated successfully',
             data: updatedProfile,
         });
-    } catch (error: any) {
-        if (error.name === "ZodError") {
-            res.status(400).json({
-                success: false,
-                error: {
-                    code: "VALIDATION_ERROR",
-                    message: error.errors[0]?.message || "Validation failed",
-                },
-            });
-            return;
-        }
-
-        res.status(400).json({
-            success: false,
-            error: {
+    } catch (error: unknown) {
+        next(
+            toAppError(error, {
+                statusCode: 400,
                 code: "PROFILE_UPDATE_FAILED",
-                message: error.message || "Failed to update profile",
-            },
-        });
+                message: "Failed to update profile",
+            }),
+        );
     }
 };

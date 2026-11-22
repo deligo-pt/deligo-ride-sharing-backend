@@ -49,10 +49,10 @@ async function bootstrap(): Promise<void> {
   });
 
   // ── 3. Graceful Shutdown ───────────────────────────────────────────────────
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = (signal: string): void => {
     console.info(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
-    server.close(async () => {
+    const cleanup = async (): Promise<void> => {
       console.info('   HTTP server closed');
       try {
         if (activeWorker) {
@@ -66,6 +66,10 @@ async function bootstrap(): Promise<void> {
       }
       console.info('✅ Shutdown complete');
       process.exit(0);
+    };
+
+    server.close(() => {
+      void cleanup();
     });
 
     // Force shutdown after 10 seconds if graceful shutdown stalls
@@ -75,18 +79,18 @@ async function bootstrap(): Promise<void> {
     }, 10_000);
   };
 
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
-  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
   // ── 4. Unhandled rejection / exception handlers ────────────────────────────
   process.on('unhandledRejection', (reason: unknown) => {
     console.error('💥 Unhandled Promise Rejection:', reason);
-    void shutdown('unhandledRejection');
+    shutdown('unhandledRejection');
   });
 
   process.on('uncaughtException', (err: Error) => {
     console.error('💥 Uncaught Exception:', err);
-    void shutdown('uncaughtException');
+    shutdown('uncaughtException');
   });
 }
 

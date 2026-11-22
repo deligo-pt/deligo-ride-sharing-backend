@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { initiateSignup, login } from '../auth.service';
 import { InitiateSignupSchema, LoginSchema } from '../auth.validation';
 import { getClientInfo, setRefreshTokenCookie } from '../auth.utils';
+import { sendResponse } from '../../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Driver Auth Controller
@@ -23,8 +24,10 @@ export async function driverInitiateSignupHandler(
     const validatedData = InitiateSignupSchema.parse(req.body);
     const result = await initiateSignup(validatedData, 'DRIVER');
 
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Driver signup initiated. Verification code sent',
       data: result,
     });
   } catch (err) {
@@ -50,8 +53,10 @@ export async function driverLoginHandler(
     const cookieDays = validatedData.rememberMe ? 30 : 1;
     setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
 
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Driver login successful',
       data: result,
     });
   } catch (err) {

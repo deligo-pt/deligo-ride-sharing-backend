@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middlewares/mockAuth';
+import { authenticate } from '../../middlewares/auth';
 import { kycUpload } from '../../middlewares/uploadMiddleware';
 import {
   getMyDashboardHandler,
@@ -13,7 +13,7 @@ import { REQUIRED_KYC_DOCUMENTS } from './drivers.validation';
 // Mounted at: /api/v1/drivers  (see app.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * GET /api/v1/drivers/me
@@ -25,7 +25,7 @@ const router = Router();
  * IMPORTANT: This route must be declared BEFORE any /:id routes to prevent
  * "me" being matched as an ID parameter.
  */
-router.get('/me', requireAuth, getMyDashboardHandler);
+router.get('/me', authenticate, getMyDashboardHandler);
 
 /**
  * GET /api/v1/drivers/me/history
@@ -34,7 +34,7 @@ router.get('/me', requireAuth, getMyDashboardHandler);
  * Paginated trip history (COMPLETED + CANCELLED) for the authenticated driver.
  * Query params: ?page=1&limit=10
  */
-router.get('/me/history', requireAuth, getTripHistoryHandler);
+router.get('/me/history', authenticate, getTripHistoryHandler);
 
 /**
  * POST /api/v1/drivers/documents
@@ -50,7 +50,7 @@ router.get('/me/history', requireAuth, getTripHistoryHandler);
  */
 router.post(
   '/documents',
-  requireAuth,
+  authenticate,
   kycUpload.fields(REQUIRED_KYC_DOCUMENTS.map((doc) => ({ name: doc.type, maxCount: 1 }))),
   uploadDocumentsHandler,
 );

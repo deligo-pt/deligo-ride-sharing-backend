@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { handleGetMyProfile, handleUpdateMyProfile } from "./profile.controller";
-import { requireAuth } from "../../middlewares/mockAuth";
+import { authenticate } from "../../middlewares/auth";
 
-const router = Router();
+const router: Router = Router();
 
 // GET /api/v1/profile/me — fetch own profile (role-aware)
-router.get("/me", requireAuth, handleGetMyProfile);
+router.get("/me", authenticate, handleGetMyProfile);
 
 // PATCH /api/v1/profile/me — update own profile (role-aware)
-router.patch("/me", requireAuth, handleUpdateMyProfile);
+router.patch("/me", authenticate, handleUpdateMyProfile);
 
 export default router;

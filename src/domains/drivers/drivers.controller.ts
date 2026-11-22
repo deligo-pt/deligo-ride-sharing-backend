@@ -12,8 +12,8 @@ import {
   REQUIRED_DOCUMENT_TYPES,
   REQUIRED_KYC_DOCUMENTS,
   TripHistoryQuerySchema,
-  type DocumentType,
 } from './drivers.validation';
+import { sendResponse } from '../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drivers Controller  —  PRD 2.2
@@ -113,7 +113,7 @@ export async function uploadDocumentsHandler(
         const expiryKey = `${doc.type}_expiryDate` as keyof typeof expiryDates;
 
         return {
-          documentType: doc.type as DocumentType,
+          documentType: doc.type,
           documentUrl: cloudinaryResult.secureUrl,
           expiryDate: expiryDates[expiryKey],
         };
@@ -123,8 +123,10 @@ export async function uploadDocumentsHandler(
     // ── Upsert DriverDocument + mark user as PENDING_VERIFICATION ─────────────
     const savedDocument = await uploadDriverDocuments(req.user!.id, uploadResults);
 
-    res.status(201).json({
+    sendResponse(res, {
+      statusCode: 201,
       success: true,
+      message: 'KYC documents uploaded successfully',
       data: {
         message: 'All 7 KYC documents uploaded successfully. Your application is now under review.',
         document: savedDocument,
@@ -155,7 +157,12 @@ export async function getMyDashboardHandler(
 
     const profile = await getDriverDashboard(req.user!.id);
 
-    res.status(200).json({ success: true, data: { profile } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Driver dashboard retrieved successfully',
+      data: { profile },
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -187,7 +194,12 @@ export async function getTripHistoryHandler(
 
     const result = await getDriverTripHistory(req.user!.id, parsed.data);
 
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Trip history retrieved successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapError(err));
   }

@@ -109,8 +109,8 @@ Install dependencies and align your local database with the Prisma schema:
 # Install Node modules
 npm install
 
-# Push schema changes to PostgreSQL
-npx prisma db push
+# Apply committed migrations to PostgreSQL (use `npx prisma migrate dev` to create a new one)
+npx prisma migrate deploy
 
 # Generate the Prisma Client types
 npx prisma generate
@@ -140,5 +140,5 @@ When contributing to this repository, please adhere to the following guidelines:
 
 - **Strict Type Safety:** The use of `any` is strictly prohibited. Define explicit TypeScript interfaces or infer them dynamically using Prisma and Zod.
 - **Graceful Error Handling:** Controllers must wrap execution in `try/catch` blocks. Unhandled exceptions should be passed to `next(error)` to be caught and formatted by the global error handler.
-- **Database Migrations:** Any modification to `prisma/schema.prisma` must be immediately followed by `npx prisma db push` and `npx prisma generate` to ensure type definitions remain synchronized.
+- **Database Migrations:** Any modification to the Prisma schema (`prisma/schema/*.prisma`) must ship with a migration (`npx prisma migrate dev`), followed by `npx prisma generate`. Never use `prisma db push --accept-data-loss` against shared or production databases to ensure type definitions remain synchronized.
 - **Service Isolation:** Controllers should never interact with the database directly. All Prisma logic must be abstracted into the respective Domain Service.

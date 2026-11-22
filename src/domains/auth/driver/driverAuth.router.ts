@@ -17,7 +17,7 @@ import {
 //   - POST /api/v1/auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
 
 router.post(
   '/signup/initiate',

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { createReview, getMyReviews } from './reviews.service';
 import { CreateReviewSchema } from './reviews.validation';
+import { sendResponse } from '../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reviews Controller
@@ -46,7 +47,12 @@ export async function submitReview(req: Request, res: Response, next: NextFuncti
 
     const review = await createReview(req.user!.id, req.user!.role, parsed.data);
 
-    res.status(201).json({ success: true, data: { review } });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Review submitted successfully',
+      data: { review },
+    });
   } catch (err) {
     next(mapError(err));
   }
@@ -66,8 +72,10 @@ export async function getReviewsAboutMe(
 ): Promise<void> {
   try {
     const reviews = await getMyReviews(req.user!.id);
-    res.status(200).json({
+    sendResponse(res, {
+      statusCode: 200,
       success: true,
+      message: 'Reviews retrieved successfully',
       data: { reviews, total: reviews.length },
     });
   } catch (err) {

@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { successResponse } from '../../types/api.types';
+import { sendResponse } from '../../utils/sendResponse';
 import {
   getPendingKycProfiles,
   reviewDriverKyc,
@@ -28,12 +28,12 @@ export const getPendingKycHandler = async (
   try {
     assertAdmin(req);
     const profiles = await getPendingKycProfiles();
-    res.status(200).json(
-      successResponse({
-        count: profiles.length,
-        profiles,
-      }),
-    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Pending KYC profiles retrieved successfully',
+      data: { count: profiles.length, profiles },
+    });
   } catch (err) {
     next(err);
   }
@@ -49,8 +49,16 @@ export const reviewKycHandler = async (
   try {
     assertAdmin(req);
     const driverProfileId = req.params.driverProfileId as string;
-    const result = await reviewDriverKyc(driverProfileId, req.body);
-    res.status(200).json(successResponse(result));
+    const result = await reviewDriverKyc(
+      driverProfileId,
+      req.body as Parameters<typeof reviewDriverKyc>[1],
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Driver KYC reviewed successfully',
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
@@ -66,7 +74,13 @@ export const listUsersHandler = async (
   try {
     assertAdmin(req);
     const { users, meta } = await listUsers(req.query as never);
-    res.status(200).json(successResponse({ users }, meta));
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Users retrieved successfully',
+      meta,
+      data: { users },
+    });
   } catch (err) {
     next(err);
   }
@@ -82,8 +96,13 @@ export const updateUserStatusHandler = async (
   try {
     assertAdmin(req);
     const userId = req.params.userId as string;
-    const updated = await updateUserStatus(userId, req.body);
-    res.status(200).json(successResponse(updated));
+    const updated = await updateUserStatus(userId, req.body as Parameters<typeof updateUserStatus>[1]);
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'User status updated successfully',
+      data: updated,
+    });
   } catch (err) {
     next(err);
   }

@@ -9,6 +9,7 @@ import {
   CreatePromoCodeSchema,
   ValidatePromoCodeSchema,
 } from './promotions.validation';
+import { sendResponse } from '../../utils/sendResponse';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Promotions Controller
@@ -62,7 +63,12 @@ export async function createPromoCodeHandler(
 
     const promoCode = await createPromoCode(parsed.data);
 
-    res.status(201).json({ success: true, data: { promoCode } });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Promo code created successfully',
+      data: { promoCode },
+    });
   } catch (err) {
     next(err);
   }
@@ -96,7 +102,12 @@ export async function validatePromoCodeHandler(
 
     const result = await validatePromoCode(req.user!.id, parsed.data);
 
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Promo code validated successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapError(err));
   }

@@ -6,6 +6,7 @@ import type {
   CreateTicketDto,
   SosDto,
 } from './support.validation';
+import { assertCanRaiseEmergency, escalateRideToEmergency } from '../rides/rides.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Support Service  —: Customer Support & Safety
@@ -64,7 +65,7 @@ export async function getEmergencyContacts(userId: string) {
  *
  * In production, step 3 integrates with Twilio SMS.
  */
-export async function triggerSos(userId: string, dto: SosDto) {
+export async function triggerSos(userId: string, role: string, dto: SosDto) {
   // 1. Fetch the user's basic info + emergency contacts
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -78,6 +79,12 @@ export async function triggerSos(userId: string, dto: SosDto) {
   });
 
   if (!user) throw new Error('USER_NOT_FOUND');
+
+  // Ownership: only the ride's customer / assigned driver (or an admin) may flag it.
+  // Checked before admins are notified, so a bogus rideId has no side effects.
+  const emergencyRide = dto.rideId
+    ? await assertCanRaiseEmergency({ id: userId, role }, dto.rideId)
+    : null;
 
   const userName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || 'A user';
   const locationText =
@@ -120,25 +127,12 @@ export async function triggerSos(userId: string, dto: SosDto) {
   });
 
   // 4. Flip the Ride status to EMERGENCY if a rideId was provided
-  let updatedRide = null;
-  if (dto.rideId) {
-    const ride = await prisma.ride.findUnique({
-      where: { id: dto.rideId },
-      select: { id: true, status: true },
-    });
-
-    if (ride && ride.status !== 'COMPLETED' && ride.status !== 'CANCELLED') {
-      updatedRide = await prisma.ride.update({
-        where: { id: dto.rideId },
-        data:  { status: 'EMERGENCY' },
-      });
-    }
-  }
+  const rideStatusUpdated = emergencyRide ? await escalateRideToEmergency(emergencyRide) : false;
 
   return {
     notifiedAdmins:     admins.length,
     emergencyContacts:  user.emergencyContacts.length,
-    rideStatusUpdated:  !!updatedRide,
+    rideStatusUpdated,
     rideId:             dto.rideId ?? null,
   };
 }

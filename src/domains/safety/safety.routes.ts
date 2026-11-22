@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middlewares/mockAuth';
+import { authenticate } from '../../middlewares/auth';
 import {
   getActiveAlertsHandler,
   resolveAlertHandler,
@@ -11,7 +11,7 @@ import {
 // Mounted at: /api/v1/safety  (see app.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const router = Router();
+const router: Router = Router();
 
 // ── IMPORTANT: specific named routes must be declared BEFORE /:id routes ─────
 
@@ -20,20 +20,20 @@ const router = Router();
  * Returns all currently ACTIVE emergency alerts.
  * Role: ADMIN
  */
-router.get('/sos/active', requireAuth, getActiveAlertsHandler);
+router.get('/sos/active', authenticate, getActiveAlertsHandler);
 
 /**
  * POST /api/v1/safety/sos
  * Triggers an SOS alert from a customer or driver.
  * Role: CUSTOMER | DRIVER
  */
-router.post('/sos', requireAuth, triggerSosHandler);
+router.post('/sos', authenticate, triggerSosHandler);
 
 /**
  * PATCH /api/v1/safety/sos/:id/resolve
  * Admin resolves or dismisses an active emergency alert.
  * Role: ADMIN
  */
-router.patch('/sos/:id/resolve', requireAuth, resolveAlertHandler);
+router.patch('/sos/:id/resolve', authenticate, resolveAlertHandler);
 
 export default router;

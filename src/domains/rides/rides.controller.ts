@@ -35,7 +35,12 @@ export async function updateLocation(
 
     await ridesService.updateDriverLocation(req.user!.id, parsed.data);
 
-    res.status(200).json({ success: true, data: { message: 'Location updated successfully.' } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Location updated successfully',
+      data: { message: 'Location updated successfully.' },
+    });
   } catch (err) {
     next(err);
   }
@@ -60,7 +65,12 @@ export async function searchRide(req: Request, res: Response, next: NextFunction
 
     const drivers = await ridesService.findNearbyDrivers(parsed.data);
 
-    res.status(200).json({ success: true, data: drivers });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Nearby drivers retrieved successfully',
+      data: drivers,
+    });
   } catch (err) {
     next(err);
   }
@@ -86,7 +96,12 @@ export async function estimateFare(req: Request, res: Response, next: NextFuncti
 
     const estimates = await ridesService.estimateFare(req.user!.id, parsed.data);
 
-    res.status(200).json({ success: true, data: estimates });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Fare estimates retrieved successfully',
+      data: estimates,
+    });
   } catch (err) {
     next(err);
   }
@@ -115,8 +130,10 @@ export async function requestRide(req: Request, res: Response, next: NextFunctio
 
     if (result.scheduled) {
       // Scheduled ride: BullMQ job enqueued, no immediate driver dispatch.
-      res.status(201).json({
+      sendResponse(res, {
+        statusCode: 201,
         success: true,
+        message: 'Ride scheduled successfully',
         data: {
           ride: result.ride,
           scheduled: true,
@@ -126,8 +143,10 @@ export async function requestRide(req: Request, res: Response, next: NextFunctio
       });
     } else {
       // On-demand ride: driver search already triggered.
-      res.status(201).json({
+      sendResponse(res, {
+        statusCode: 201,
         success: true,
+        message: 'Ride requested successfully',
         data: {
           ride: result.ride,
           scheduled: false,
@@ -156,6 +175,8 @@ function mapRideError(err: unknown): Error {
         return new NotFoundError('DriverProfile for this user. Complete driver onboarding first.');
       case 'RIDE_FORBIDDEN':
         return new ForbiddenError('You are not the assigned driver for this ride.');
+      case 'DRIVER_NOT_AVAILABLE':
+        return new BadRequestError('You are not available to accept rides.');
       case 'RIDE_ALREADY_TERMINAL':
         return new BadRequestError('Ride is already completed or cancelled.');
     }
@@ -178,7 +199,12 @@ export async function acceptRide(req: Request, res: Response, next: NextFunction
     const rideId = String(req.params.id);
     const ride = await ridesService.acceptRide(req.user!.id, rideId);
 
-    res.status(200).json({ success: true, data: { ride } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Ride accepted successfully',
+      data: { ride },
+    });
   } catch (err) {
     next(mapRideError(err));
   }
@@ -209,7 +235,12 @@ export async function updateRideStatus(
     const rideId = String(req.params.id);
     const result = await ridesService.updateRideStatus(req.user!.id, rideId, parsed.data);
 
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Ride status updated successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapRideError(err));
   }
@@ -236,7 +267,12 @@ export async function cancelRide(req: Request, res: Response, next: NextFunction
     const rideId = String(req.params.id);
     const ride = await ridesService.cancelRide(req.user!.id, rideId, parsed.data);
 
-    res.status(200).json({ success: true, data: { ride } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Ride cancelled successfully',
+      data: { ride },
+    });
   } catch (err) {
     next(mapRideError(err));
   }
@@ -259,7 +295,12 @@ export async function shareRide(req: Request, res: Response, next: NextFunction)
     const rideId = String(req.params.id);
     const result = await ridesService.shareRide(req.user!.id, rideId);
 
-    res.status(201).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Ride shared successfully',
+      data: result,
+    });
   } catch (err) {
     next(mapRideError(err));
   }
@@ -271,6 +312,7 @@ export async function shareRide(req: Request, res: Response, next: NextFunction)
 
 import * as recurringService from './recurring.service';
 import { ValidationError } from '../../utils/errors';
+import { sendResponse } from '../../utils/sendResponse';
 
 function mapRecurringError(err: unknown): Error {
   if (err instanceof Error) {
@@ -312,7 +354,12 @@ export async function createRecurringProfile(
     }
 
     const profile = await recurringService.createRecurringProfile(req.user!.id, parsed.data);
-    res.status(201).json({ success: true, data: { profile } });
+    sendResponse(res, {
+      statusCode: 201,
+      success: true,
+      message: 'Recurring ride profile created successfully',
+      data: { profile },
+    });
   } catch (err) {
     next(mapRecurringError(err));
   }
@@ -335,7 +382,12 @@ export async function getMyRecurringProfiles(
     }
 
     const profiles = await recurringService.getMyRecurringProfiles(req.user!.id);
-    res.status(200).json({ success: true, data: { profiles, total: profiles.length } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Recurring ride profiles retrieved successfully',
+      data: { profiles, total: profiles.length },
+    });
   } catch (err) {
     next(err);
   }
@@ -359,7 +411,12 @@ export async function deactivateRecurringProfile(
 
     const profileId = String(req.params.id);
     const profile = await recurringService.deactivateRecurringProfile(req.user!.id, profileId);
-    res.status(200).json({ success: true, data: { profile } });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Recurring ride profile deactivated successfully',
+      data: { profile },
+    });
   } catch (err) {
     next(mapRecurringError(err));
   }
@@ -384,7 +441,12 @@ export async function triggerRecurringEvaluate(
     }
 
     const result = await recurringService.evaluateRecurringProfiles();
-    res.status(200).json({ success: true, data: result });
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Recurring rides evaluated successfully',
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
