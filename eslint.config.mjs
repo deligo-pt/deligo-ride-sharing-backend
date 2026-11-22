@@ -32,7 +32,24 @@ export default [
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/await-thenable': 'error',
       'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
+      // Environment variables are validated once in src/config/env.ts and consumed through
+      // `config` (src/config/index.ts). Raw reads elsewhere bypass that validation.
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message:
+            "Don't read process.env directly — add the variable to src/config/env.ts and use `config` from 'src/config'.",
+        },
+      ],
     },
+  },
+
+  // The config layer itself (and scripts/, which is outside this lint scope) may read process.env.
+  {
+    files: ['src/config/**/*.ts'],
+    rules: { 'no-restricted-properties': 'off' },
   },
 
   // Must stay last: turns off stylistic rules that conflict with Prettier.

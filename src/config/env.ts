@@ -46,6 +46,14 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   // Firebase Admin — push notifications
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./firebase-service-account.json'),
+  // Resend — transactional email (falls back to console logging when unset)
+  RESEND_API_KEY: z.string().optional(),
+  // Mapbox — routing / ETA (falls back to OSRM when unset)
+  MAPBOX_ACCESS_TOKEN: z.string().optional(),
+  // Embedded BullMQ worker inside the API process. Anything except "false" enables it.
+  ENABLE_WORKER: z
+    .preprocess((val) => String(val).toLowerCase() !== 'false', z.boolean())
+    .default(true),
   // BulkGate — transactional SMS gateway
   // Obtain from https://portal.bulkgate.com → Administration → Applications
   BULKGATE_APPLICATION_ID: z.string().optional(),

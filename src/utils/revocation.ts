@@ -1,4 +1,3 @@
-import { env } from '../config/env';
 import { config } from '../config';
 import { redis } from './redis';
 import type { JwtPayload } from '../types/auth.types';
@@ -44,8 +43,8 @@ export function durationToSeconds(value: string): number | null {
  */
 export function maxAccessTokenTtlSeconds(): number {
   const lifetimes = [durationToSeconds(config.jwt.accessExpiresIn)];
-  if (env.JWT_ACCESS_SECRET && env.JWT_ACCESS_SECRET !== env.JWT_SECRET) {
-    lifetimes.push(durationToSeconds(env.JWT_EXPIRES_IN));
+  if (config.jwt.accessSecret !== config.jwt.secret) {
+    lifetimes.push(durationToSeconds(config.jwt.expiresIn));
   }
   const max = Math.max(...lifetimes.filter((n): n is number => n !== null), 0);
   return (max || FALLBACK_TTL_SECONDS) + TTL_SLACK_SECONDS;

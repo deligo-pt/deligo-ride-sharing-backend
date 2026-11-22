@@ -115,8 +115,8 @@ class EmailService {
     try {
       const html = await this.renderTemplate(options.template, options.data, options.subject);
 
-      const fromAddress = config.smtp.fromAddress || 'noreply@deligo.com';
-      const fromName = config.smtp.fromName || 'Deligo Ride';
+      const fromAddress = config.email.fromAddress || 'noreply@deligo.com';
+      const fromName = config.email.fromName || 'Deligo Ride';
       const from = `"${fromName}" <${fromAddress}>`;
 
       // In local dev without credentials, gracefully log instead of failing

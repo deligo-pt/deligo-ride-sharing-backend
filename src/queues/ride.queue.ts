@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
-import { env } from '../config/env';
+import { config } from '../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ride Scheduling Queue
@@ -28,7 +28,7 @@ export interface ScheduledRideJobData {
 // rediss:// (TLS) URLs from managed Redis providers work.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function parseBullMQConnection(redisUrl: string = env.REDIS_URL): ConnectionOptions {
+export function parseBullMQConnection(redisUrl: string = config.redis.url): ConnectionOptions {
   // Tolerate a bare "host:port" (no scheme) so legacy configs keep working.
   const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(redisUrl) ? redisUrl : `redis://${redisUrl}`;
   const url = new URL(normalized);

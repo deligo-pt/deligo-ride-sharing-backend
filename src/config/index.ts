@@ -39,6 +39,15 @@ export const config = {
     url: env.DATABASE_URL,
   },
 
+  redis: {
+    url: env.REDIS_URL,
+  },
+
+  worker: {
+    /** Run the BullMQ ride-scheduling worker inside the API process. */
+    embedded: env.ENABLE_WORKER,
+  },
+
   jwt: {
     secret: env.JWT_SECRET,
     expiresIn: env.JWT_EXPIRES_IN,
@@ -61,8 +70,34 @@ export const config = {
     secure: env.SMTP_SECURE,
     user: env.SMTP_USER,
     pass: env.SMTP_PASS,
+  },
+
+  email: {
     fromName: env.EMAIL_FROM_NAME,
     fromAddress: env.EMAIL_FROM_ADDRESS,
+  },
+
+  resend: {
+    apiKey: env.RESEND_API_KEY,
+  },
+
+  cloudinary: {
+    cloudName: env.CLOUDINARY_CLOUD_NAME,
+    apiKey: env.CLOUDINARY_API_KEY,
+    apiSecret: env.CLOUDINARY_API_SECRET,
+  },
+
+  bulkgate: {
+    applicationId: env.BULKGATE_APPLICATION_ID,
+    applicationToken: env.BULKGATE_APPLICATION_TOKEN,
+  },
+
+  mapbox: {
+    accessToken: env.MAPBOX_ACCESS_TOKEN,
+  },
+
+  firebase: {
+    serviceAccountPath: env.FIREBASE_SERVICE_ACCOUNT_PATH,
   },
 
   bcrypt: {
@@ -91,17 +126,14 @@ export const config = {
   },
 
   apple: {
-    clientId: env.APPLE_CLIENT_ID || 'com.deligo.web.demo',
-    bundleId: env.APPLE_BUNDLE_ID || 'com.deligo.app.demo',
-    demoMode: env.NODE_ENV !== 'production' && Boolean(env.APPLE_DEMO_MODE),
-    audiences: [
-      env.APPLE_CLIENT_ID || 'com.deligo.web.demo',
-      env.APPLE_BUNDLE_ID || 'com.deligo.app.demo',
-    ].filter((id): id is string => typeof id === 'string' && id.length > 0),
+    clientId: env.APPLE_CLIENT_ID,
+    bundleId: env.APPLE_BUNDLE_ID,
+    demoMode: env.NODE_ENV !== 'production' && env.APPLE_DEMO_MODE,
+    audiences: [env.APPLE_CLIENT_ID, env.APPLE_BUNDLE_ID].filter((id) => id.length > 0),
   },
 
   frontend: {
-    adminUrl: env.ADMIN_FRONTEND_URL || 'http://localhost:3000/admin',
+    adminUrl: env.ADMIN_FRONTEND_URL,
   },
 } as const;
 

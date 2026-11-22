@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as path from 'path';
 import * as fs from 'fs';
-import { env } from '../config/env';
+import { config } from '../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Firebase Admin SDK Singleton
@@ -19,7 +19,7 @@ function initFirebase(): admin.app.App {
     return admin.app();
   }
 
-  const absolutePath = path.resolve(env.FIREBASE_SERVICE_ACCOUNT_PATH);
+  const absolutePath = path.resolve(config.firebase.serviceAccountPath);
 
   if (!fs.existsSync(absolutePath)) {
     console.error(

@@ -1,7 +1,7 @@
 import 'dotenv/config'; // Must be the VERY FIRST import to load .env
 import Redis from 'ioredis';
 import prisma from './config/db';
-import { env } from './config/env';
+import { config } from './config';
 import { rideWorker } from './queues/ride.worker';
 
 // Dedicated BullMQ Worker Service Entry Point
@@ -19,7 +19,7 @@ async function bootstrapWorker(): Promise<void> {
   }
 
   // ── 2. Verify Redis connectivity ───────────────────────────────────────────
-  const redisProbe = new Redis(env.REDIS_URL, {
+  const redisProbe = new Redis(config.redis.url, {
     maxRetriesPerRequest: 3,
     lazyConnect: false,
   });

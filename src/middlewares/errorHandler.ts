@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors';
 import { ErrorResponseOptions, ErrorSource, errorResponse } from '../types/api.types';
+import { config } from '../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global Error Handling Middleware
@@ -22,7 +23,7 @@ import { ErrorResponseOptions, ErrorSource, errorResponse } from '../types/api.t
 //   5. Unknown/programmer errors (generic 500)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const isDev = (): boolean => process.env.NODE_ENV === 'development';
+const isDev = (): boolean => config.isDevelopment;
 
 /** Stack traces are only ever exposed in development. */
 const devStack = (err: unknown): string | undefined =>

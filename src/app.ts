@@ -3,7 +3,6 @@ import cors from 'cors';
 import cooikieParser from 'cookie-parser';
 import express, { Application, NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
-import { env } from './config/env';
 import { config } from './config';
 import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './utils/errors';
@@ -58,7 +57,7 @@ export function createApp(): Application {
       message: 'Service is healthy',
       data: {
         status: 'ok',
-        environment: env.NODE_ENV,
+        environment: config.env,
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
       },

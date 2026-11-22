@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
 import prisma from '../config/db';
-import { env } from '../config/env';
 import { config } from '../config';
 import { redis } from '../utils/redis';
 import { isAccessTokenRevoked } from '../utils/revocation';
@@ -25,15 +24,15 @@ import { UnauthorizedError, ForbiddenError } from '../utils/errors';
  * both transports accept exactly the same tokens.
  */
 export async function verifyAccessToken(token: string): Promise<JwtPayload> {
-  const secret = config.jwt.accessSecret || env.JWT_SECRET;
+  const secret = config.jwt.accessSecret;
   let payload: JwtPayload;
 
   try {
     payload = jwt.verify(token, secret) as JwtPayload;
   } catch {
-    if (env.JWT_SECRET && env.JWT_SECRET !== secret) {
+    if (config.jwt.secret !== secret) {
       try {
-        payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+        payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
       } catch {
         throw new UnauthorizedError('Invalid or expired token');
       }

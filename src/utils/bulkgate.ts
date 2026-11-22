@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { config } from '../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BulkGate SMS Gateway Utility
@@ -58,8 +59,7 @@ export async function sendBulkGateSms(
   phone: string,
   message: string,
 ): Promise<void> {
-  const applicationId = process.env.BULKGATE_APPLICATION_ID;
-  const applicationToken = process.env.BULKGATE_APPLICATION_TOKEN;
+  const { applicationId, applicationToken } = config.bulkgate;
 
   // ── Graceful degradation in environments without credentials ───────────────
   if (!applicationId || !applicationToken) {

@@ -1,5 +1,5 @@
 import Redis from 'ioredis';
-import { env } from '../config/env';
+import { config } from '../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Redis Client Singleton
@@ -9,7 +9,7 @@ import { env } from '../config/env';
 // which keeps test environments from failing if Redis is unavailable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const redis = new Redis(env.REDIS_URL, {
+const redis = new Redis(config.redis.url, {
   lazyConnect: false,
   maxRetriesPerRequest: 3,
 });

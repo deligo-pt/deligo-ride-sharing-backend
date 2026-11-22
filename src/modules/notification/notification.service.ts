@@ -14,6 +14,7 @@ import type {
   ListNotificationsQuery,
   NotificationChannel,
 } from './notification.validation';
+import { config } from '../../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRD 3.12: Notification Engine
@@ -173,8 +174,8 @@ async function sendSMS(phone: string, message: string): Promise<void> {
  * Falls back to console.log if RESEND_API_KEY is not configured.
  */
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  const apiKey   = process.env.RESEND_API_KEY;
-  const fromAddr = process.env.EMAIL_FROM_ADDRESS ?? 'noreply@deligo.app';
+  const apiKey   = config.resend.apiKey;
+  const fromAddr = config.email.fromAddress;
 
   if (!apiKey) {
     console.log(`[EMAIL FALLBACK] → ${to} | ${subject}`);

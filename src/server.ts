@@ -3,7 +3,7 @@ import http from 'http';
 import type { Worker } from 'bullmq';
 import { createApp } from './app';
 import prisma from './config/db';
-import { env } from './config/env';
+import { config } from './config';
 import { NotificationEngine } from './modules/notification/notification.service';
 import { initSocketServer } from './sockets';
 import { rideWorker } from './queues/ride.worker';
@@ -33,19 +33,19 @@ async function bootstrap(): Promise<void> {
 
   // ── Optional: Embedded Worker (if not running dedicated worker container) ──
   let activeWorker: Worker | null = null;
-  if (process.env.ENABLE_WORKER !== 'false') {
+  if (config.worker.embedded) {
     activeWorker = rideWorker;
     console.info('⚙️  Embedded BullMQ worker initialized in server process');
   } else {
     console.info('ℹ️  Embedded BullMQ worker disabled (ENABLE_WORKER=false)');
   }
 
-  server.listen(env.PORT, () => {
-    console.info(`🚀 Server running on http://localhost:${env.PORT}`);
-    console.info(`   Environment : ${env.NODE_ENV}`);
-    console.info(`   Health      : http://localhost:${env.PORT}/health`);
-    console.info(`   API         : http://localhost:${env.PORT}/api/v1`);
-    console.info(`   WebSocket   : ws://localhost:${env.PORT}`);
+  server.listen(config.port, () => {
+    console.info(`🚀 Server running on http://localhost:${config.port}`);
+    console.info(`   Environment : ${config.env}`);
+    console.info(`   Health      : http://localhost:${config.port}/health`);
+    console.info(`   API         : http://localhost:${config.port}/api/v1`);
+    console.info(`   WebSocket   : ws://localhost:${config.port}`);
   });
 
   // ── 3. Graceful Shutdown ───────────────────────────────────────────────────

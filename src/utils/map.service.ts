@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { haversineKm } from '../modules/ride/pricing.service';
+import { config } from '../config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Map Service — Real-world routing via OSRM (public) or Mapbox (key-gated)
@@ -160,7 +161,7 @@ export async function getMultiStopRouteData(
     throw new Error('getMultiStopRouteData requires at least 2 coordinates.');
   }
 
-  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
+  const mapboxToken = config.mapbox.accessToken;
 
   if (mapboxToken) {
     try {
