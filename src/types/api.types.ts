@@ -1,20 +1,5 @@
 import { TMeta } from '../utils/sendResponse';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Unified API error shape. Shares `{ success, statusCode, message }` with the
-// success envelope produced by `sendResponse`.
-//
-//   {
-//     success: false,
-//     statusCode: 422,
-//     message: 'Validation failed',
-//     code: 'VALIDATION_ERROR',                        // machine-readable code
-//     errorSources: [{ path: 'email', message: '…' }],  // field-level problems
-//     details: { … },                                   // extra structured info
-//     stack: '…'                                        // development only
-//   }
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface ErrorSource {
   path: string;
   message: string;
