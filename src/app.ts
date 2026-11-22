@@ -20,6 +20,7 @@ import supportRouter from './domains/support/support.routes';
 import vehicleRouter from './domains/vehicle/vehicle.routes';
 import adminRouter from './domains/admin/admin.routes';
 import authRouter from './domains/auth/auth.routes';
+import fleetOnboardingRouter from './domains/fleet/onboarding/fleetOnboarding.routes';
 
 // ── Inline micro-router for /api/v1/users ────────────────────────────────────
 // Keeps the users-related endpoints (e.g. FCM token) without needing a
@@ -99,6 +100,7 @@ export function createApp(): Application {
   app.use(`${API_PREFIX}/safety`, safetyRouter);
   app.use(`${API_PREFIX}/users`, usersRouter);
   app.use(`${API_PREFIX}/admin`, adminRouter);
+  app.use(`${API_PREFIX}/fleet/onboarding`, fleetOnboardingRouter);
 
   // API root — health / welcome
   app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {

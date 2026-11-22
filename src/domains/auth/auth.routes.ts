@@ -23,6 +23,7 @@ import {
 } from './auth.validation';
 import driverAuthRouter from './driver/driverAuth.router';
 import adminAuthRouter from './admin/adminAuth.router';
+import fleetAuthRouter from './fleet/fleetAuth.router';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auth Router
@@ -47,9 +48,11 @@ async function optionalAuthenticate(
   next();
 }
 
-// ── Driver & Admin Auth Sub-Routers ──────────────────────────────────────────
+// ── Driver, Admin & Fleet Auth Sub-Routers ────────────────────────────────────
 router.use('/driver', driverAuthRouter);
 router.use('/admin', adminAuthRouter);
+router.use('/fleet', fleetAuthRouter);
+router.use('/fleet-manager', fleetAuthRouter);
 
 // ── Registration Flow ────────────────────────────────────────────────────────
 router.post('/signup/initiate', validate({ body: InitiateSignupSchema }), initiateSignupHandler);
