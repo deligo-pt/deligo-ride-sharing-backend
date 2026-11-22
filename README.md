@@ -26,17 +26,19 @@ The core backend microservice for the **Deligo Ride-Sharing** platform. Built fo
 
 We strictly adhere to a **Domain-Driven, Layered Architecture**. This ensures a clear separation of concerns, making the codebase predictable, testable, and highly scalable.
 
-### Domain Structure
-Each feature is encapsulated within its own isolated domain inside the `src/domains/` directory:
+### Module Structure
+Each feature is encapsulated in its own module inside `src/modules/`, one folder per singular domain name. Files follow `<module>.<layer>.ts`:
 
 ```text
-src/domains/
-└── rides/
-    ├── rides.routes.ts      # Express endpoint definitions & middleware mapping
-    ├── rides.controller.ts  # Request parsing, service invocation, and response formatting
-    ├── rides.service.ts     # Core business logic and Prisma ORM data access
-    └── rides.validation.ts  # Zod schemas for strict request body/query validation
+src/modules/
+└── ride/
+    ├── ride.route.ts        # Express endpoint definitions & middleware mapping
+    ├── ride.controller.ts   # Request parsing, service invocation, and response formatting
+    ├── ride.service.ts      # Core business logic and Prisma ORM data access
+    └── ride.validation.ts   # Zod schemas for strict request body/query validation
 ```
+
+All module routers are registered in one place, `src/routes/index.ts`, which `src/app.ts` mounts at `/api/v1`.
 
 ---
 
@@ -44,27 +46,29 @@ src/domains/
 
 To ensure seamless frontend and mobile integration, all API endpoints must adhere to a strict, predictable JSON response format.
 
-**✅ Success Response (2XX):**
+**✅ Success Response (2XX):** built with `sendResponse` (`src/utils/sendResponse.ts`)
 ```json
 {
   "success": true,
-  "data": {
-    "id": "uuid-1234",
-    "status": "COMPLETED"
-  }
+  "statusCode": 200,
+  "message": "Ride accepted successfully",
+  "meta": { "page": 1, "limit": 20, "total": 42, "totalPage": 3 },
+  "data": { "id": "uuid-1234", "status": "ACCEPTED" }
 }
 ```
+`meta` is only present on paginated lists.
 
-**❌ Error Response (4XX / 5XX):**
+**❌ Error Response (4XX / 5XX):** produced only by the global `errorHandler`
 ```json
 {
   "success": false,
-  "error": {
-    "code": "VALIDATION_FAILED",
-    "message": "Invalid license plate format provided."
-  }
+  "statusCode": 400,
+  "message": "Validation failed",
+  "code": "VALIDATION_ERROR",
+  "errorSources": [{ "path": "body.licensePlate", "message": "Invalid license plate format." }]
 }
 ```
+`details` carries extra structured info and `stack` appears only when `NODE_ENV=development`.
 
 ---
 

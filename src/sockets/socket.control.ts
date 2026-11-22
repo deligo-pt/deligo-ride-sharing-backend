@@ -1,4 +1,4 @@
-import { getIo } from '../domains/notifications/notifications.service';
+import { getIo } from '../modules/notification/notification.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Socket lifecycle control

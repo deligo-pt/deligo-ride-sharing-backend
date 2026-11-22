@@ -2,7 +2,7 @@ import http from 'http';
 import { createApp } from '../src/app';
 import prisma from '../src/config/db';
 import { redis } from '../src/utils/redis';
-import { googleAuthClient } from '../src/domains/auth/auth.service';
+import { googleAuthClient } from '../src/modules/auth/auth.service';
 import { LoginTicket, TokenPayload } from 'google-auth-library';
 
 // ─────────────────────────────────────────────────────────────────────────────

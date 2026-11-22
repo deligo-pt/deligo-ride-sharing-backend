@@ -1,5 +1,5 @@
 import prisma from '../src/config/db';
-import { appleLogin, facebookLogin, googleLogin, handleSocialAuth } from '../src/domains/auth/auth.service';
+import { appleLogin, facebookLogin, googleLogin, handleSocialAuth } from '../src/modules/auth/auth.service';
 import { UnauthorizedError } from '../src/utils/errors';
 import crypto from 'crypto';
 

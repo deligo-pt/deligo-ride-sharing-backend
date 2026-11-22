@@ -4,7 +4,7 @@ import type { Worker } from 'bullmq';
 import { createApp } from './app';
 import prisma from './config/db';
 import { env } from './config/env';
-import { NotificationEngine } from './domains/notifications/notifications.service';
+import { NotificationEngine } from './modules/notification/notification.service';
 import { initSocketServer } from './sockets';
 import { rideWorker } from './queues/ride.worker';
 

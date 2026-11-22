@@ -1,17 +1,17 @@
 import { RequestHandler, Router } from 'express';
-import authRouter from '../domains/auth/auth.routes';
-import ridesRouter from '../domains/rides/rides.routes';
-import driversRouter from '../domains/drivers/drivers.routes';
-import vehicleRouter from '../domains/vehicle/vehicle.routes';
-import profileRouter from '../domains/profile/profile.routes';
-import kycRouter from '../domains/kyc/kyc.routes';
-import notificationsRouter from '../domains/notifications/notifications.routes';
-import promotionsRouter from '../domains/promotions/promotions.routes';
-import reviewsRouter from '../domains/reviews/reviews.routes';
-import supportRouter from '../domains/support/support.routes';
-import safetyRouter from '../domains/safety/safety.routes';
-import adminRouter from '../domains/admin/admin.routes';
-import usersRouter from './users.routes';
+import authRouter from '../modules/auth/auth.route';
+import rideRouter from '../modules/ride/ride.route';
+import driverRouter from '../modules/driver/driver.route';
+import vehicleRouter from '../modules/vehicle/vehicle.route';
+import profileRouter from '../modules/profile/profile.route';
+import kycRouter from '../modules/kyc/kyc.route';
+import notificationRouter from '../modules/notification/notification.route';
+import promotionRouter from '../modules/promotion/promotion.route';
+import reviewRouter from '../modules/review/review.route';
+import supportRouter from '../modules/support/support.route';
+import safetyRouter from '../modules/safety/safety.route';
+import adminRouter from '../modules/admin/admin.route';
+import userRouter from '../modules/user/user.route';
 
 interface ModuleRoute {
   path: string;
@@ -21,17 +21,17 @@ interface ModuleRoute {
 
 const moduleRoutes: ModuleRoute[] = [
   { path: '/auth', route: authRouter },
-  { path: '/rides', route: ridesRouter },
-  { path: '/drivers', route: driversRouter },
+  { path: '/rides', route: rideRouter },
+  { path: '/drivers', route: driverRouter },
   { path: '/vehicles', route: vehicleRouter },
   { path: '/profile', route: profileRouter },
   { path: '/kyc', route: kycRouter },
-  { path: '/notifications', route: notificationsRouter },
-  { path: '/promotions', route: promotionsRouter },
-  { path: '/reviews', route: reviewsRouter },
+  { path: '/notifications', route: notificationRouter },
+  { path: '/promotions', route: promotionRouter },
+  { path: '/reviews', route: reviewRouter },
   { path: '/support', route: supportRouter },
   { path: '/safety', route: safetyRouter },
-  { path: '/users', route: usersRouter },
+  { path: '/users', route: userRouter },
   { path: '/admin', route: adminRouter },
 ];
 

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { haversineKm } from '../domains/rides/pricing.service';
+import { haversineKm } from '../modules/ride/pricing.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Map Service — Real-world routing via OSRM (public) or Mapbox (key-gated)
