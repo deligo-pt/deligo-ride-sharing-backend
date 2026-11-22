@@ -56,14 +56,34 @@ router.use('/fleet', authRateLimiter, fleetAuthRouter);
 router.use('/fleet-manager', authRateLimiter, fleetAuthRouter);
 
 // ── Registration Flow ────────────────────────────────────────────────────────
-router.post('/signup/initiate', authRateLimiter, validate({ body: InitiateSignupSchema }), initiateSignupHandler);
-router.post('/signup/resend-otp', authRateLimiter, validate({ body: ResendOtpSchema }), resendOtpHandler);
-router.post('/signup/verify-otp', authRateLimiter, validate({ body: VerifyOtpSchema }), verifyOtpHandler);
+router.post(
+  '/signup/initiate',
+  authRateLimiter,
+  validate({ body: InitiateSignupSchema }),
+  initiateSignupHandler,
+);
+router.post(
+  '/signup/resend-otp',
+  authRateLimiter,
+  validate({ body: ResendOtpSchema }),
+  resendOtpHandler,
+);
+router.post(
+  '/signup/verify-otp',
+  authRateLimiter,
+  validate({ body: VerifyOtpSchema }),
+  verifyOtpHandler,
+);
 
 // ── Login, Token Refresh & Logout Flow ───────────────────────────────────────
 router.post('/login', authRateLimiter, validate({ body: LoginSchema }), loginHandler);
 router.post('/google', authRateLimiter, validate({ body: GoogleLoginSchema }), googleLoginHandler);
-router.post('/facebook', authRateLimiter, validate({ body: FacebookLoginSchema }), facebookLoginHandler);
+router.post(
+  '/facebook',
+  authRateLimiter,
+  validate({ body: FacebookLoginSchema }),
+  facebookLoginHandler,
+);
 router.post('/apple', authRateLimiter, validate({ body: AppleLoginSchema }), appleLoginHandler);
 router.post('/refresh-token', refreshTokenHandler);
 router.post('/logout', optionalAuthenticate, logoutHandler);

@@ -57,11 +57,7 @@ export async function fleetLoginHandler(
       statusCode: 200,
       success: true,
       message: 'Fleet manager login successful',
-      data: {
-        user: result.user,
-        accessToken: result.tokens.accessToken,
-        expiresIn: result.tokens.expiresIn,
-      },
+      data: result,
     });
   } catch (err) {
     next(err);

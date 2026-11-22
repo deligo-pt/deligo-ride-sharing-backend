@@ -1,10 +1,7 @@
 import { Router } from 'express';
 import { validate } from '../../middlewares/validate';
 import { InitiateSignupSchema, LoginSchema } from './auth.validation';
-import {
-  fleetInitiateSignupHandler,
-  fleetLoginHandler,
-} from './fleet-auth.controller';
+import { fleetInitiateSignupHandler, fleetLoginHandler } from './fleet-auth.controller';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fleet Manager Auth Router
@@ -25,10 +22,6 @@ router.post(
   fleetInitiateSignupHandler,
 );
 
-router.post(
-  '/login',
-  validate({ body: LoginSchema }),
-  fleetLoginHandler,
-);
+router.post('/login', validate({ body: LoginSchema }), fleetLoginHandler);
 
 export default router;
