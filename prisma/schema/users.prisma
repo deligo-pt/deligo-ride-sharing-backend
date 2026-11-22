@@ -2,6 +2,21 @@ enum UserRole {
   CUSTOMER
   DRIVER
   ADMIN
+  FLEET_MANAGER
+}
+
+enum FleetVerificationStatus {
+  PENDING_VERIFICATION
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum FleetSignerType {
+  MYSELF
+  AUTHORIZED_REPRESENTATIVE
 }
 
 enum UserStatus {
@@ -81,6 +96,7 @@ model User {
   customerProfile       CustomerProfile?
   driverProfile         DriverProfile?
   adminProfile          AdminProfile?
+  fleetManagerProfile   FleetManagerProfile?
   notificationsReceived Notification[]
   reviewsGiven          Review[]           @relation("ReviewAuthor")
   reviewsReceived       Review[]           @relation("ReviewTarget")
@@ -152,6 +168,69 @@ model AdminProfile {
 
   @@map("admin_profiles")
 }
+
+model FleetManagerProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Step 3: Business Details
+  businessName      String?
+  legalBusinessName String?
+  licenseNumber     String? @unique
+  nifNumber         String? @unique
+  businessEmail     String?
+  businessPhone     String?
+
+  // Step 4: Location Details (coordinates set via map selection)
+  latitude   Float?
+  longitude  Float?
+  street     String?
+  city       String?
+  district   String?
+  state      String?
+  postalCode String?
+  country    String?
+
+  // Step 5: Bank Details
+  accountHolderName String?
+  iban              String?
+
+  // Step 6: Verification Documents (nullable for incremental upload)
+  photoUrl            String?
+  businessLicenseUrl  String?
+  idProofFrontUrl     String?
+  idProofBackUrl      String?
+  addressProofUrl     String?
+  activityDocumentUrl String?
+  ibanProofUrl        String?
+
+  // Step 7: Declaration, Signer & Legal Acceptance
+  signerType         FleetSignerType?
+  representativeName String?
+  representativeId   String?
+  signatureUrl       String?
+  termsAcceptedAt    DateTime?
+  privacyAcceptedAt  DateTime?
+
+  // Onboarding & Review Tracking
+  verificationStatus FleetVerificationStatus @default(PENDING_VERIFICATION)
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  rejectionReason    String?
+  adminNote          String?
+
+  // Soft Delete & Timestamps
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([verificationStatus])
+  @@map("fleet_manager_profiles")
+}
+
 
 // PAYMENTS & WALLET => demo 
 
