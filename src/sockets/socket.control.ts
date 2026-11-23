@@ -1,4 +1,4 @@
-import { getIo } from '../modules/notification/notification.service';
+import { NotificationService } from '../modules/notification/notification.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Socket lifecycle control
@@ -19,10 +19,10 @@ export const sessionRoom = (sessionId: string): string => `session_${sessionId}`
 
 /** Force-close every socket authenticated with this session. */
 export function disconnectSessionSockets(sessionId: string): void {
-  getIo()?.in(sessionRoom(sessionId)).disconnectSockets(true);
+  NotificationService.getIo()?.in(sessionRoom(sessionId)).disconnectSockets(true);
 }
 
 /** Force-close every socket (all devices) belonging to this user. */
 export function disconnectUserSockets(userId: string): void {
-  getIo()?.in(userRoom(userId)).disconnectSockets(true);
+  NotificationService.getIo()?.in(userRoom(userId)).disconnectSockets(true);
 }

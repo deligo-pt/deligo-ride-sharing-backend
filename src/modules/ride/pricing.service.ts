@@ -2,6 +2,7 @@ import { VehicleType } from '@prisma/client';
 import prisma from '../../config/db';
 import { getMultiStopRouteData, type Coordinate } from '../../utils/map.service';
 import { isPointInPolygon, parsePolygon } from '../../utils/geo.utils';
+import { InternalError } from '../../utils/errors';
 
 // Single source of truth for all fare arithmetic. Both the estimate endpoint
 // and the trip-completion flow call this engine so the numbers are consistent.
@@ -114,7 +115,7 @@ async function computeFare(
   });
 
   if (!rule) {
-    throw new Error(`UNSUPPORTED_VEHICLE_TYPE:${vehicleType}`);
+    throw new InternalError(`No pricing rule configured for vehicle type ${vehicleType}`, 'PRICING_RULE_NOT_FOUND');
   }
 
   // Map the rule to the expected class (fallback mapping since class isn't in rule directly)
@@ -189,7 +190,7 @@ async function computeFare(
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const PricingEngine = {
+export const PricingService = {
   /**
    * Calculate an upfront fare estimate for a given route.
    *
@@ -302,13 +303,14 @@ export const PricingEngine = {
       promoCode,
     );
   },
+  haversineKm,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Haversine — exported so rides.service can still use it without circular deps
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);

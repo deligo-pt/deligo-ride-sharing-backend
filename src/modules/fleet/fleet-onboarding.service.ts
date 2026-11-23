@@ -22,7 +22,7 @@ import {
  * Helper to fetch a fleet manager profile by userId and ensure it is in an editable status.
  * Only 'PENDING_VERIFICATION' and 'REJECTED' statuses permit modifications.
  */
-export async function getEditableProfile(userId: string) {
+async function getEditableProfile(userId: string) {
   const profile = await prisma.fleetManagerProfile.findUnique({
     where: { userId },
   });
@@ -47,7 +47,7 @@ export async function getEditableProfile(userId: string) {
  * Returns the profile along with a computed completedSteps object so the frontend knows
  * which step to resume from.
  */
-export async function getOnboardingStatus(userId: string) {
+async function getOnboardingStatus(userId: string) {
   const profile = await prisma.fleetManagerProfile.findUnique({
     where: { userId },
   });
@@ -93,7 +93,7 @@ export async function getOnboardingStatus(userId: string) {
 /**
  * Step 3: Update business details
  */
-export async function updateBusinessDetails(
+async function updateBusinessDetails(
   userId: string,
   input: BusinessDetailsInput,
 ) {
@@ -129,7 +129,7 @@ export async function updateBusinessDetails(
 /**
  * Step 4: Update location details
  */
-export async function updateLocationDetails(
+async function updateLocationDetails(
   userId: string,
   input: LocationDetailsInput,
 ) {
@@ -153,7 +153,7 @@ export async function updateLocationDetails(
 /**
  * Step 5: Update bank details
  */
-export async function updateBankDetails(
+async function updateBankDetails(
   userId: string,
   input: BankDetailsInput,
 ) {
@@ -171,7 +171,7 @@ export async function updateBankDetails(
 /**
  * Step 6: Update verification documents incrementally
  */
-export async function updateDocuments(userId: string, input: DocumentsInput) {
+async function updateDocuments(userId: string, input: DocumentsInput) {
   const profile = await getEditableProfile(userId);
 
   const dataToUpdate: Prisma.FleetManagerProfileUpdateInput = {};
@@ -198,7 +198,7 @@ export async function updateDocuments(userId: string, input: DocumentsInput) {
 /**
  * Step 7: Final submission and verification
  */
-export async function submitOnboarding(
+async function submitOnboarding(
   userId: string,
   input: SubmitOnboardingInput,
 ) {
@@ -253,3 +253,13 @@ export async function submitOnboarding(
     },
   });
 }
+
+export const FleetOnboardingService = {
+  getEditableProfile,
+  getOnboardingStatus,
+  updateBusinessDetails,
+  updateLocationDetails,
+  updateBankDetails,
+  updateDocuments,
+  submitOnboarding,
+};

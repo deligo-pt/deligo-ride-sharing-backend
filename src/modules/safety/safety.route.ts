@@ -1,39 +1,33 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/auth';
-import {
-  getActiveAlertsHandler,
-  resolveAlertHandler,
-  triggerSosHandler,
-} from './safety.controller';
+import { authenticate, authorize } from '../../middlewares/auth';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { SafetyController } from './safety.controller';
+import { SafetyValidation } from './safety.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Safety Router  —  PRD 3.13 / 4.13: Emergency SOS & Real-Time Safety Escalation
-// Mounted at: /api/v1/safety  (see app.ts)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Mounted at: /api/v1/safety (see src/routes/index.ts) — PRD 3.13 / 4.13
 const router: Router = Router();
 
-// ── IMPORTANT: specific named routes must be declared BEFORE /:id routes ─────
+// Specific named routes must be declared BEFORE /:id routes.
 
-/**
- * GET /api/v1/safety/sos/active
- * Returns all currently ACTIVE emergency alerts.
- * Role: ADMIN
- */
-router.get('/sos/active', authenticate, getActiveAlertsHandler);
+// All currently ACTIVE emergency alerts — ADMIN
+router.get('/sos/active', authenticate, authorize('ADMIN'), SafetyController.getActiveAlerts);
 
-/**
- * POST /api/v1/safety/sos
- * Triggers an SOS alert from a customer or driver.
- * Role: CUSTOMER | DRIVER
- */
-router.post('/sos', authenticate, triggerSosHandler);
+// Trigger an SOS alert — CUSTOMER | DRIVER
+router.post(
+  '/sos',
+  authenticate,
+  authorize('CUSTOMER', 'DRIVER'),
+  validateRequest(SafetyValidation.triggerSos),
+  SafetyController.triggerSos,
+);
 
-/**
- * PATCH /api/v1/safety/sos/:id/resolve
- * Admin resolves or dismisses an active emergency alert.
- * Role: ADMIN
- */
-router.patch('/sos/:id/resolve', authenticate, resolveAlertHandler);
+// Resolve or dismiss an active alert — ADMIN
+router.patch(
+  '/sos/:id/resolve',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(SafetyValidation.resolveAlert),
+  SafetyController.resolveAlert,
+);
 
 export default router;

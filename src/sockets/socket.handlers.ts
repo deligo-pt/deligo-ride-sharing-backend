@@ -29,7 +29,7 @@ export function registerSocketHandlers(io: IoServer): void {
 
     // ── Auto-join personal notification room ──────────────────────────────────
     // Every authenticated socket is automatically placed in user_<userId>.
-    // The NotificationEngine uses this room to push real-time notifications.
+    // The NotificationService uses this room to push real-time notifications.
     void socket.join(userRoom(userId));
 
     // Per-session room — lets logout / revocation disconnect just this login session.

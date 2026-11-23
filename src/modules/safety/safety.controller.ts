@@ -1,144 +1,75 @@
-import { NextFunction, Request, Response } from 'express';
-import {
-  BadRequestError,
-  ForbiddenError,
-  NotFoundError,
-  ValidationError,
-} from '../../utils/errors';
-import { getActiveAlerts, resolveAlert, triggerSos } from './safety.service';
-import { ResolveAlertSchema, TriggerSosSchema } from './safety.validation';
+import { SafetyService } from './safety.service';
+import { ResolveAlertDto, TriggerSosDto } from './safety.validation';
 import { sendResponse } from '../../utils/sendResponse';
+import { catchAsync } from '../../utils/catchAsync';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safety Controller  —  PRD 3.13 / 4.13
-// ─────────────────────────────────────────────────────────────────────────────
-
-function mapError(err: unknown): unknown {
-  if (err instanceof Error) {
-    switch (err.message) {
-      case 'USER_NOT_FOUND':
-        return new NotFoundError('User');
-      case 'ALERT_NOT_FOUND':
-        return new NotFoundError('Emergency alert');
-      case 'ALERT_ALREADY_RESOLVED':
-        return new BadRequestError('This alert has already been resolved or dismissed.');
-      case 'FORBIDDEN':
-        return new ForbiddenError('You do not have permission to perform this action');
-    }
-  }
-  return err;
-}
-
+// Role checks live in safety.route.ts (authorize); validation in safety.validation.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * POST /api/v1/safety/sos
  * Role: CUSTOMER | DRIVER
  *
- * Triggers an SOS alert:
- *  - Creates an EmergencyAlert record (ACTIVE)
- *  - Updates the linked Ride to EMERGENCY (if rideId provided)
- *  - Broadcasts `sos_alert` to the `admin_security_desk` Socket.io room
- *  - Dispatches SMS to each of the initiator's emergency contacts
+ * Triggers an SOS alert: creates an ACTIVE EmergencyAlert, escalates the linked
+ * ride to EMERGENCY, broadcasts `sos_alert` to `admin_security_desk`, and SMSes
+ * the initiator's emergency contacts.
  */
-export async function triggerSosHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const role = req.user!.role;
-    if (role !== 'CUSTOMER' && role !== 'DRIVER') {
-      throw new ForbiddenError('Only CUSTOMER or DRIVER roles can trigger an SOS');
-    }
+const triggerSos = catchAsync(async (req, res) => {
+  const result = await SafetyService.triggerSos(
+    req.user!.id,
+    req.user!.role,
+    req.body as TriggerSosDto,
+  );
 
-    const parsed = TriggerSosSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-
-    const result = await triggerSos(req.user!.id, role, parsed.data);
-
-    sendResponse(res, {
-      statusCode: 201,
-      success: true,
-      message: 'SOS alert triggered successfully',
-      data: result,
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'SOS alert triggered successfully',
+    data: result,
+  });
+});
 
 /**
  * PATCH /api/v1/safety/sos/:id/resolve
  * Role: ADMIN
  *
- * Allows an admin to mark an active alert as RESOLVED or FALSE_ALARM.
- * The linked ride is intentionally NOT auto-reset — admin handles it manually.
+ * Marks an active alert RESOLVED or FALSE_ALARM. The linked ride is
+ * intentionally NOT auto-reset — admin handles it manually.
  */
-export async function resolveAlertHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    if (req.user!.role !== 'ADMIN') {
-      throw new ForbiddenError('Only ADMIN can resolve emergency alerts');
-    }
+const resolveAlert = catchAsync(async (req, res) => {
+  const updatedAlert = await SafetyService.resolveAlert(
+    req.params.id as string,
+    req.user!.id,
+    req.body as ResolveAlertDto,
+  );
 
-    const alertId = req.params.id as string;
-    if (!alertId) {
-      throw new BadRequestError('Alert ID is required');
-    }
-
-    const parsed = ResolveAlertSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-
-    const updatedAlert = await resolveAlert(alertId, req.user!.id, parsed.data);
-
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Safety alert resolved successfully',
-      data: { alert: updatedAlert },
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Safety alert resolved successfully',
+    data: { alert: updatedAlert },
+  });
+});
 
 /**
  * GET /api/v1/safety/sos/active
- * Role: ADMIN
- *
- * Returns all currently ACTIVE EmergencyAlerts, newest first, with initiator details.
+ * Role: ADMIN — all ACTIVE EmergencyAlerts, newest first, with initiator details.
  */
-export async function getActiveAlertsHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    if (req.user!.role !== 'ADMIN') {
-      throw new ForbiddenError('Only ADMIN can view active emergency alerts');
-    }
+const getActiveAlerts = catchAsync(async (_req, res) => {
+  const alerts = await SafetyService.getActiveAlerts();
 
-    const alerts = await getActiveAlerts();
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Active safety alerts retrieved successfully',
+    data: { alerts, total: alerts.length },
+  });
+});
 
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Active safety alerts retrieved successfully',
-      data: { alerts, total: alerts.length },
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
+export const SafetyController = {
+  triggerSos,
+  resolveAlert,
+  getActiveAlerts,
+};

@@ -6,32 +6,37 @@ import { ZodType } from 'zod';
 //
 // Validates req.body, req.params, and req.query against a Zod schema.
 // On failure, returns a 422 with field-level error details.
+// Accepts either a fixed set of schemas or a resolver `(req) => schemas` for
+// request-dependent validation (e.g. role-specific bodies).
 // On success, replaces req.body/params/query with the parsed (coerced) data.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ValidationTargets {
+export interface ValidationTargets {
   body?: ZodType;
   params?: ZodType;
   query?: ZodType;
 }
 
-export function validate(schemas: ValidationTargets) {
+export function validateRequest(
+  schemas: ValidationTargets | ((req: Request) => ValidationTargets),
+) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
-      if (schemas.body) {
-        req.body = await schemas.body.parseAsync(req.body);
+      const targets = typeof schemas === 'function' ? schemas(req) : schemas;
+      if (targets.body) {
+        req.body = await targets.body.parseAsync(req.body);
       }
-      if (schemas.params) {
+      if (targets.params) {
         Object.defineProperty(req, 'params', {
-          value: await schemas.params.parseAsync(req.params),
+          value: await targets.params.parseAsync(req.params),
           enumerable: true,
           configurable: true,
           writable: true,
         });
       }
-      if (schemas.query) {
+      if (targets.query) {
         Object.defineProperty(req, 'query', {
-          value: await schemas.query.parseAsync(req.query),
+          value: await targets.query.parseAsync(req.query),
           enumerable: true,
           configurable: true,
           writable: true,

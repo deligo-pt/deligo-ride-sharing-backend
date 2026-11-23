@@ -1,39 +1,37 @@
-import { Request, Response, NextFunction } from 'express';
 import { sendResponse } from '../../utils/sendResponse';
-import { assertAdmin } from './admin.util';
-import { listPromotions, updatePromotionStatus } from './admin.promotion.service';
+import { catchAsync } from '../../utils/catchAsync';
+import { AdminPromotionService } from './admin.promotion.service';
+import { DeactivatePromotionInput, ListPromotionsQuery } from './admin.promotion.validation';
 
-export const getPromotionsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    assertAdmin(req);
-    const { promotions, meta } = await listPromotions(req.query as never);
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Promotions retrieved successfully',
-      meta,
-      data: { promotions },
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+/** GET /api/v1/admin/promotions */
+const getPromotions = catchAsync(async (req, res) => {
+  const { promotions, meta } = await AdminPromotionService.listPromotions(
+    req.query as unknown as ListPromotionsQuery,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Promotions retrieved successfully',
+    meta,
+    data: { promotions },
+  });
+});
 
-export const updatePromotionHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    assertAdmin(req);
-    const promoId = req.params.id as string;
-    const updated = await updatePromotionStatus(
-      promoId,
-      req.body as Parameters<typeof updatePromotionStatus>[1],
-    );
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Promotion updated successfully',
-      data: updated,
-    });
-  } catch (err) {
-    next(err);
-  }
+/** PATCH /api/v1/admin/promotions/:id */
+const updatePromotion = catchAsync(async (req, res) => {
+  const updated = await AdminPromotionService.updatePromotionStatus(
+    req.params.id as string,
+    req.body as DeactivatePromotionInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Promotion updated successfully',
+    data: updated,
+  });
+});
+
+export const AdminPromotionController = {
+  getPromotions,
+  updatePromotion,
 };

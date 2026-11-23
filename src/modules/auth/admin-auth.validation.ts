@@ -4,7 +4,7 @@ import { z } from 'zod';
 // Admin Auth Validation Schemas
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const CreateAdminSchema = z.object({
+const CreateAdminSchema = z.object({
   firstName: z.string().min(1, 'First name is required').trim(),
   lastName: z.string().min(1, 'Last name is required').trim(),
   email: z.string().email('Invalid email address').toLowerCase().trim(),
@@ -13,7 +13,7 @@ export const CreateAdminSchema = z.object({
 
 export type CreateAdminInput = z.infer<typeof CreateAdminSchema>;
 
-export const SetAdminPasswordSchema = z.object({
+const SetAdminPasswordSchema = z.object({
   token: z.string().min(1, 'Invitation token is required').trim(),
   password: z
     .string()
@@ -25,3 +25,8 @@ export const SetAdminPasswordSchema = z.object({
 });
 
 export type SetAdminPasswordInput = z.infer<typeof SetAdminPasswordSchema>;
+
+export const AdminAuthValidation = {
+  create: { body: CreateAdminSchema },
+  setPassword: { body: SetAdminPasswordSchema },
+};

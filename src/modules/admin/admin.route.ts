@@ -1,263 +1,115 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../middlewares/auth';
-import { validate } from '../../middlewares/validate';
-import {
-  getPendingKycHandler,
-  reviewKycHandler,
-  listUsersHandler,
-  updateUserStatusHandler,
-} from './admin.controller';
-import {
-  ReviewKycSchema,
-  DriverProfileIdParamSchema,
-  ListUsersQuerySchema,
-  UserIdParamSchema,
-  UpdateUserStatusSchema,
-} from './admin.validation';
-import {
-  getTicketsHandler,
-  updateTicketHandler,
-  addTicketMessageHandler,
-} from './admin.support.controller';
-import {
-  ListTicketsQuerySchema,
-  UpdateTicketSchema,
-  AddTicketMessageSchema,
-  TicketIdParamSchema,
-} from './admin.support.validation';
-import {
-  getRidesHandler,
-  cancelRideHandler,
-} from './admin.ride.controller';
-import {
-  ListRidesQuerySchema,
-  CancelRideSchema,
-  RideIdParamSchema,
-} from './admin.ride.validation';
-import {
-  broadcastNotificationHandler,
-} from './admin.notification.controller';
-import {
-  BroadcastNotificationSchema,
-} from './admin.notification.validation';
-import {
-  getPricingRulesHandler,
-  updatePricingRuleHandler,
-} from './admin.pricing.controller';
-import {
-  VehicleTypeParamSchema,
-  UpdatePricingRuleSchema,
-} from './admin.pricing.validation';
-import {
-  getPromotionsHandler,
-  updatePromotionHandler,
-} from './admin.promotion.controller';
-import {
-  ListPromotionsQuerySchema,
-  PromoIdParamSchema,
-  DeactivatePromotionSchema,
-} from './admin.promotion.validation';
-import {
-  getLedgerHandler,
-} from './admin.finance.controller';
-import {
-  GetLedgerQuerySchema,
-} from './admin.finance.validation';
-import {
-  getDashboardHandler,
-  getTrendsHandler,
-  exportReportHandler,
-} from './admin.analytics.controller';
-import {
-  GetTrendsQuerySchema,
-  ExportReportQuerySchema,
-} from './admin.analytics.validation';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { AdminController } from './admin.controller';
+import { AdminValidation } from './admin.validation';
+import { AdminSupportController } from './admin.support.controller';
+import { AdminSupportValidation } from './admin.support.validation';
+import { AdminRideController } from './admin.ride.controller';
+import { AdminRideValidation } from './admin.ride.validation';
+import { AdminNotificationController } from './admin.notification.controller';
+import { AdminNotificationValidation } from './admin.notification.validation';
+import { AdminPricingController } from './admin.pricing.controller';
+import { AdminPricingValidation } from './admin.pricing.validation';
+import { AdminPromotionController } from './admin.promotion.controller';
+import { AdminPromotionValidation } from './admin.promotion.validation';
+import { AdminFinanceController } from './admin.finance.controller';
+import { AdminFinanceValidation } from './admin.finance.validation';
+import { AdminAnalyticsController } from './admin.analytics.controller';
+import { AdminAnalyticsValidation } from './admin.analytics.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin Router  —  PRD 5.x
-// Mounted at: /api/v1/admin  (see app.ts)
-//
-// All routes require a valid Bearer JWT with role ADMIN (enforced via router.use below).
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Mounted at: /api/v1/admin (see src/routes/index.ts) — PRD 5.x
 const router: Router = Router();
 
-// Every admin endpoint requires a valid JWT belonging to an ADMIN user.
+// Every admin route requires a valid session AND the ADMIN role.
 router.use(authenticate, authorize('ADMIN'));
 
-// ── KYC Review ───────────────────────────────────────────────────────────────
-
-/**
- * GET /api/v1/admin/kyc/pending
- *
- * Returns all DriverProfiles whose kycStatus is UNDER_REVIEW or PENDING_DOCS,
- * including full user info and the submitted document URLs for review.
- */
-router.get('/kyc/pending', getPendingKycHandler);
-
-/**
- * PATCH /api/v1/admin/kyc/:driverProfileId
- *
- * Approve or reject a driver's KYC submission.
- * Body: { kycStatus, rejectionReason?, reviewNote? }
- *
- * On APPROVED: sets DriverDocument.verificationStatus → APPROVED,
- *              DriverProfile.kycStatus → APPROVED,
- *              User.status → ACTIVE.
- *
- * On REJECTED: sets DriverDocument.verificationStatus → REJECTED,
- *              DriverProfile.kycStatus → REJECTED,
- *              User.status → PENDING_VERIFICATION.
- */
+// ── Driver KYC review ─────────────────────────────────────────────────────────
+router.get('/kyc/pending', AdminController.getPendingKyc);
 router.patch(
   '/kyc/:driverProfileId',
-  validate({
-    params: DriverProfileIdParamSchema,
-    body: ReviewKycSchema,
-  }),
-  reviewKycHandler,
+  validateRequest(AdminValidation.reviewKyc),
+  AdminController.reviewKyc,
 );
 
-// ── User Management (PRD 5.2 & 5.3) ─────────────────────────────────────────
-
-/**
- * GET /api/v1/admin/users
- *
- * Paginated user list. Accepts optional query params:
- *   role    — filter by CUSTOMER | DRIVER
- *   status  — filter by ACTIVE | SUSPENDED | PENDING_VERIFICATION | DEACTIVATED
- *   page    — default 1
- *   limit   — default 20, max 100
- *
- * When role=DRIVER, the response includes the nested driverProfile
- * (with vehicle info and kycStatus).
- */
-router.get(
-  '/users',
-  validate({ query: ListUsersQuerySchema }),
-  listUsersHandler,
-);
-
-/**
- * PATCH /api/v1/admin/users/:userId/status
- *
- * Manually change a user account's status.
- * Body: { status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED', reason? }
- */
+// ── User management ───────────────────────────────────────────────────────────
+router.get('/users', validateRequest(AdminValidation.listUsers), AdminController.listUsers);
 router.patch(
   '/users/:userId/status',
-  validate({
-    params: UserIdParamSchema,
-    body: UpdateUserStatusSchema,
-  }),
-  updateUserStatusHandler,
+  validateRequest(AdminValidation.updateUserStatus),
+  AdminController.updateUserStatus,
 );
 
-// ── Support Tickets (PRD 5.11) ──────────────────────────────────────────────
-
+// ── Support tickets ───────────────────────────────────────────────────────────
 router.get(
   '/support/tickets',
-  validate({ query: ListTicketsQuerySchema }),
-  getTicketsHandler,
+  validateRequest(AdminSupportValidation.listTickets),
+  AdminSupportController.getTickets,
 );
-
 router.patch(
   '/support/tickets/:id',
-  validate({
-    params: TicketIdParamSchema,
-    body: UpdateTicketSchema,
-  }),
-  updateTicketHandler,
+  validateRequest(AdminSupportValidation.updateTicket),
+  AdminSupportController.updateTicket,
 );
-
 router.post(
   '/support/tickets/:id/messages',
-  validate({
-    params: TicketIdParamSchema,
-    body: AddTicketMessageSchema,
-  }),
-  addTicketMessageHandler,
+  validateRequest(AdminSupportValidation.addTicketMessage),
+  AdminSupportController.addTicketMessage,
 );
 
-// ── Ride Management (PRD 5.4) ───────────────────────────────────────────────
-
-router.get(
-  '/rides',
-  validate({ query: ListRidesQuerySchema }),
-  getRidesHandler,
-);
-
+// ── Rides ─────────────────────────────────────────────────────────────────────
+router.get('/rides', validateRequest(AdminRideValidation.list), AdminRideController.getRides);
 router.patch(
   '/rides/:id/cancel',
-  validate({
-    params: RideIdParamSchema,
-    body: CancelRideSchema,
-  }),
-  cancelRideHandler,
+  validateRequest(AdminRideValidation.cancel),
+  AdminRideController.cancelRide,
 );
 
-// ── Broadcast Notifications (PRD 5.9) ───────────────────────────────────────
-
+// ── Notifications ─────────────────────────────────────────────────────────────
 router.post(
   '/notifications/broadcast',
-  validate({ body: BroadcastNotificationSchema }),
-  broadcastNotificationHandler,
+  validateRequest(AdminNotificationValidation.broadcast),
+  AdminNotificationController.broadcast,
 );
 
-// ── Financial Controller & Pricing (PRD 5.5, 5.6, 5.8) ──────────────────────
-
-router.get(
-  '/pricing',
-  getPricingRulesHandler,
-);
-
+// ── Pricing rules ─────────────────────────────────────────────────────────────
+router.get('/pricing', AdminPricingController.getPricingRules);
 router.patch(
   '/pricing/:vehicleType',
-  validate({
-    params: VehicleTypeParamSchema,
-    body: UpdatePricingRuleSchema,
-  }),
-  updatePricingRuleHandler,
+  validateRequest(AdminPricingValidation.updateRule),
+  AdminPricingController.updatePricingRule,
 );
 
+// ── Promotions ────────────────────────────────────────────────────────────────
 router.get(
   '/promotions',
-  validate({ query: ListPromotionsQuerySchema }),
-  getPromotionsHandler,
+  validateRequest(AdminPromotionValidation.list),
+  AdminPromotionController.getPromotions,
 );
-
 router.patch(
   '/promotions/:id',
-  validate({
-    params: PromoIdParamSchema,
-    body: DeactivatePromotionSchema,
-  }),
-  updatePromotionHandler,
+  validateRequest(AdminPromotionValidation.update),
+  AdminPromotionController.updatePromotion,
 );
 
+// ── Finances ──────────────────────────────────────────────────────────────────
 router.get(
   '/finances/ledger',
-  validate({ query: GetLedgerQuerySchema }),
-  getLedgerHandler,
+  validateRequest(AdminFinanceValidation.ledger),
+  AdminFinanceController.getLedger,
 );
 
-// ── Analytics & Business Intelligence (PRD 5.1, 5.12) ─────────────────────
-
-router.get(
-  '/analytics/dashboard',
-  getDashboardHandler,
-);
-
+// ── Analytics ─────────────────────────────────────────────────────────────────
+router.get('/analytics/dashboard', AdminAnalyticsController.getDashboard);
 router.get(
   '/analytics/trends',
-  validate({ query: GetTrendsQuerySchema }),
-  getTrendsHandler,
+  validateRequest(AdminAnalyticsValidation.trends),
+  AdminAnalyticsController.getTrends,
 );
-
 router.get(
   '/analytics/export',
-  validate({ query: ExportReportQuerySchema }),
-  exportReportHandler,
+  validateRequest(AdminAnalyticsValidation.exportReport),
+  AdminAnalyticsController.exportReport,
 );
 
 export default router;

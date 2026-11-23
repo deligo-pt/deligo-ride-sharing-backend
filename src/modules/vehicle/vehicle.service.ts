@@ -1,6 +1,7 @@
 import prisma from "../../config/db";
 import { uploadToCloudinary } from "../../utils/cloudinary";
 import { CreateVehicleInput, UpdateVehicleInput, ReviewVehicleInput } from "./vehicle.validation";
+import { BadRequestError, NotFoundError } from '../../utils/errors';
 
 // ─── Shared vehicle select shape ───────────────────────────────────────────────
 const vehicleSelect = {
@@ -35,11 +36,13 @@ const vehicleSelect = {
 // ─── POST /api/v1/vehicles ────────────────────────────────────────────────────
 // Driver registers their vehicle. Only one vehicle per driver profile is allowed.
 
-export const createVehicle = async (userId: string, payload: CreateVehicleInput) => {
+const createVehicle = async (userId: string, payload: CreateVehicleInput) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found. You must be a registered driver to add a vehicle.");
+    throw new NotFoundError('Driver profile', {
+      message: 'Driver profile not found. You must be a registered driver to add a vehicle.',
+    });
   }
 
   const existingVehicle = await prisma.vehicle.findUnique({
@@ -47,7 +50,9 @@ export const createVehicle = async (userId: string, payload: CreateVehicleInput)
   });
 
   if (existingVehicle) {
-    throw new Error("A vehicle is already registered for this driver profile. Use PATCH to update it.");
+    throw new BadRequestError(
+      'A vehicle is already registered for this driver profile. Use PATCH to update it.',
+    );
   }
 
   const existingPlate = await prisma.vehicle.findUnique({
@@ -55,7 +60,9 @@ export const createVehicle = async (userId: string, payload: CreateVehicleInput)
   });
 
   if (existingPlate) {
-    throw new Error(`License plate "${payload.licensePlate}" is already registered to another vehicle.`);
+    throw new BadRequestError(
+      `License plate "${payload.licensePlate}" is already registered to another vehicle.`,
+    );
   }
 
   return await prisma.vehicle.create({
@@ -76,11 +83,11 @@ export const createVehicle = async (userId: string, payload: CreateVehicleInput)
 // ─── GET /api/v1/vehicles/me ──────────────────────────────────────────────────
 // Driver fetches their own vehicle.
 
-export const getMyVehicle = async (userId: string) => {
+const getMyVehicle = async (userId: string) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found.");
+    throw new NotFoundError('Driver profile');
   }
 
   const vehicle = await prisma.vehicle.findUnique({
@@ -89,7 +96,9 @@ export const getMyVehicle = async (userId: string) => {
   });
 
   if (!vehicle) {
-    throw new Error("No vehicle found for this driver. Please register your vehicle first.");
+    throw new NotFoundError('Vehicle', {
+      message: 'No vehicle found for this driver. Please register your vehicle first.',
+    });
   }
 
   return vehicle;
@@ -98,7 +107,7 @@ export const getMyVehicle = async (userId: string) => {
 // ─── GET /api/v1/vehicles (ADMIN) ─────────────────────────────────────────────
 // Admin fetches all vehicles with an optional filter by approvalStatus.
 
-export const getAllVehicles = async (statusFilter?: string) => {
+const getAllVehicles = async (statusFilter?: string) => {
   return await prisma.vehicle.findMany({
     where: statusFilter
       ? { approvalStatus: statusFilter as "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED" }
@@ -111,11 +120,11 @@ export const getAllVehicles = async (statusFilter?: string) => {
 // ─── PATCH /api/v1/vehicles ───────────────────────────────────────────────────
 // Driver updates their vehicle information. Re-triggers approval (status → PENDING_REVIEW).
 
-export const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
+const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found.");
+    throw new NotFoundError('Driver profile');
   }
 
   const existingVehicle = await prisma.vehicle.findUnique({
@@ -123,7 +132,9 @@ export const updateMyVehicle = async (userId: string, payload: UpdateVehicleInpu
   });
 
   if (!existingVehicle) {
-    throw new Error("No vehicle found. Please register a vehicle first.");
+    throw new NotFoundError('Vehicle', {
+      message: 'No vehicle found. Please register a vehicle first.',
+    });
   }
 
   // If the driver is changing the license plate, ensure it's not already taken
@@ -132,7 +143,9 @@ export const updateMyVehicle = async (userId: string, payload: UpdateVehicleInpu
       where: { licensePlate: payload.licensePlate },
     });
     if (plateExists) {
-      throw new Error(`License plate "${payload.licensePlate}" is already registered to another vehicle.`);
+      throw new BadRequestError(
+      `License plate "${payload.licensePlate}" is already registered to another vehicle.`,
+    );
     }
   }
 
@@ -158,14 +171,14 @@ export const updateMyVehicle = async (userId: string, payload: UpdateVehicleInpu
 // ─── POST /api/v1/vehicles/photos ─────────────────────────────────────────────
 // Driver uploads vehicle photos (up to 5). Appends to existing photoUrls.
 
-export const uploadVehiclePhotos = async (
+const uploadVehiclePhotos = async (
   userId: string,
   files: Express.Multer.File[]
 ) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
   if (!driverProfile) {
-    throw new Error("Driver profile not found.");
+    throw new NotFoundError('Driver profile');
   }
 
   const vehicle = await prisma.vehicle.findUnique({
@@ -173,13 +186,15 @@ export const uploadVehiclePhotos = async (
   });
 
   if (!vehicle) {
-    throw new Error("No vehicle found. Please register a vehicle before uploading photos.");
+    throw new NotFoundError('Vehicle', {
+      message: 'No vehicle found. Please register a vehicle before uploading photos.',
+    });
   }
 
   const existingPhotoCount = vehicle.photoUrls.length;
   if (existingPhotoCount + files.length > 5) {
-    throw new Error(
-      `You can upload a maximum of 5 vehicle photos. You currently have ${existingPhotoCount} and are trying to add ${files.length} more.`
+    throw new BadRequestError(
+      `You can upload a maximum of 5 vehicle photos. You currently have ${existingPhotoCount} and are trying to add ${files.length} more.`,
     );
   }
 
@@ -206,7 +221,7 @@ export const uploadVehiclePhotos = async (
 // ─── PATCH /api/v1/vehicles/:id/review (ADMIN) ────────────────────────────────
 // Admin reviews a vehicle registration (Approve / Reject / Suspend).
 
-export const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInput) => {
+const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInput) => {
   const vehicle = await prisma.vehicle.findUnique({
     where: { id: vehicleId },
     include: {
@@ -215,11 +230,11 @@ export const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInp
   });
 
   if (!vehicle) {
-    throw new Error("Vehicle not found.");
+    throw new NotFoundError('Vehicle');
   }
 
   if (vehicle.approvalStatus === payload.approvalStatus) {
-    throw new Error(`Vehicle is already ${payload.approvalStatus}.`);
+    throw new BadRequestError(`Vehicle is already ${payload.approvalStatus}.`);
   }
 
   return await prisma.vehicle.update({
@@ -231,4 +246,13 @@ export const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInp
     },
     select: vehicleSelect,
   });
+};
+
+export const VehicleService = {
+  createVehicle,
+  getMyVehicle,
+  getAllVehicles,
+  updateMyVehicle,
+  uploadVehiclePhotos,
+  reviewVehicle,
 };

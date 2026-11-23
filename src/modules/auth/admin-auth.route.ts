@@ -1,43 +1,30 @@
 import { Router } from 'express';
 import { authenticate, requireRole } from '../../middlewares/auth';
-import { validate } from '../../middlewares/validate';
-import { LoginSchema } from './auth.validation';
-import { CreateAdminSchema, SetAdminPasswordSchema } from './admin-auth.validation';
-import {
-  adminLoginHandler,
-  createAdminHandler,
-  setAdminPasswordHandler,
-} from './admin-auth.controller';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { AuthValidation } from './auth.validation';
+import { AdminAuthValidation } from './admin-auth.validation';
+import { AdminAuthController } from './admin-auth.controller';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin Auth Router
 // Mounted at: /api/v1/auth/admin
 //
-// NOTE: Admins reuse the shared endpoints for session management:
-//   - POST /api/v1/auth/refresh-token
-//   - POST /api/v1/auth/logout
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Admins reuse the shared endpoints for session management:
+//   POST /api/v1/auth/refresh-token · /logout
 const router: Router = Router();
 
-router.post(
-  '/login',
-  validate({ body: LoginSchema }),
-  adminLoginHandler,
-);
+router.post('/login', validateRequest(AuthValidation.login), AdminAuthController.login);
 
 router.post(
   '/create',
   authenticate,
   requireRole('ADMIN', 'SUPER_ADMIN'),
-  validate({ body: CreateAdminSchema }),
-  createAdminHandler,
+  validateRequest(AdminAuthValidation.create),
+  AdminAuthController.createAdmin,
 );
 
 router.post(
   '/set-password',
-  validate({ body: SetAdminPasswordSchema }),
-  setAdminPasswordHandler,
+  validateRequest(AdminAuthValidation.setPassword),
+  AdminAuthController.setAdminPassword,
 );
 
 export default router;

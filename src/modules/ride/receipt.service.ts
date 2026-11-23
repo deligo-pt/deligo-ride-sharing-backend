@@ -1,5 +1,5 @@
 import prisma from '../../config/db';
-import { NotificationEngine } from '../notification/notification.service';
+import { NotificationService } from '../notification/notification.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Receipt Service — PRD 3.12 (Email Receipt after ride completion)
@@ -147,7 +147,7 @@ function buildReceiptHtml(ride: {
  * Designed to be called fire-and-forget (no await) from ride.service.ts
  * so it never blocks the completion API response.
  */
-export async function generateAndSendReceipt(rideId: string): Promise<void> {
+async function generateAndSendReceipt(rideId: string): Promise<void> {
   try {
     const ride = await prisma.ride.findUnique({
       where: { id: rideId },
@@ -176,7 +176,7 @@ export async function generateAndSendReceipt(rideId: string): Promise<void> {
       user,
     });
 
-    await NotificationEngine.dispatch(
+    await NotificationService.dispatch(
       {
         userId:    user.id,
         title:     '🧾 Your Deligo Trip Receipt',
@@ -193,3 +193,7 @@ export async function generateAndSendReceipt(rideId: string): Promise<void> {
     console.error('[RECEIPT] ❌ Failed to generate/send receipt:', err);
   }
 }
+
+export const ReceiptService = {
+  generateAndSendReceipt,
+};

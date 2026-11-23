@@ -150,3 +150,22 @@ export function requireRole(...allowedRoles: string[]) {
     }
   };
 }
+
+/**
+ * Attaches req.user when a Bearer token is supplied, but never rejects: an
+ * absent, expired or invalid token simply proceeds without req.user. Used by
+ * endpoints that must also work for cookie-only clients (e.g. logout).
+ */
+export async function optionalAuthenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    return authenticate(req, res, () => {
+      // Token verification failed (or succeeded): proceed either way.
+      next();
+    });
+  }
+  next();
+}

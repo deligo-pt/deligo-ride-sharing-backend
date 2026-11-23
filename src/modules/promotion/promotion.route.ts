@@ -1,27 +1,29 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/auth';
-import * as promotionsController from './promotion.controller';
+import { authenticate, authorize } from '../../middlewares/auth';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { PromotionController } from './promotion.controller';
+import { PromotionValidation } from './promotion.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Promotions Router
-// Mounted at: /api/v1/promotions  (see app.ts)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Mounted at: /api/v1/promotions (see src/routes/index.ts)
 const router: Router = Router();
 
-/**
- * POST /api/v1/promotions
- * Create a new promo code.
- * Role: ADMIN
- */
-router.post('/', authenticate, promotionsController.createPromoCodeHandler);
+// Create a promo code — ADMIN
+router.post(
+  '/',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(PromotionValidation.create),
+  PromotionController.createPromoCode,
+);
 
-/**
- * POST /api/v1/promotions/validate
- * Validate a promo code against an estimated fare.
- * Role: CUSTOMER
- * Note: Must be declared before any future /:id routes to avoid param shadowing.
- */
-router.post('/validate', authenticate, promotionsController.validatePromoCodeHandler);
+// Validate a promo code against an estimated fare — CUSTOMER.
+// Declared before any future /:id routes to avoid param shadowing.
+router.post(
+  '/validate',
+  authenticate,
+  authorize('CUSTOMER'),
+  validateRequest(PromotionValidation.validate),
+  PromotionController.validatePromoCode,
+);
 
 export default router;

@@ -32,10 +32,22 @@ Each feature is encapsulated in its own module inside `src/modules/`, one folder
 ```text
 src/modules/
 └── ride/
-    ├── ride.route.ts        # Express endpoint definitions & middleware mapping
-    ├── ride.controller.ts   # Request parsing, service invocation, and response formatting
-    ├── ride.service.ts      # Core business logic and Prisma ORM data access
-    └── ride.validation.ts   # Zod schemas for strict request body/query validation
+    ├── ride.route.ts        # Declarative only: authenticate → authorize → validateRequest → controller
+    ├── ride.controller.ts   # catchAsync handlers → service call → sendResponse; exports RideController
+    ├── ride.service.ts      # HTTP-agnostic business logic + Prisma access; throws AppErrors; exports RideService
+    └── ride.validation.ts   # Zod schemas as { body?, query?, params? }; exports RideValidation
+```
+
+Every layer exports exactly one grouped object (`<Module>Route` is the default-exported router, `<Module>Controller`, `<Module>Service`, `<Module>Validation`), e.g.:
+
+```ts
+router.post(
+  '/request',
+  authenticate,
+  authorize('CUSTOMER'),
+  validateRequest(RideValidation.requestRide),
+  RideController.requestRide,
+);
 ```
 
 All module routers are registered in one place, `src/routes/index.ts`, which `src/app.ts` mounts at `/api/v1`.
@@ -145,6 +157,7 @@ npx prisma studio
 When contributing to this repository, please adhere to the following guidelines:
 
 - **Strict Type Safety:** The use of `any` is strictly prohibited. Define explicit TypeScript interfaces or infer them dynamically using Prisma and Zod.
-- **Graceful Error Handling:** Controllers must wrap execution in `try/catch` blocks. Unhandled exceptions should be passed to `next(error)` to be caught and formatted by the global error handler.
+- **Graceful Error Handling:** Controllers wrap handlers in `catchAsync` (no `try/catch`); services throw `AppError` subclasses (`BadRequestError`, `NotFoundError`, `ForbiddenError`, `ConflictError`, …). The global error handler formats every failure.
 - **Database Migrations:** Any modification to the Prisma schema (`prisma/schema/*.prisma`) must ship with a migration (`npx prisma migrate dev`), followed by `npx prisma generate`. Never use `prisma db push --accept-data-loss` against shared or production databases to ensure type definitions remain synchronized.
-- **Service Isolation:** Controllers should never interact with the database directly. All Prisma logic must be abstracted into the respective Domain Service.
+- **Service Isolation:** Controllers should never interact with the database directly. All Prisma logic must be abstracted into the respective Domain Service, which must stay HTTP-agnostic (no `Request`/`Response`).
+- **Validation:** Zod schemas live in `<module>.validation.ts` and run through `validateRequest(...)` in the route; controllers never call `.parse()`.

@@ -127,7 +127,7 @@ const APPLE_JWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/ke
 // Internal Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function hashSha256(value: string): string {
+function hashSha256(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
@@ -156,7 +156,7 @@ function maskTarget(
   return '***';
 }
 
-export function sanitizeUser(user: {
+function sanitizeUser(user: {
   id: string;
   email: string | null;
   phone: string | null;
@@ -192,7 +192,7 @@ export function sanitizeUser(user: {
  * Generates a unique referral code for a newly registered user.
  * Retries up to 5 times against DB collisions, with a timestamp-based fallback.
  */
-export async function generateUniqueReferralCode(): Promise<string> {
+async function generateUniqueReferralCode(): Promise<string> {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   for (let attempt = 0; attempt < 5; attempt++) {
     let code = 'DL';
@@ -350,7 +350,7 @@ function sendWelcomeEmailAsync(user: {
 // OAuth Token Verification
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function verifyGoogleIdToken(idToken: string): Promise<GooglePayload> {
+async function verifyGoogleIdToken(idToken: string): Promise<GooglePayload> {
   try {
     const audiences = config.google.audiences;
     if (!audiences || audiences.length === 0) {
@@ -391,7 +391,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GooglePayloa
 // Signup Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function initiateSignup(
+async function initiateSignup(
   input: InitiateSignupInput,
   role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER' = 'CUSTOMER',
 ): Promise<{
@@ -491,7 +491,7 @@ export async function initiateSignup(
   };
 }
 
-export async function resendSignupOtp(input: ResendOtpInput): Promise<{
+async function resendSignupOtp(input: ResendOtpInput): Promise<{
   signupSessionId: string;
   channel: 'EMAIL' | 'PHONE';
   maskedTarget: string;
@@ -577,7 +577,7 @@ export async function resendSignupOtp(input: ResendOtpInput): Promise<{
   };
 }
 
-export async function verifySignupOtp(
+async function verifySignupOtp(
   input: VerifyOtpInput,
   clientInfo: ClientInfo,
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
@@ -712,7 +712,7 @@ export async function verifySignupOtp(
 // Login & Social Auth Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function login(
+async function login(
   input: LoginInput,
   clientInfo: ClientInfo,
   allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
@@ -773,7 +773,7 @@ export async function login(
   return issueSessionAndTokens(user, Boolean(input.rememberMe), clientInfo);
 }
 
-export async function handleSocialAuth(
+async function handleSocialAuth(
   profile: SocialUserProfile,
   options: SocialAuthOptions,
   clientInfo: ClientInfo,
@@ -985,7 +985,7 @@ export async function handleSocialAuth(
   return issueSessionAndTokens(newUser, rememberMe, clientInfo);
 }
 
-export async function googleLogin(
+async function googleLogin(
   input: GoogleLoginInput,
   clientInfo: ClientInfo,
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
@@ -1017,7 +1017,7 @@ export async function googleLogin(
   );
 }
 
-export async function facebookLogin(
+async function facebookLogin(
   input: FacebookLoginInput,
   clientInfo: ClientInfo,
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
@@ -1124,7 +1124,7 @@ export async function facebookLogin(
   );
 }
 
-export async function appleLogin(
+async function appleLogin(
   input: AppleLoginInput,
   clientInfo: ClientInfo,
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
@@ -1220,7 +1220,7 @@ export async function appleLogin(
 // Session Refresh & Logout Operations
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function refreshAccessToken(
+async function refreshAccessToken(
   refreshToken: string,
 ): Promise<{ tokens: AuthTokens; rememberMe: boolean }> {
   if (!refreshToken) {
@@ -1336,7 +1336,7 @@ export async function refreshAccessToken(
  * Revokes every login session of a user and force-disconnects their sockets.
  * Use on password change, admin suspension / ban, or detected token theft.
  */
-export async function revokeAllUserSessions(userId: string): Promise<void> {
+async function revokeAllUserSessions(userId: string): Promise<void> {
   await prisma.session.updateMany({
     where: { userId, isRevoked: false },
     data: { isRevoked: true },
@@ -1354,7 +1354,7 @@ export async function revokeAllUserSessions(userId: string): Promise<void> {
   disconnectUserSockets(userId);
 }
 
-export async function logoutUser(options: {
+async function logoutUser(options: {
   sessionId?: string;
   jti?: string;
   exp?: number;
@@ -1399,3 +1399,21 @@ export async function logoutUser(options: {
 
   return { message: 'Successfully logged out' };
 }
+
+export const AuthService = {
+  hashSha256,
+  sanitizeUser,
+  generateUniqueReferralCode,
+  verifyGoogleIdToken,
+  initiateSignup,
+  resendSignupOtp,
+  verifySignupOtp,
+  login,
+  handleSocialAuth,
+  googleLogin,
+  facebookLogin,
+  appleLogin,
+  refreshAccessToken,
+  revokeAllUserSessions,
+  logoutUser,
+};

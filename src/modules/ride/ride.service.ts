@@ -2,7 +2,7 @@ import { Prisma, RideStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import prisma from '../../config/db';
 import { LocationService, redis } from '../../utils/redis';
-import { PricingEngine } from './pricing.service';
+import { PricingService } from './pricing.service';
 import { getMultiStopRouteData } from '../../utils/map.service';
 import { addScheduledRideJob } from '../../queues/ride.queue';
 import type {
@@ -13,7 +13,7 @@ import type {
   UpdateRideStatusDto,
   CancelRideDto,
 } from './ride.validation';
-import { generateAndSendReceipt } from './receipt.service';
+import { ReceiptService } from './receipt.service';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '.
 /**
  * Persist the driver's live coordinates in Redis AND Postgres.
  */
-export async function updateDriverLocation(
+async function updateDriverLocation(
   driverId: string,
   dto: UpdateLocationDto,
 ): Promise<void> {
@@ -43,7 +43,7 @@ export async function updateDriverLocation(
 /**
  * Find available, KYC-approved drivers near a pickup point.
  */
-export async function findNearbyDrivers(dto: SearchRideDto) {
+async function findNearbyDrivers(dto: SearchRideDto) {
   const candidateIds = await LocationService.findNearbyDrivers(dto.pickupLng, dto.pickupLat, 5);
 
   if (candidateIds.length === 0) {
@@ -71,10 +71,10 @@ export async function findNearbyDrivers(dto: SearchRideDto) {
 /**
  * Returns one itemised FareBreakdown per vehicle tier (or a single one
  * if vehicleType is specified). Promo code is validated and applied inside
- * PricingEngine.
+ * PricingService.
  */
-export async function estimateFare(userId: string, dto: EstimateFareDto) {
-  const estimates = await PricingEngine.calculateEstimate(
+async function estimateFare(userId: string, dto: EstimateFareDto) {
+  const estimates = await PricingService.calculateEstimate(
     dto.pickupLat,
     dto.pickupLng,
     dto.dropoffLat,
@@ -112,7 +112,7 @@ export interface RequestRideResult {
  *  5. Return the Ride + the list of dispatched driver IDs (the caller /
  *     future socket layer uses these to push notifications).
  */
-export async function requestRide(userId: string, dto: RequestRideDto): Promise<RequestRideResult> {
+async function requestRide(userId: string, dto: RequestRideDto): Promise<RequestRideResult> {
   // 1. Resolve CustomerProfile
   const customerProfile = await prisma.customerProfile.findUnique({
     where: { userId },
@@ -120,7 +120,7 @@ export async function requestRide(userId: string, dto: RequestRideDto): Promise<
   });
 
   if (!customerProfile) {
-    throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
+    throw new NotFoundError('CustomerProfile for this user. Create a customer profile first.');
   }
 
   const activeRide = await prisma.ride.findFirst({
@@ -131,7 +131,7 @@ export async function requestRide(userId: string, dto: RequestRideDto): Promise<
   });
 
   if (activeRide) {
-    throw new Error('CUSTOMER_HAS_ACTIVE_RIDE');
+    throw new ConflictError('You already have an active ride.');
   }
 
   const estimateKey = `fare_estimate:${userId}`;
@@ -140,7 +140,7 @@ export async function requestRide(userId: string, dto: RequestRideDto): Promise<
 
   const cachedEstimates = JSON.parse(estimateCache ?? 'null') as { subtotal?: number }[] | null;
   if (dto.estimatedFare !== cachedEstimates?.[0]?.subtotal) {
-    throw new Error('ESTIMATED_FARE_MISMATCH');
+    throw new BadRequestError('Estimated fare does not match the latest estimate. Please request a new fare estimate.', undefined, 'ESTIMATED_FARE_MISMATCH');
   }
 
   // 2. Build full coordinate chain and fetch cumulative route data
@@ -250,11 +250,11 @@ const RIDE_TRANSITIONS: Record<RideStatus, readonly RideStatus[]> = {
   CANCELLED: [],
 };
 
-export function canTransitionRide(from: RideStatus, to: RideStatus): boolean {
+function canTransitionRide(from: RideStatus, to: RideStatus): boolean {
   return RIDE_TRANSITIONS[from].includes(to);
 }
 
-export function assertRideTransition(from: RideStatus, to: RideStatus): void {
+function assertRideTransition(from: RideStatus, to: RideStatus): void {
   if (!canTransitionRide(from, to)) {
     throw new BadRequestError(`Invalid ride status transition: ${from} → ${to}.`);
   }
@@ -279,7 +279,7 @@ const rideStateConflict = () =>
  * rolls back. The driver is claimed the same way (`isAvailable = true` in the
  * WHERE), so one driver cannot accept two rides at once either.
  */
-export async function acceptRide(driverUserId: string, rideId: string) {
+async function acceptRide(driverUserId: string, rideId: string) {
   return prisma.$transaction(async (tx) => {
     // 1. Resolve the driver profile + eligibility (404 vs 403 vs "busy" decided here)
     const driverProfile = await tx.driverProfile.findUnique({
@@ -293,7 +293,7 @@ export async function acceptRide(driverUserId: string, rideId: string) {
     });
 
     if (!driverProfile) {
-      throw new Error('DRIVER_PROFILE_NOT_FOUND');
+      throw new NotFoundError('DriverProfile for this user. Complete driver onboarding first.');
     }
 
     if (
@@ -319,7 +319,7 @@ export async function acceptRide(driverUserId: string, rideId: string) {
     });
 
     if (driverLock.count === 0) {
-      throw new Error('DRIVER_NOT_AVAILABLE');
+      throw new BadRequestError('You are not available to accept rides.');
     }
 
     // 3. Claim the ride
@@ -335,7 +335,7 @@ export async function acceptRide(driverUserId: string, rideId: string) {
     if (claim.count === 0) {
       // Throwing rolls back the driver lock above.
       const exists = await tx.ride.findUnique({ where: { id: rideId }, select: { id: true } });
-      throw new Error(exists ? 'RIDE_NOT_AVAILABLE' : 'RIDE_NOT_FOUND');
+      throw exists ? new BadRequestError('Ride is no longer available for acceptance.') : new NotFoundError('Ride');
     }
 
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
@@ -365,7 +365,7 @@ const STATUS_TIMESTAMP_MAP = {
  * - On COMPLETED: puts the driver back on the map and increments totalRides
  *   for both the driver and the customer — in the same transaction, exactly once.
  */
-export async function updateRideStatus(
+async function updateRideStatus(
   driverUserId: string,
   rideId: string,
   dto: UpdateRideStatusDto,
@@ -377,7 +377,7 @@ export async function updateRideStatus(
   });
 
   if (!ride || ride.isDeleted) {
-    throw new Error('RIDE_NOT_FOUND');
+    throw new NotFoundError('Ride');
   }
 
   // 2. Resolve driver profile and verify ownership (before revealing any state)
@@ -387,7 +387,7 @@ export async function updateRideStatus(
   });
 
   if (!driverProfile || ride.driverProfileId !== driverProfile.id) {
-    throw new Error('RIDE_FORBIDDEN');
+    throw new ForbiddenError('You are not the assigned driver for this ride.');
   }
 
   // 3. State machine check
@@ -418,11 +418,11 @@ export async function updateRideStatus(
     return { ride: updatedRide, fareBreakdown: null };
   }
 
-  // 6. COMPLETED: calculate final fare via PricingEngine
+  // 6. COMPLETED: calculate final fare via PricingService
   const actualDistKm = dto.actualDistanceKm ?? dto.finalDistanceKm ?? 1;
   const actualDurMin = dto.actualDurationMinutes ?? dto.finalDurationMinutes ?? 10;
 
-  const fareBreakdown = await PricingEngine.calculateFinalFare(
+  const fareBreakdown = await PricingService.calculateFinalFare(
     ride.vehicleType,
     actualDistKm,
     actualDurMin,
@@ -456,7 +456,7 @@ export async function updateRideStatus(
   });
 
   // Fire-and-forget: send receipt email + SMS — does NOT block the API response
-  void generateAndSendReceipt(rideId);
+  void ReceiptService.generateAndSendReceipt(rideId);
 
   return { ride: updatedRide, fareBreakdown };
 
@@ -472,7 +472,7 @@ export async function updateRideStatus(
  * conditional UPDATE so a ride that was completed/cancelled/re-assigned in the
  * meantime is never overwritten (→ 409).
  */
-export async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
+async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
   // 1. Fetch the ride with just enough data for the teardown
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
@@ -487,17 +487,17 @@ export async function cancelRide(userId: string, rideId: string, dto: CancelRide
   });
 
   if (!ride || ride.isDeleted) {
-    throw new Error('RIDE_NOT_FOUND');
+    throw new NotFoundError('Ride');
   }
 
   // Actor ownership: only this ride's customer or assigned driver
   if (ride.customerProfile.userId !== userId && ride.driverProfile?.userId !== userId) {
-    throw new Error('RIDE_FORBIDDEN');
+    throw new ForbiddenError('You are not the assigned driver for this ride.');
   }
 
   // Prevent cancelling an already-terminal ride
   if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
-    throw new Error('RIDE_ALREADY_TERMINAL');
+    throw new BadRequestError('Ride is already completed or cancelled.');
   }
 
   assertRideTransition(ride.status, 'CANCELLED');
@@ -536,7 +536,7 @@ export async function cancelRide(userId: string, rideId: string, dto: CancelRide
  * customer, its assigned driver, or an ADMIN. Call this BEFORE creating alerts
  * or notifying anyone, so a request for someone else's ride has no side effects.
  */
-export async function assertCanRaiseEmergency(
+async function assertCanRaiseEmergency(
   requester: { id: string; role: string },
   rideId: string,
 ): Promise<{ id: string; status: RideStatus }> {
@@ -569,7 +569,7 @@ export async function assertCanRaiseEmergency(
  * was read. Conditional write — a ride that changed state in the meantime is
  * left alone. Returns whether the ride was actually updated.
  */
-export async function escalateRideToEmergency(ride: {
+async function escalateRideToEmergency(ride: {
   id: string;
   status: RideStatus;
 }): Promise<boolean> {
@@ -601,7 +601,7 @@ const TRACKING_BASE_URL = 'https://deligo.com/track';
  * A read-only guest may later present this token to join the Socket.io room
  * without a driver or customer account.
  */
-export async function shareRide(
+async function shareRide(
   userId: string,
   rideId: string,
 ): Promise<{ trackingToken: string; trackingUrl: string }> {
@@ -612,7 +612,7 @@ export async function shareRide(
   });
 
   if (!customerProfile) {
-    throw new Error('CUSTOMER_PROFILE_NOT_FOUND');
+    throw new NotFoundError('CustomerProfile for this user. Create a customer profile first.');
   }
 
   // 2. Verify ride ownership and active status
@@ -622,15 +622,15 @@ export async function shareRide(
   });
 
   if (!ride) {
-    throw new Error('RIDE_NOT_FOUND');
+    throw new NotFoundError('Ride');
   }
 
   if (ride.customerProfile.userId !== userId) {
-    throw new Error('RIDE_FORBIDDEN');
+    throw new ForbiddenError('You are not the assigned driver for this ride.');
   }
 
   if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
-    throw new Error('RIDE_ALREADY_TERMINAL');
+    throw new BadRequestError('Ride is already completed or cancelled.');
   }
 
   // 3. Generate token and persist in Redis
@@ -644,3 +644,18 @@ export async function shareRide(
     trackingUrl: `${TRACKING_BASE_URL}/${trackingToken}`,
   };
 }
+
+export const RideService = {
+  updateDriverLocation,
+  findNearbyDrivers,
+  estimateFare,
+  requestRide,
+  canTransitionRide,
+  assertRideTransition,
+  acceptRide,
+  updateRideStatus,
+  cancelRide,
+  assertCanRaiseEmergency,
+  escalateRideToEmergency,
+  shareRide,
+};

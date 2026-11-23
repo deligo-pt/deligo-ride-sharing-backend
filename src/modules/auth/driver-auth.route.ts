@@ -1,34 +1,20 @@
 import { Router } from 'express';
-import { validate } from '../../middlewares/validate';
-import { InitiateSignupSchema, LoginSchema } from './auth.validation';
-import {
-  driverInitiateSignupHandler,
-  driverLoginHandler,
-} from './driver-auth.controller';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { AuthValidation } from './auth.validation';
+import { DriverAuthController } from './driver-auth.controller';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Driver Auth Router
 // Mounted at: /api/v1/auth/driver
 //
-// NOTE: Drivers reuse the shared endpoints for OTP verification and session mgmt:
-//   - POST /api/v1/auth/signup/resend-otp
-//   - POST /api/v1/auth/signup/verify-otp
-//   - POST /api/v1/auth/refresh-token
-//   - POST /api/v1/auth/logout
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Drivers reuse the shared endpoints for OTP verification and session management:
+//   POST /api/v1/auth/signup/resend-otp · /signup/verify-otp · /refresh-token · /logout
 const router: Router = Router();
 
 router.post(
   '/signup/initiate',
-  validate({ body: InitiateSignupSchema }),
-  driverInitiateSignupHandler,
+  validateRequest(AuthValidation.initiateSignup),
+  DriverAuthController.initiateSignup,
 );
 
-router.post(
-  '/login',
-  validate({ body: LoginSchema }),
-  driverLoginHandler,
-);
+router.post('/login', validateRequest(AuthValidation.login), DriverAuthController.login);
 
 export default router;

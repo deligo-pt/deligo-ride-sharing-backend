@@ -10,7 +10,7 @@ const isoDate = z
 // ─── POST /api/v1/vehicles ────────────────────────────────────────────────────
 // Driver creates their vehicle with full information.
 
-export const createVehicleSchema = z.object({
+const createVehicleSchema = z.object({
   body: z.object({
     vehicleClass: z.nativeEnum(VehicleClass, {
       error: `vehicleClass must be one of: ${Object.values(VehicleClass).join(", ")}`,
@@ -38,7 +38,7 @@ export type CreateVehicleInput = z.infer<typeof createVehicleSchema>["body"];
 // ─── PATCH /api/v1/vehicles/:id ───────────────────────────────────────────────
 // Driver updates their vehicle information (all fields optional).
 
-export const updateVehicleSchema = z.object({
+const updateVehicleSchema = z.object({
   body: createVehicleSchema.shape.body.partial(),
 });
 
@@ -47,7 +47,7 @@ export type UpdateVehicleInput = z.infer<typeof updateVehicleSchema>["body"];
 // ─── PATCH /api/v1/vehicles/:id/review ───────────────────────────────────────
 // Admin approves, rejects, or suspends a vehicle registration.
 
-export const reviewVehicleSchema = z.object({
+const reviewVehicleSchema = z.object({
   body: z
     .object({
       approvalStatus: z.enum(["APPROVED", "REJECTED", "SUSPENDED"]),
@@ -63,3 +63,19 @@ export const reviewVehicleSchema = z.object({
 });
 
 export type ReviewVehicleInput = z.infer<typeof reviewVehicleSchema>["body"];
+
+// ─── GET /api/v1/vehicles (ADMIN) ─────────────────────────────────────────────
+const listVehiclesQuerySchema = z.object({
+  status: z.string().optional(),
+});
+
+export type ListVehiclesQuery = z.infer<typeof listVehiclesQuerySchema>;
+
+// ─── Grouped validation (consumed by validateRequest in vehicle.route.ts) ─────
+
+export const VehicleValidation = {
+  create: { body: createVehicleSchema.shape.body },
+  update: { body: updateVehicleSchema.shape.body },
+  review: { body: reviewVehicleSchema.shape.body },
+  list: { query: listVehiclesQuerySchema },
+};

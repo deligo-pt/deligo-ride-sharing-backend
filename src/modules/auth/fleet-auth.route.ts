@@ -1,27 +1,20 @@
 import { Router } from 'express';
-import { validate } from '../../middlewares/validate';
-import { InitiateSignupSchema, LoginSchema } from './auth.validation';
-import { fleetInitiateSignupHandler, fleetLoginHandler } from './fleet-auth.controller';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { AuthValidation } from './auth.validation';
+import { FleetAuthController } from './fleet-auth.controller';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fleet Manager Auth Router
-// Mounted at: /api/v1/auth/fleet
+// Mounted at: /api/v1/auth/fleet (and /fleet-manager)
 //
-// NOTE: Fleet Managers reuse the shared endpoints for OTP verification and session mgmt:
-//   - POST /api/v1/auth/signup/resend-otp
-//   - POST /api/v1/auth/signup/verify-otp
-//   - POST /api/v1/auth/refresh-token
-//   - POST /api/v1/auth/logout
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Fleet managers reuse the shared endpoints for OTP verification and session management:
+//   POST /api/v1/auth/signup/resend-otp · /signup/verify-otp · /refresh-token · /logout
 const router: Router = Router();
 
 router.post(
   '/signup/initiate',
-  validate({ body: InitiateSignupSchema }),
-  fleetInitiateSignupHandler,
+  validateRequest(AuthValidation.initiateSignup),
+  FleetAuthController.initiateSignup,
 );
 
-router.post('/login', validate({ body: LoginSchema }), fleetLoginHandler);
+router.post('/login', validateRequest(AuthValidation.login), FleetAuthController.login);
 
 export default router;

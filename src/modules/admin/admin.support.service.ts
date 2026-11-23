@@ -3,9 +3,9 @@ import prisma from '../../config/db';
 import { NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
 import { ListTicketsQuery, UpdateTicketInput, AddTicketMessageInput } from './admin.support.validation';
-import { NotificationEngine } from '../notification/notification.service';
+import { NotificationService } from '../notification/notification.service';
 
-export const listSupportTickets = async (query: ListTicketsQuery) => {
+const listSupportTickets = async (query: ListTicketsQuery) => {
   const { status, priority, page, limit } = query;
   const skip = (page - 1) * limit;
 
@@ -35,7 +35,7 @@ export const listSupportTickets = async (query: ListTicketsQuery) => {
   return { tickets, meta: buildPaginationMeta(total, page, limit) };
 };
 
-export const updateSupportTicket = async (ticketId: string, adminId: string, payload: UpdateTicketInput) => {
+const updateSupportTicket = async (ticketId: string, adminId: string, payload: UpdateTicketInput) => {
   const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
 
   if (!ticket) {
@@ -62,7 +62,7 @@ export const updateSupportTicket = async (ticketId: string, adminId: string, pay
   });
 };
 
-export const addTicketMessage = async (ticketId: string, adminId: string, payload: AddTicketMessageInput) => {
+const addTicketMessage = async (ticketId: string, adminId: string, payload: AddTicketMessageInput) => {
   const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
 
   if (!ticket) {
@@ -86,7 +86,7 @@ export const addTicketMessage = async (ticketId: string, adminId: string, payloa
   }
 
   // Dispatch notification to the user
-  void NotificationEngine.dispatch({
+  void NotificationService.dispatch({
     userId: ticket.userId,
     type: 'SYSTEM',
     title: `New reply on Support Ticket #${ticketId.slice(0, 8)}`,
@@ -95,4 +95,10 @@ export const addTicketMessage = async (ticketId: string, adminId: string, payloa
   });
 
   return message;
+};
+
+export const AdminSupportService = {
+  listSupportTickets,
+  updateSupportTicket,
+  addTicketMessage,
 };

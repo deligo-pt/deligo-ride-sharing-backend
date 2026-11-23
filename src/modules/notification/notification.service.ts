@@ -15,6 +15,7 @@ import type {
   NotificationChannel,
 } from './notification.validation';
 import { config } from '../../config';
+import { ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRD 3.12: Notification Engine
@@ -28,12 +29,12 @@ import { config } from '../../config';
 //   • EMAIL     → [MOCK] placeholder for SendGrid / SES
 //
 // Usage:
-//   import { NotificationEngine } from '...notifications.service';
-//   await NotificationEngine.dispatch({ userId, title, message, type });
+//   import { NotificationService } from '...notifications.service';
+//   await NotificationService.dispatch({ userId, title, message, type });
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Socket.io server reference ────────────────────────────────────────────────
-// Injected once at startup from server.ts via NotificationEngine.setIo().
+// Injected once at startup from server.ts via NotificationService.setIo().
 // Kept as a module-level singleton so ride/other services can call dispatch()
 // without carrying the io instance around.
 type IoServer = SocketIoServer<
@@ -47,9 +48,9 @@ let _io: IoServer | null = null;
 
 /**
  * Returns the Socket.io server instance, or null if not yet initialised.
- * Use this to emit to arbitrary rooms from outside the NotificationEngine.
+ * Use this to emit to arbitrary rooms from outside the NotificationService.
  */
-export function getIo(): IoServer | null {
+function getIo(): IoServer | null {
   return _io;
 }
 
@@ -192,24 +193,18 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
   }
 }
 
-/**
- * Public helpers exposed for use in receipt and other direct dispatch
- * scenarios where callers already have the phone/email value.
- */
-export { sendSMS, sendEmail };
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const NotificationEngine = {
+export const NotificationService = {
   /**
    * Inject the Socket.io server instance.
    * Call this once from server.ts immediately after initSocketServer().
    */
   setIo(io: IoServer): void {
     _io = io;
-    console.info('✅ NotificationEngine: Socket.io server registered');
+    console.info('✅ NotificationService: Socket.io server registered');
   },
 
   /**
@@ -218,7 +213,7 @@ export const NotificationEngine = {
    * Default channels: ['IN_APP', 'WEBSOCKET']
    *
    * @example
-   * await NotificationEngine.dispatch({
+   * await NotificationService.dispatch({
    *   userId:   customerUserId,
    *   title:    'Driver Assigned',
    *   message:  'Your driver is on the way!',
@@ -274,6 +269,16 @@ export const NotificationEngine = {
       }
     }
   },
+
+  // ── Direct-dispatch helpers (callers that already hold the phone/email) ──
+  sendSMS,
+  sendEmail,
+
+  // ── Inbox queries / token storage (used by the controller) ──
+  getIo,
+  getInbox,
+  markAsRead,
+  markAllAsRead,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,7 +289,7 @@ export const NotificationEngine = {
  * Return paginated notifications for a user, newest first.
  * Optionally filter to unread only.
  */
-export async function getInbox(userId: string, query: ListNotificationsQuery) {
+async function getInbox(userId: string, query: ListNotificationsQuery) {
   const { page, limit, unread } = query;
   const skip = (page - 1) * limit;
 
@@ -321,18 +326,18 @@ export async function getInbox(userId: string, query: ListNotificationsQuery) {
  * Mark a single notification as read.
  * Throws if it doesn't exist or doesn't belong to the requesting user.
  */
-export async function markAsRead(userId: string, notificationId: string) {
+async function markAsRead(userId: string, notificationId: string) {
   const notification = await prisma.notification.findUnique({
     where: { id: notificationId },
     select: { id: true, userId: true, isRead: true },
   });
 
   if (!notification) {
-    throw new Error('NOTIFICATION_NOT_FOUND');
+    throw new NotFoundError('Notification');
   }
 
   if (notification.userId !== userId) {
-    throw new Error('NOTIFICATION_FORBIDDEN');
+    throw new ForbiddenError('This notification does not belong to you.');
   }
 
   if (notification.isRead) {
@@ -349,33 +354,12 @@ export async function markAsRead(userId: string, notificationId: string) {
 /**
  * Mark ALL unread notifications as read for the logged-in user.
  */
-export async function markAllAsRead(userId: string) {
+async function markAllAsRead(userId: string) {
   const result = await prisma.notification.updateMany({
     where: { userId, isRead: false },
     data:  { isRead: true, readAt: new Date() },
   });
   return { updatedCount: result.count };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FCM Token Management
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Save (or replace) the FCM push token for a user.
- * Called by the mobile app on login or when the OS issues a new token.
- */
-export async function saveFcmToken(
-  userId: string,
-  fcmToken: string,
-): Promise<{ message: string }> {
-  await prisma.user.update({
-    where: { id: userId },
-    data:  { fcmToken },
-  });
-
-  console.info(`[FCM] Token saved for userId=${userId}`);
-  return { message: 'FCM token saved successfully.' };
 }
 
 // Re-export the type so callers don't need two imports

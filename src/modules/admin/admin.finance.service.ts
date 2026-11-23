@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import { GetLedgerQuery } from './admin.finance.validation';
 
-export const getFinancialLedger = async (query: GetLedgerQuery) => {
+const getFinancialLedger = async (query: GetLedgerQuery) => {
   const { startDate, endDate } = query;
 
   const where: Prisma.RideWhereInput = {
@@ -72,4 +72,8 @@ export const getFinancialLedger = async (query: GetLedgerQuery) => {
     driverEarnings: parseFloat(driverEarnings.toFixed(2)),
     totalCompletedRides,
   };
+};
+
+export const AdminFinanceService = {
+  getFinancialLedger,
 };

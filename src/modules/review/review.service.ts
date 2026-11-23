@@ -1,5 +1,6 @@
 import prisma from '../../config/db';
 import type { CreateReviewDto } from './review.validation';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reviews Service
@@ -15,7 +16,7 @@ import type { CreateReviewDto } from './review.validation';
  *  4. After creating the review, the reviewee's profile stats are recalculated
  *     via a Prisma aggregate and updated atomically.
  */
-export async function createReview(
+async function createReview(
   authorUserId: string,
   role: string,
   dto: CreateReviewDto,
@@ -35,8 +36,8 @@ export async function createReview(
     },
   });
 
-  if (!ride) throw new Error('RIDE_NOT_FOUND');
-  if (ride.status !== 'COMPLETED') throw new Error('RIDE_NOT_COMPLETED');
+  if (!ride) throw new NotFoundError('Ride');
+  if (ride.status !== 'COMPLETED') throw new BadRequestError('You can only review a COMPLETED ride.');
 
   // ── 2. Determine author and reviewee based on caller's role ─────────────────
   let revieweeUserId: string;
@@ -44,25 +45,25 @@ export async function createReview(
   if (role === 'CUSTOMER') {
     // Customer reviews the Driver
     if (ride.customerProfile?.userId !== authorUserId) {
-      throw new Error('RIDE_FORBIDDEN');
+      throw new ForbiddenError('You were not a participant in this ride.');
     }
-    if (!ride.driverProfile) throw new Error('DRIVER_NOT_ASSIGNED');
+    if (!ride.driverProfile) throw new BadRequestError('No driver was assigned to this ride.');
     revieweeUserId = ride.driverProfile.userId;
   } else if (role === 'DRIVER') {
     // Driver reviews the Customer
     if (ride.driverProfile?.userId !== authorUserId) {
-      throw new Error('RIDE_FORBIDDEN');
+      throw new ForbiddenError('You were not a participant in this ride.');
     }
     revieweeUserId = ride.customerProfile.userId;
   } else {
-    throw new Error('INVALID_ROLE');
+    throw new ForbiddenError('Only CUSTOMER and DRIVER roles can submit reviews.');
   }
 
   // ── 3. Guard: already reviewed? (DB also enforces @@unique[rideId, authorId]) ─
   const existing = await prisma.review.findUnique({
     where: { rideId_authorId: { rideId, authorId: authorUserId } },
   });
-  if (existing) throw new Error('REVIEW_ALREADY_EXISTS');
+  if (existing) throw new BadRequestError('You have already submitted a review for this ride.');
 
   // ── 4. Create the review ───────────────────────────────────────────────────
   const review = await prisma.review.create({
@@ -112,7 +113,7 @@ export async function createReview(
  * Fetch all reviews written ABOUT the logged-in user (reviewee), newest first.
  * Includes the reviewer's first name for display.
  */
-export async function getMyReviews(userId: string) {
+async function getMyReviews(userId: string) {
   return prisma.review.findMany({
     where: { targetId: userId },
     orderBy: { createdAt: 'desc' },
@@ -131,3 +132,8 @@ export async function getMyReviews(userId: string) {
     },
   });
 }
+
+export const ReviewService = {
+  createReview,
+  getMyReviews,
+};

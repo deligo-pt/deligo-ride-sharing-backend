@@ -1,8 +1,8 @@
 import prisma from '../../config/db';
 import { BroadcastNotificationInput } from './admin.notification.validation';
-import { NotificationEngine } from '../notification/notification.service';
+import { NotificationService } from '../notification/notification.service';
 
-export const broadcastNotification = async (payload: BroadcastNotificationInput) => {
+const broadcastNotification = async (payload: BroadcastNotificationInput) => {
   const where = payload.targetRole === 'ALL' ? {} : { role: payload.targetRole };
 
   // Fetch all users matching the role
@@ -16,7 +16,7 @@ export const broadcastNotification = async (payload: BroadcastNotificationInput)
   let sentCount = 0;
 
   for (const user of users) {
-    void NotificationEngine.dispatch({
+    void NotificationService.dispatch({
       userId: user.id,
       type: 'SYSTEM',
       title: payload.title,
@@ -26,4 +26,8 @@ export const broadcastNotification = async (payload: BroadcastNotificationInput)
   }
 
   return { success: true, sentCount, targetRole: payload.targetRole };
+};
+
+export const AdminNotificationService = {
+  broadcastNotification,
 };

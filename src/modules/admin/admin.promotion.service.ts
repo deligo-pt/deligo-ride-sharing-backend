@@ -3,7 +3,7 @@ import { buildPaginationMeta } from '../../types/api.types';
 import { ListPromotionsQuery, DeactivatePromotionInput } from './admin.promotion.validation';
 import { NotFoundError } from '../../utils/errors';
 
-export const listPromotions = async (query: ListPromotionsQuery) => {
+const listPromotions = async (query: ListPromotionsQuery) => {
   const { page, limit } = query;
   const skip = (page - 1) * limit;
 
@@ -19,7 +19,7 @@ export const listPromotions = async (query: ListPromotionsQuery) => {
   return { promotions, meta: buildPaginationMeta(total, page, limit) };
 };
 
-export const updatePromotionStatus = async (id: string, payload: DeactivatePromotionInput) => {
+const updatePromotionStatus = async (id: string, payload: DeactivatePromotionInput) => {
   const promo = await prisma.promoCode.findUnique({ where: { id } });
 
   if (!promo) {
@@ -30,4 +30,9 @@ export const updatePromotionStatus = async (id: string, payload: DeactivatePromo
     where: { id },
     data: { isActive: payload.isActive },
   });
+};
+
+export const AdminPromotionService = {
+  listPromotions,
+  updatePromotionStatus,
 };

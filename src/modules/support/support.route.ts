@@ -1,69 +1,45 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/auth';
-import {
-  addEmergencyContactHandler,
-  addTicketMessageHandler,
-  createTicketHandler,
-  getEmergencyContactsHandler,
-  getMyTicketsHandler,
-  triggerSosHandler,
-} from './support.controller';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { SupportController } from './support.controller';
+import { SupportValidation } from './support.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Support Router  —  PRD 3.x: Customer Support & Safety
-// Mounted at: /api/v1/support  (see app.ts)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Mounted at: /api/v1/support (see src/routes/index.ts) — PRD 3.x
+// Every route is open to any authenticated user.
 const router: Router = Router();
 
-// ── Emergency Contacts ────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/emergency-contacts
- * Add an emergency contact (max 3 per user).
- * Role: any authenticated user
- */
-router.post('/emergency-contacts', authenticate, addEmergencyContactHandler);
-
-/**
- * GET /api/v1/support/emergency-contacts
- * List the authenticated user's emergency contacts.
- * Role: any authenticated user
- */
-router.get('/emergency-contacts', authenticate, getEmergencyContactsHandler);
+// ── Emergency Contacts (max 3 per user) ───────────────────────────────────────
+router.post(
+  '/emergency-contacts',
+  authenticate,
+  validateRequest(SupportValidation.addEmergencyContact),
+  SupportController.addEmergencyContact,
+);
+router.get('/emergency-contacts', authenticate, SupportController.getEmergencyContacts);
 
 // ── SOS ───────────────────────────────────────────────────────────────────────
+router.post(
+  '/sos',
+  authenticate,
+  validateRequest(SupportValidation.triggerSos),
+  SupportController.triggerSos,
+);
 
-/**
- * POST /api/v1/support/sos
- * Trigger an SOS alert: notifies admins, mock-SMSes emergency contacts,
- * and flips the linked ride to EMERGENCY status.
- * Role: any authenticated user
- */
-router.post('/sos', authenticate, triggerSosHandler);
+// ── Ticketing ─────────────────────────────────────────────────────────────────
+router.post(
+  '/tickets',
+  authenticate,
+  validateRequest(SupportValidation.createTicket),
+  SupportController.createTicket,
+);
+router.get('/tickets', authenticate, SupportController.getMyTickets);
 
-// ── Ticketing System ──────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/tickets
- * Create a new support ticket.
- * Role: any authenticated user
- */
-router.post('/tickets', authenticate, createTicketHandler);
-
-/**
- * GET /api/v1/support/tickets
- * Return all tickets created by the authenticated user.
- * Role: any authenticated user
- */
-router.get('/tickets', authenticate, getMyTicketsHandler);
-
-/**
- * POST /api/v1/support/tickets/:id/messages
- * Add a message to an existing ticket (Live Chat thread).
- * Role: ticket owner OR ADMIN
- * NOTE: /:id routes must come AFTER any specific named sub-paths.
- */
-router.post('/tickets/:id/messages', authenticate, addTicketMessageHandler);
+// /:id routes must come AFTER specific named sub-paths. Owner or ADMIN (checked in the service).
+router.post(
+  '/tickets/:id/messages',
+  authenticate,
+  validateRequest(SupportValidation.addTicketMessage),
+  SupportController.addTicketMessage,
+);
 
 export default router;

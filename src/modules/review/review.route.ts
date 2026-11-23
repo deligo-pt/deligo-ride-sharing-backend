@@ -1,26 +1,21 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/auth';
-import * as reviewsController from './review.controller';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { ReviewController } from './review.controller';
+import { ReviewValidation } from './review.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Reviews Router
-// Mounted at: /api/v1/reviews  (see app.ts)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Mounted at: /api/v1/reviews (see src/routes/index.ts)
 const router: Router = Router();
 
-/**
- * GET /api/v1/reviews/me
- * Returns all reviews about the logged-in user (newest first).
- * MUST be before /:id routes to prevent "me" matching a param.
- */
-router.get('/me', authenticate, reviewsController.getReviewsAboutMe);
+// MUST stay before any /:id routes so "me" is not matched as a param
+router.get('/me', authenticate, ReviewController.getReviewsAboutMe);
 
-/**
- * POST /api/v1/reviews
- * Submit a review for a completed ride (CUSTOMER or DRIVER).
- * Body: { rideId, rating, comment? }
- */
-router.post('/', authenticate, reviewsController.submitReview);
+// Body: { rideId, rating, comment? } — CUSTOMER or DRIVER
+router.post(
+  '/',
+  authenticate,
+  validateRequest(ReviewValidation.create),
+  ReviewController.submitReview,
+);
 
 export default router;

@@ -2,7 +2,7 @@ import prisma from '../../config/db';
 import { GetTrendsQuery, ExportReportQuery } from './admin.analytics.validation';
 import { format, startOfDay, startOfWeek, startOfMonth } from 'date-fns';
 
-export const getDashboardSummary = async () => {
+const getDashboardSummary = async () => {
   // 1. Ride Volumes
   const rideCounts = await prisma.ride.groupBy({
     by: ['status'],
@@ -58,7 +58,7 @@ export const getDashboardSummary = async () => {
   };
 };
 
-export const getTrends = async (query: GetTrendsQuery) => {
+const getTrends = async (query: GetTrendsQuery) => {
   const { interval, startDate, endDate } = query;
 
   const rides = await prisma.ride.findMany({
@@ -105,7 +105,7 @@ export const getTrends = async (query: GetTrendsQuery) => {
   return trends;
 };
 
-export const generateCsvReport = async (query: ExportReportQuery): Promise<string> => {
+const generateCsvReport = async (query: ExportReportQuery): Promise<string> => {
   const { reportType } = query;
 
   if (reportType === 'REVENUE' || reportType === 'RIDES') {
@@ -155,4 +155,10 @@ export const generateCsvReport = async (query: ExportReportQuery): Promise<strin
   }
 
   return 'No Data\\n';
+};
+
+export const AdminAnalyticsService = {
+  getDashboardSummary,
+  getTrends,
+  generateCsvReport,
 };

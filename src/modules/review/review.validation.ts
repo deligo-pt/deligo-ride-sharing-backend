@@ -5,7 +5,7 @@ import { z } from 'zod';
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── POST /api/v1/reviews ──────────────────────────────────────────────────────
-export const CreateReviewSchema = z.object({
+const CreateReviewSchema = z.object({
   rideId: z
     .string({ error: 'rideId is required' })
     .uuid('rideId must be a valid UUID'),
@@ -23,3 +23,7 @@ export const CreateReviewSchema = z.object({
 });
 
 export type CreateReviewDto = z.infer<typeof CreateReviewSchema>;
+
+export const ReviewValidation = {
+  create: { body: CreateReviewSchema },
+};

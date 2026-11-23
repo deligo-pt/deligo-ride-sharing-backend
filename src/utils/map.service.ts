@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { haversineKm } from '../modules/ride/pricing.service';
+import { PricingService } from '../modules/ride/pricing.service';
 import { config } from '../config';
 
 export interface Coordinate {
@@ -94,7 +94,7 @@ function haversineFallback(coords: Coordinate[]): RouteData {
   for (let i = 0; i < coords.length - 1; i++) {
     const { lat: lat1, lng: lng1 } = coords[i];
     const { lat: lat2, lng: lng2 } = coords[i + 1];
-    const straightKm = haversineKm(lat1, lng1, lat2, lng2);
+    const straightKm = PricingService.haversineKm(lat1, lng1, lat2, lng2);
     totalMeters += straightKm * 1.35 * 1_000;
   }
 

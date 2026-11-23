@@ -98,7 +98,7 @@ const isoDatetime = z
   .datetime({ message: "Must be a valid ISO 8601 datetime (e.g. 2030-12-31T00:00:00Z)" })
   .optional();
 
-export const bulkExpiryDatesSchema = z.object({
+const bulkExpiryDatesSchema = z.object({
   DRIVING_LICENSE_expiryDate: isoDatetime,
   VEHICLE_REGISTRATION_expiryDate: isoDatetime,
   VEHICLE_INSURANCE_expiryDate: isoDatetime,
@@ -116,20 +116,24 @@ export interface SingleDocumentPayload {
 // ─── PATCH /kyc/documents/:id/review ─────────────────────────────────────────
 // Admin approves or rejects a document.
 
-export const reviewDocumentSchema = z.object({
-  body: z
-    .object({
-      verificationStatus: z.enum(["APPROVED", "REJECTED", "SUSPENDED", "TEMPORARILY_BLOCKED"]),
-      reviewNote: z.string().optional(),
-      rejectionReason: z.string().optional(),
-    })
-    .refine(
-      (data) => data.verificationStatus === "APPROVED" || !!data.rejectionReason,
-      {
-        message: "rejectionReason is required when rejecting, suspending, or blocking a document",
-        path: ["rejectionReason"],
-      }
-    ),
-});
+const reviewDocumentBodySchema = z
+  .object({
+    verificationStatus: z.enum(['APPROVED', 'REJECTED', 'SUSPENDED', 'TEMPORARILY_BLOCKED']),
+    reviewNote: z.string().optional(),
+    rejectionReason: z.string().optional(),
+  })
+  .refine((data) => data.verificationStatus === 'APPROVED' || !!data.rejectionReason, {
+    message: 'rejectionReason is required when rejecting, suspending, or blocking a document',
+    path: ['rejectionReason'],
+  });
 
-export type ReviewDocumentInput = z.infer<typeof reviewDocumentSchema>["body"];
+export type ReviewDocumentInput = z.infer<typeof reviewDocumentBodySchema>;
+
+// ─── Grouped validation (consumed by validateRequest in kyc.route.ts) ─────────
+
+export const KycValidation = {
+  /** POST /kyc/documents — optional expiry-date text fields (runs after multer). */
+  uploadDocuments: { body: bulkExpiryDatesSchema },
+  /** PATCH /kyc/documents/:id/review */
+  reviewDocument: { body: reviewDocumentBodySchema },
+};

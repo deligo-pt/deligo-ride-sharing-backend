@@ -1,65 +1,47 @@
-import { Request, Response, NextFunction } from 'express';
-import { initiateSignup, login } from './auth.service';
+import { AuthService } from './auth.service';
 import { InitiateSignupInput, LoginInput } from './auth.validation';
 import { getClientInfo, setRefreshTokenCookie } from './auth.util';
 import { sendResponse } from '../../utils/sendResponse';
+import { catchAsync } from '../../utils/catchAsync';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fleet Manager Auth Controller
 //
-// Thin controller delegating to shared AuthService with explicit 'FLEET_MANAGER' role.
-// The role is never accepted from the client request body.
+// Thin controller delegating to the shared AuthService with the explicit
+// 'FLEET_MANAGER' role. The role is never accepted from the client request body.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * POST /api/v1/auth/fleet/signup/initiate
- * Initiates registration specifically for FLEET_MANAGER role.
- */
-export async function fleetInitiateSignupHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const input = req.body as InitiateSignupInput;
-    const result = await initiateSignup(input, 'FLEET_MANAGER');
+/** POST /api/v1/auth/fleet/signup/initiate — registration for the FLEET_MANAGER role. */
+const initiateSignup = catchAsync(async (req, res) => {
+  const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'FLEET_MANAGER');
 
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Fleet manager signup initiated. Verification code sent',
-      data: result,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Fleet manager signup initiated. Verification code sent',
+    data: result,
+  });
+});
 
 /**
  * POST /api/v1/auth/fleet/login
- * Authenticates specifically for FLEET_MANAGER role.
- * Non-fleet manager accounts will be rejected with 403 Forbidden after password verification.
+ * Non-fleet-manager accounts are rejected with 403 after password verification.
  */
-export async function fleetLoginHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const input = req.body as LoginInput;
-    const clientInfo = getClientInfo(req);
-    const result = await login(input, clientInfo, ['FLEET_MANAGER']);
+const login = catchAsync(async (req, res) => {
+  const input = req.body as LoginInput;
+  const result = await AuthService.login(input, getClientInfo(req), ['FLEET_MANAGER']);
 
-    const cookieDays = input.rememberMe ? 30 : 1;
-    setRefreshTokenCookie(res, result.tokens.refreshToken, cookieDays);
+  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
 
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Fleet manager login successful',
-      data: result,
-    });
-  } catch (err) {
-    next(err);
-  }
-}
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Fleet manager login successful',
+    data: result,
+  });
+});
+
+export const FleetAuthController = {
+  initiateSignup,
+  login,
+};

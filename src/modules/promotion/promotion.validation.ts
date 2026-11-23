@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // ── POST /api/v1/promotions  (ADMIN) ─────────────────────────────────────────
 
-export const CreatePromoCodeSchema = z
+const CreatePromoCodeSchema = z
   .object({
     code: z
       .string({ error: 'code is required' })
@@ -70,7 +70,7 @@ export type CreatePromoCodeDto = z.infer<typeof CreatePromoCodeSchema>;
 
 // ── POST /api/v1/promotions/validate  (CUSTOMER) ─────────────────────────────
 
-export const ValidatePromoCodeSchema = z.object({
+const ValidatePromoCodeSchema = z.object({
   code: z
     .string({ error: 'code is required' })
     .min(1, 'code cannot be empty')
@@ -82,3 +82,8 @@ export const ValidatePromoCodeSchema = z.object({
 });
 
 export type ValidatePromoCodeDto = z.infer<typeof ValidatePromoCodeSchema>;
+
+export const PromotionValidation = {
+  create: { body: CreatePromoCodeSchema },
+  validate: { body: ValidatePromoCodeSchema },
+};

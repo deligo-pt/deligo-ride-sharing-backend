@@ -19,7 +19,7 @@ const lngField = (name: string) =>
     .max(180, `${name} must be <= 180`);
 
 // ── Reusable intermediate stop schema ─────────────────────────────────────────
-export const StopSchema = z.object({
+const StopSchema = z.object({
   address: z.string({ error: 'address is required' }).min(1, 'address cannot be empty'),
   lat: latField('stop.lat'),
   lng: lngField('stop.lng'),
@@ -27,21 +27,21 @@ export const StopSchema = z.object({
 export type StopDto = z.infer<typeof StopSchema>;
 
 // ── PATCH /api/v1/rides/location ──────────────────────────────────────────────
-export const UpdateLocationSchema = z.object({
+const UpdateLocationSchema = z.object({
   lat: latField('lat'),
   lng: lngField('lng'),
 });
 export type UpdateLocationDto = z.infer<typeof UpdateLocationSchema>;
 
 // ── POST /api/v1/rides/search ─────────────────────────────────────────────────
-export const SearchRideSchema = z.object({
+const SearchRideSchema = z.object({
   pickupLat: latField('pickupLat'),
   pickupLng: lngField('pickupLng'),
 });
 export type SearchRideDto = z.infer<typeof SearchRideSchema>;
 
 // ── POST /api/v1/rides/estimate ───────────────────────────────────────────────
-export const EstimateFareSchema = z.object({
+const EstimateFareSchema = z.object({
   pickupLat: latField('pickupLat'),
   pickupLng: lngField('pickupLng'),
   dropoffLat: latField('dropoffLat'),
@@ -58,7 +58,7 @@ export const EstimateFareSchema = z.object({
 export type EstimateFareDto = z.infer<typeof EstimateFareSchema>;
 
 // ── POST /api/v1/rides/request ────────────────────────────────────────────────
-export const RequestRideSchema = z.object({
+const RequestRideSchema = z.object({
   pickupLat: latField('pickupLat'),
   pickupLng: lngField('pickupLng'),
   pickupAddress: z
@@ -96,7 +96,7 @@ export type RequestRideDto = z.infer<typeof RequestRideSchema>;
 // No body required — the ride ID and driver identity come from params + headers.
 
 // ── PATCH /api/v1/rides/:id/status ───────────────────────────────────────────
-export const UpdateRideStatusSchema = z.object({
+const UpdateRideStatusSchema = z.object({
   status: z.enum(['DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED'], {
     error: 'status must be one of: DRIVER_ARRIVED, IN_PROGRESS, COMPLETED',
   }),
@@ -119,13 +119,63 @@ export const UpdateRideStatusSchema = z.object({
 export type UpdateRideStatusDto = z.infer<typeof UpdateRideStatusSchema>;
 
 // ── POST /api/v1/rides/:id/cancel ────────────────────────────────────────────
-export const CancelRideSchema = z.object({
+const CancelRideSchema = z.object({
   reason: z.string({ error: 'reason is required' }).min(1, 'reason cannot be empty'),
 });
 export type CancelRideDto = z.infer<typeof CancelRideSchema>;
 
-// ── POST /api/v1/rides/:id/share ─────────────────────────────────────────────
-// No body required. The rideId comes from the URL param, auth from headers.
-// (Schema kept as empty object so it's consistent with the rest of the file)
-export const ShareRideSchema = z.object({});
-export type ShareRideDto = z.infer<typeof ShareRideSchema>;
+// ── POST /api/v1/rides/recurring ─────────────────────────────────────────────
+// (PRD 3.9) A repeating ride template.
+const RecurringProfileSchema = z.object({
+  vehicleType: z.enum([
+    'Hatchback', 'Micro', 'Sedan', 'SUV', 'Motorcycle', 'PickupTruck',
+  ] as const, {
+    error: 'vehicleType must be a valid VehicleType',
+  }),
+
+  pickupAddress: z.string().min(1, 'pickupAddress is required'),
+  pickupLat:     z.number().min(-90).max(90),
+  pickupLng:     z.number().min(-180).max(180),
+
+  dropoffAddress: z.string().min(1, 'dropoffAddress is required'),
+  dropoffLat:     z.number().min(-90).max(90),
+  dropoffLng:     z.number().min(-180).max(180),
+
+  /**
+   * ISO weekday numbers: 1 = Monday … 7 = Sunday.
+   * e.g. [1, 3, 5] = Mon / Wed / Fri
+   */
+  daysOfWeek: z
+    .array(z.int().min(1).max(7))
+    .min(1, 'At least one day of week is required')
+    .max(7),
+
+  /** Local time of day in 'HH:MM' 24-hour format. e.g. "08:30" */
+  timeOfDay: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'timeOfDay must be in HH:MM format'),
+
+  startDate: z
+    .string()
+    .datetime({ message: 'startDate must be a valid ISO 8601 datetime' })
+    .transform((v) => new Date(v)),
+
+  endDate: z
+    .string()
+    .datetime({ message: 'endDate must be a valid ISO 8601 datetime' })
+    .transform((v) => new Date(v)),
+});
+
+export type RecurringProfileDto = z.infer<typeof RecurringProfileSchema>;
+
+// ── Grouped validation (consumed by validateRequest in ride.route.ts) ─────────
+
+export const RideValidation = {
+  updateLocation: { body: UpdateLocationSchema },
+  searchRide: { body: SearchRideSchema },
+  estimateFare: { body: EstimateFareSchema },
+  requestRide: { body: RequestRideSchema },
+  updateRideStatus: { body: UpdateRideStatusSchema },
+  cancelRide: { body: CancelRideSchema },
+  createRecurringProfile: { body: RecurringProfileSchema },
+};

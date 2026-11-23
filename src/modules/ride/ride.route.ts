@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import * as ridesController from './ride.controller';
+import { RideController } from './ride.controller';
+import { RideValidation } from './ride.validation';
+import { validateRequest } from '../../middlewares/validateRequest';
 import { authenticate, authorize } from '../../middlewares/auth';
 import { rideRateLimiter } from '../../middlewares/rateLimiter';
 
@@ -20,7 +22,8 @@ router.patch(
   '/location',
   authenticate,
   authorize('DRIVER'),
-  ridesController.updateLocation,
+  validateRequest(RideValidation.updateLocation),
+  RideController.updateLocation,
 );
 
 /**
@@ -33,7 +36,8 @@ router.post(
   '/search',
   authenticate,
   authorize('CUSTOMER'),
-  ridesController.searchRide,
+  validateRequest(RideValidation.searchRide),
+  RideController.searchRide,
 );
 
 /**
@@ -47,7 +51,8 @@ router.post(
   authenticate,
   authorize('CUSTOMER'),
   rideRateLimiter,
-  ridesController.estimateFare,
+  validateRequest(RideValidation.estimateFare),
+  RideController.estimateFare,
 );
 
 /**
@@ -62,7 +67,8 @@ router.post(
   authenticate,
   authorize('CUSTOMER'),
   rideRateLimiter,
-  ridesController.requestRide,
+  validateRequest(RideValidation.requestRide),
+  RideController.requestRide,
 );
 
 // ── Recurring Rides (PRD 3.9) — must be BEFORE /:id routes ───────────────────
@@ -76,7 +82,8 @@ router.post(
   '/recurring',
   authenticate,
   authorize('CUSTOMER'),
-  ridesController.createRecurringProfile,
+  validateRequest(RideValidation.createRecurringProfile),
+  RideController.createRecurringProfile,
 );
 
 /**
@@ -88,7 +95,7 @@ router.get(
   '/recurring',
   authenticate,
   authorize('CUSTOMER'),
-  ridesController.getMyRecurringProfiles,
+  RideController.getMyRecurringProfiles,
 );
 
 /**
@@ -100,7 +107,7 @@ router.post(
   '/recurring/evaluate',
   authenticate,
   authorize('ADMIN'),
-  ridesController.triggerRecurringEvaluate,
+  RideController.triggerRecurringEvaluate,
 );
 
 /**
@@ -112,7 +119,7 @@ router.delete(
   '/recurring/:id',
   authenticate,
   authorize('CUSTOMER'),
-  ridesController.deactivateRecurringProfile,
+  RideController.deactivateRecurringProfile,
 );
 
 // ── Parameterised routes (must come AFTER all static routes) ─────────────────
@@ -122,12 +129,7 @@ router.delete(
  * Driver → atomically claim a REQUESTED ride
  * Auth: Bearer JWT (role: DRIVER)
  */
-router.patch(
-  '/:id/accept',
-  authenticate,
-  authorize('DRIVER'),
-  ridesController.acceptRide,
-);
+router.patch('/:id/accept', authenticate, authorize('DRIVER'), RideController.acceptRide);
 
 /**
  * PATCH /api/v1/rides/:id/status
@@ -139,7 +141,8 @@ router.patch(
   '/:id/status',
   authenticate,
   authorize('DRIVER'),
-  ridesController.updateRideStatus,
+  validateRequest(RideValidation.updateRideStatus),
+  RideController.updateRideStatus,
 );
 
 /**
@@ -152,7 +155,8 @@ router.post(
   '/:id/cancel',
   authenticate,
   authorize('CUSTOMER'),
-  ridesController.cancelRide,
+  validateRequest(RideValidation.cancelRide),
+  RideController.cancelRide,
 );
 
 /**
@@ -160,11 +164,6 @@ router.post(
  * Customer → generate 24-hour tracking token + public URL
  * Auth: Bearer JWT (role: CUSTOMER)
  */
-router.post(
-  '/:id/share',
-  authenticate,
-  authorize('CUSTOMER', 'DRIVER'),
-  ridesController.shareRide,
-);
+router.post('/:id/share', authenticate, authorize('CUSTOMER', 'DRIVER'), RideController.shareRide);
 
 export default router;

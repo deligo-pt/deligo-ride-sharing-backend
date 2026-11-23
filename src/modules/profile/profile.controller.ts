@@ -1,69 +1,43 @@
-import { NextFunction, Request, Response } from "express";
-import { getMyProfile, updateMyProfile } from "./profile.service";
-import { updateCustomerProfileSchema, updateDriverProfileSchema } from "./profile.validation";
-import { sendResponse } from "../../utils/sendResponse";
-import { toAppError } from "../../utils/errors";
+import { ProfileService } from './profile.service';
+import { UpdateCustomerProfileInput, UpdateDriverProfileInput } from './profile.validation';
+import { sendResponse } from '../../utils/sendResponse';
+import { catchAsync } from '../../utils/catchAsync';
 
-export const handleGetMyProfile = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-): Promise<void> => {
-    try {
-        const { id, role } = req.user!;
+/** GET /api/v1/profile/me — own profile (role-aware). */
+const getMyProfile = catchAsync(async (req, res) => {
+  const { id, role } = req.user!;
+  const profile = await ProfileService.getMyProfile(id, role);
 
-        const profile = await getMyProfile(id, role);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Profile retrieved successfully',
+    data: profile,
+  });
+});
 
-        sendResponse(res, {
-            statusCode: 200,
-            success: true,
-            message: 'Profile retrieved successfully',
-            data: profile,
-        });
-    } catch (error: unknown) {
-        next(
-            toAppError(error, {
-                statusCode: 404,
-                code: "PROFILE_NOT_FOUND",
-                message: "Failed to retrieve profile",
-            }),
-        );
-    }
-};
+/** PATCH /api/v1/profile/me — update own profile (role-aware). */
+const updateMyProfile = catchAsync(async (req, res) => {
+  const { id, role } = req.user!;
 
-export const handleUpdateMyProfile = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-): Promise<void> => {
-    try {
-        const { id, role } = req.user!;
+  await ProfileService.updateMyProfile(
+    id,
+    role,
+    req.body as UpdateCustomerProfileInput | UpdateDriverProfileInput,
+  );
 
-        // Pick the correct schema based on role
-        const schema = role === "DRIVER"
-            ? updateDriverProfileSchema
-            : updateCustomerProfileSchema;
+  // Re-fetch so the response carries fresh data
+  const updatedProfile = await ProfileService.getMyProfile(id, role);
 
-        const validatedData = schema.parse({ body: req.body as unknown }).body;
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Profile updated successfully',
+    data: updatedProfile,
+  });
+});
 
-        await updateMyProfile(id, role, validatedData);
-
-        // Re-fetch updated profile to return fresh data
-        const updatedProfile = await getMyProfile(id, role);
-
-        sendResponse(res, {
-            statusCode: 200,
-            success: true,
-            message: 'Profile updated successfully',
-            data: updatedProfile,
-        });
-    } catch (error: unknown) {
-        next(
-            toAppError(error, {
-                statusCode: 400,
-                code: "PROFILE_UPDATE_FAILED",
-                message: "Failed to update profile",
-            }),
-        );
-    }
+export const ProfileController = {
+  getMyProfile,
+  updateMyProfile,
 };

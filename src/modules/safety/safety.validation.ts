@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // ── POST /safety/sos ──────────────────────────────────────────────────────────
 
-export const TriggerSosSchema = z.object({
+const TriggerSosSchema = z.object({
   rideId: z.string().uuid('rideId must be a valid UUID').optional(),
 
   lat: z
@@ -24,7 +24,7 @@ export type TriggerSosDto = z.infer<typeof TriggerSosSchema>;
 
 // ── PATCH /safety/sos/:id/resolve ────────────────────────────────────────────
 
-export const ResolveAlertSchema = z.object({
+const ResolveAlertSchema = z.object({
   status: z.enum(['RESOLVED', 'FALSE_ALARM'], {
     error: 'status must be one of: RESOLVED, FALSE_ALARM',
   }),
@@ -36,3 +36,13 @@ export const ResolveAlertSchema = z.object({
 });
 
 export type ResolveAlertDto = z.infer<typeof ResolveAlertSchema>;
+
+// ── PATCH /safety/sos/:id/resolve — path param ───────────────────────────────
+const AlertParamsSchema = z.object({
+  id: z.string().min(1, 'Alert ID is required'),
+});
+
+export const SafetyValidation = {
+  triggerSos: { body: TriggerSosSchema },
+  resolveAlert: { params: AlertParamsSchema, body: ResolveAlertSchema },
+};

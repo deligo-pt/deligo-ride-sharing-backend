@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { VehicleType } from '@prisma/client';
 
-export const UpdatePricingRuleSchema = z.object({
+const UpdatePricingRuleSchema = z.object({
   baseFare: z.number().min(0).optional(),
   perKmRate: z.number().min(0).optional(),
   perMinRate: z.number().min(0).optional(),
@@ -10,8 +10,14 @@ export const UpdatePricingRuleSchema = z.object({
 });
 export type UpdatePricingRuleInput = z.infer<typeof UpdatePricingRuleSchema>;
 
-export const VehicleTypeParamSchema = z.object({
+const VehicleTypeParamSchema = z.object({
   vehicleType: z.nativeEnum(VehicleType, {
     error: 'vehicleType must be a valid VehicleType enum value',
   }),
 });
+
+// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+
+export const AdminPricingValidation = {
+  updateRule: { params: VehicleTypeParamSchema, body: UpdatePricingRuleSchema },
+};

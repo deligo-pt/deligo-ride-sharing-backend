@@ -4,6 +4,7 @@ import {
   REQUIRED_KYC_DOCUMENTS,
   SingleDocumentPayload,
 } from './kyc.validation';
+import { BadRequestError, NotFoundError } from '../../utils/errors';
 
 // ─── Shared document select shape ─────────────────────────────────────────────
 
@@ -42,13 +43,15 @@ const buildFlattenedData = (documents: SingleDocumentPayload[]) => {
 // ─── POST /kyc/documents (BULK) ────────────────────────────────────────────────
 // Upserts the flattened DriverDocument row for a driver.
 
-export const uploadAllDocuments = async (userId: string, documents: SingleDocumentPayload[]) => {
+const uploadAllDocuments = async (userId: string, documents: SingleDocumentPayload[]) => {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
   if (!driverProfile) {
-    throw new Error('Driver profile not found. Only registered drivers can upload KYC documents.');
+    throw new NotFoundError('Driver profile', {
+      message: 'Driver profile not found. Only registered drivers can upload KYC documents.',
+    });
   }
 
   const flattenedData = buildFlattenedData(documents);
@@ -80,7 +83,7 @@ export const uploadAllDocuments = async (userId: string, documents: SingleDocume
 
 // ─── GET /kyc/status ─────────────────────────────────────────────────────────
 
-export const getKycStatus = async (userId: string) => {
+const getKycStatus = async (userId: string) => {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
     include: {
@@ -89,7 +92,7 @@ export const getKycStatus = async (userId: string) => {
   });
 
   if (!driverProfile) {
-    throw new Error('Driver profile not found.');
+    throw new NotFoundError('Driver profile');
   }
 
   const doc = driverProfile.document;
@@ -103,7 +106,7 @@ export const getKycStatus = async (userId: string) => {
 
 // ─── GET /kyc/documents/pending ──────────────────────────────────────────────
 
-export const getPendingDocuments = async () => {
+const getPendingDocuments = async () => {
   return await prisma.driverProfile.findMany({
     where: {
       document: { verificationStatus: 'PENDING' },
@@ -130,7 +133,7 @@ export const getPendingDocuments = async () => {
 
 // ─── GET /kyc/documents/all ───────────────────────────────────────────────────
 
-export const getAllDocuments = async () => {
+const getAllDocuments = async () => {
   return await prisma.driverProfile.findMany({
     where: {
       document: { isNot: null },
@@ -158,7 +161,7 @@ export const getAllDocuments = async () => {
 // ─── PATCH /kyc/documents/:id/review ─────────────────────────────────────────
 // Admin approves or rejects the entire document set.
 
-export const reviewDocument = async (documentId: string, payload: ReviewDocumentInput) => {
+const reviewDocument = async (documentId: string, payload: ReviewDocumentInput) => {
   const document = await prisma.driverDocument.findUnique({
     where: { id: documentId },
     include: {
@@ -169,11 +172,11 @@ export const reviewDocument = async (documentId: string, payload: ReviewDocument
   });
 
   if (!document) {
-    throw new Error('Document set not found.');
+    throw new NotFoundError('Document set');
   }
 
   if (document.verificationStatus === payload.verificationStatus) {
-    throw new Error(`Document set is already ${document.verificationStatus}.`);
+    throw new BadRequestError(`Document set is already ${document.verificationStatus}.`);
   }
 
   const updatedDoc = await prisma.driverDocument.update({
@@ -211,13 +214,13 @@ export const reviewDocument = async (documentId: string, payload: ReviewDocument
 
 // ─── GET /kyc/documents/me ───────────────────────────────────────────────────
 
-export const getMyDocuments = async (userId: string) => {
+const getMyDocuments = async (userId: string) => {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
   if (!driverProfile) {
-    throw new Error('Driver profile not found.');
+    throw new NotFoundError('Driver profile');
   }
 
   return await prisma.driverDocument.findUnique({
@@ -228,11 +231,21 @@ export const getMyDocuments = async (userId: string) => {
 
 // ─── GET /kyc/requirements ────────────────────────────────────────────────────
 
-export const getKycRequirements = () => {
+const getKycRequirements = () => {
   return REQUIRED_KYC_DOCUMENTS.map((doc) => ({
     documentType: doc.type,
     label: doc.label,
     description: doc.description,
     requiresExpiry: doc.requiresExpiry,
   }));
+};
+
+export const KycService = {
+  uploadAllDocuments,
+  getKycStatus,
+  getPendingDocuments,
+  getAllDocuments,
+  reviewDocument,
+  getMyDocuments,
+  getKycRequirements,
 };

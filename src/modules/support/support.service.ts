@@ -1,12 +1,13 @@
 import prisma from '../../config/db';
-import { NotificationEngine } from '../notification/notification.service';
+import { NotificationService } from '../notification/notification.service';
 import type {
   AddTicketMessageDto,
   CreateEmergencyContactDto,
   CreateTicketDto,
   SosDto,
 } from './support.validation';
-import { assertCanRaiseEmergency, escalateRideToEmergency } from '../ride/ride.service';
+import { RideService } from '../ride/ride.service';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Support Service  —: Customer Support & Safety
@@ -21,14 +22,16 @@ const MAX_EMERGENCY_CONTACTS = 3;
  * Adds a new emergency contact for the user.
  * Throws if the user already has 3 contacts (enforced here at the service layer).
  */
-export async function addEmergencyContact(
+async function addEmergencyContact(
   userId: string,
   dto: CreateEmergencyContactDto,
 ) {
   const existingCount = await prisma.emergencyContact.count({ where: { userId } });
 
   if (existingCount >= MAX_EMERGENCY_CONTACTS) {
-    throw new Error('EMERGENCY_CONTACTS_LIMIT_REACHED');
+    throw new BadRequestError(
+      'You can only add up to 3 emergency contacts. Remove one before adding another.',
+    );
   }
 
   return prisma.emergencyContact.create({
@@ -45,7 +48,7 @@ export async function addEmergencyContact(
  * GET /api/v1/support/emergency-contacts
  * Returns all emergency contacts for the authenticated user.
  */
-export async function getEmergencyContacts(userId: string) {
+async function getEmergencyContacts(userId: string) {
   return prisma.emergencyContact.findMany({
     where: { userId },
     orderBy: { createdAt: 'asc' },
@@ -59,13 +62,13 @@ export async function getEmergencyContacts(userId: string) {
  *
  * Safety dispatch flow:
  *  1. Fetch the user's emergency contacts.
- *  2. Notify ALL admins via NotificationEngine (SECURITY type, IN_APP + WEBSOCKET).
+ *  2. Notify ALL admins via NotificationService (SECURITY type, IN_APP + WEBSOCKET).
  *  3. Simulate SMS dispatch to each emergency contact (MOCK).
  *  4. If a rideId is provided, flip the Ride.status → EMERGENCY.
  *
  * In production, step 3 integrates with Twilio SMS.
  */
-export async function triggerSos(userId: string, role: string, dto: SosDto) {
+async function triggerSos(userId: string, role: string, dto: SosDto) {
   // 1. Fetch the user's basic info + emergency contacts
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -78,12 +81,12 @@ export async function triggerSos(userId: string, role: string, dto: SosDto) {
     },
   });
 
-  if (!user) throw new Error('USER_NOT_FOUND');
+  if (!user) throw new NotFoundError('User');
 
   // Ownership: only the ride's customer / assigned driver (or an admin) may flag it.
   // Checked before admins are notified, so a bogus rideId has no side effects.
   const emergencyRide = dto.rideId
-    ? await assertCanRaiseEmergency({ id: userId, role }, dto.rideId)
+    ? await RideService.assertCanRaiseEmergency({ id: userId, role }, dto.rideId)
     : null;
 
   const userName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || 'A user';
@@ -92,7 +95,7 @@ export async function triggerSos(userId: string, role: string, dto: SosDto) {
       ? `Location: ${dto.lat.toFixed(5)}, ${dto.lng.toFixed(5)}`
       : 'Location not provided';
 
-  // 2. Notify all ADMIN users via NotificationEngine (IN_APP + WEBSOCKET)
+  // 2. Notify all ADMIN users via NotificationService (IN_APP + WEBSOCKET)
   const admins = await prisma.user.findMany({
     where: { role: 'ADMIN' },
     select: { id: true },
@@ -100,7 +103,7 @@ export async function triggerSos(userId: string, role: string, dto: SosDto) {
 
   await Promise.all(
     admins.map((admin) =>
-      NotificationEngine.dispatch(
+      NotificationService.dispatch(
         {
           userId:  admin.id,
           title:   '🚨 SOS ALERT',
@@ -127,7 +130,7 @@ export async function triggerSos(userId: string, role: string, dto: SosDto) {
   });
 
   // 4. Flip the Ride status to EMERGENCY if a rideId was provided
-  const rideStatusUpdated = emergencyRide ? await escalateRideToEmergency(emergencyRide) : false;
+  const rideStatusUpdated = emergencyRide ? await RideService.escalateRideToEmergency(emergencyRide) : false;
 
   return {
     notifiedAdmins:     admins.length,
@@ -145,7 +148,7 @@ export async function triggerSos(userId: string, role: string, dto: SosDto) {
  * Creates a new support ticket.
  * Business rule: SAFETY type automatically escalates priority to CRITICAL.
  */
-export async function createTicket(userId: string, dto: CreateTicketDto) {
+async function createTicket(userId: string, dto: CreateTicketDto) {
   // Auto-escalate SAFETY tickets
   const priority =
     dto.type === 'SAFETY' ? 'CRITICAL' : (dto.priority ?? 'MEDIUM');
@@ -170,7 +173,7 @@ export async function createTicket(userId: string, dto: CreateTicketDto) {
  * GET /api/v1/support/tickets
  * Returns all tickets created by the authenticated user, newest first.
  */
-export async function getMyTickets(userId: string) {
+async function getMyTickets(userId: string) {
   return prisma.supportTicket.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
@@ -199,7 +202,7 @@ export async function getMyTickets(userId: string) {
  *
  * Recommended implementation in the controller (or a thin socket helper):
  *
- *   import { getIo } from '../../server';          // or inject via NotificationEngine
+ *   import { getIo } from '../../server';          // or inject via NotificationService
  *   const io = getIo();
  *   if (io) {
  *     io.to(`ticket_${ticketId}`).emit('ticket_message', {
@@ -219,7 +222,7 @@ export async function getMyTickets(userId: string) {
  *   });
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export async function addTicketMessage(
+async function addTicketMessage(
   userId: string,
   role: string,
   ticketId: string,
@@ -231,16 +234,16 @@ export async function addTicketMessage(
     select: { id: true, userId: true, status: true },
   });
 
-  if (!ticket) throw new Error('TICKET_NOT_FOUND');
+  if (!ticket) throw new NotFoundError('Ticket');
 
   // Only the ticket owner OR an admin may post
   if (ticket.userId !== userId && role !== 'ADMIN') {
-    throw new Error('TICKET_FORBIDDEN');
+    throw new ForbiddenError('You do not have access to this ticket');
   }
 
   // Prevent messages on resolved tickets (admins can still post)
   if (ticket.status === 'RESOLVED' && role !== 'ADMIN') {
-    throw new Error('TICKET_RESOLVED');
+    throw new BadRequestError('This ticket has been resolved. You cannot add more messages.');
   }
 
   const savedMessage = await prisma.ticketMessage.create({
@@ -261,3 +264,12 @@ export async function addTicketMessage(
 
   return savedMessage;
 }
+
+export const SupportService = {
+  addEmergencyContact,
+  getEmergencyContacts,
+  triggerSos,
+  createTicket,
+  getMyTickets,
+  addTicketMessage,
+};

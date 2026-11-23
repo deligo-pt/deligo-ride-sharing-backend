@@ -1,39 +1,35 @@
-import { Request, Response, NextFunction } from 'express';
 import { VehicleType } from '@prisma/client';
 import { sendResponse } from '../../utils/sendResponse';
-import { assertAdmin } from './admin.util';
-import { listPricingRules, updatePricingRule } from './admin.pricing.service';
+import { catchAsync } from '../../utils/catchAsync';
+import { AdminPricingService } from './admin.pricing.service';
+import { UpdatePricingRuleInput } from './admin.pricing.validation';
 
-export const getPricingRulesHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    assertAdmin(req);
-    const rules = await listPricingRules();
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Pricing rules retrieved successfully',
-      data: rules,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+/** GET /api/v1/admin/pricing */
+const getPricingRules = catchAsync(async (_req, res) => {
+  const rules = await AdminPricingService.listPricingRules();
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pricing rules retrieved successfully',
+    data: rules,
+  });
+});
 
-export const updatePricingRuleHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    assertAdmin(req);
-    const vehicleType = req.params.vehicleType as VehicleType;
-    const updated = await updatePricingRule(
-      vehicleType,
-      req.body as Parameters<typeof updatePricingRule>[1],
-    );
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Pricing rule updated successfully',
-      data: updated,
-    });
-  } catch (err) {
-    next(err);
-  }
+/** PATCH /api/v1/admin/pricing/:vehicleType */
+const updatePricingRule = catchAsync(async (req, res) => {
+  const updated = await AdminPricingService.updatePricingRule(
+    req.params.vehicleType as VehicleType,
+    req.body as UpdatePricingRuleInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pricing rule updated successfully',
+    data: updated,
+  });
+});
+
+export const AdminPricingController = {
+  getPricingRules,
+  updatePricingRule,
 };

@@ -1,13 +1,23 @@
-import { Router } from "express";
-import { handleGetMyProfile, handleUpdateMyProfile } from "./profile.controller";
-import { authenticate } from "../../middlewares/auth";
+import { Router } from 'express';
+import { authenticate } from '../../middlewares/auth';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { ProfileController } from './profile.controller';
+import { ProfileValidation } from './profile.validation';
 
+// Mounted at: /api/v1/profile (see src/routes/index.ts)
 const router: Router = Router();
 
-// GET /api/v1/profile/me — fetch own profile (role-aware)
-router.get("/me", authenticate, handleGetMyProfile);
+router.get('/me', authenticate, ProfileController.getMyProfile);
 
-// PATCH /api/v1/profile/me — update own profile (role-aware)
-router.patch("/me", authenticate, handleUpdateMyProfile);
+router.patch(
+  '/me',
+  authenticate,
+  validateRequest((req) =>
+    req.user?.role === 'DRIVER'
+      ? ProfileValidation.updateMyProfile.driver
+      : ProfileValidation.updateMyProfile.customer,
+  ),
+  ProfileController.updateMyProfile,
+);
 
 export default router;

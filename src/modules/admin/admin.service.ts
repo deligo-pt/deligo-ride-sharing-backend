@@ -2,7 +2,7 @@ import prisma from '../../config/db';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin.validation';
 import { buildPaginationMeta } from '../../types/api.types';
-import { revokeAllUserSessions } from '../auth/auth.service';
+import { AuthService } from '../auth/auth.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Service  —  PRD 5.x
@@ -62,7 +62,7 @@ const driverProfileKycSelect = {
 // ─── GET /admin/kyc/pending ───────────────────────────────────────────────────
 // Returns all DriverProfiles where kycStatus is UNDER_REVIEW or PENDING_DOCS.
 
-export const getPendingKycProfiles = async () => {
+const getPendingKycProfiles = async () => {
   return prisma.driverProfile.findMany({
     where: {
       kycStatus: { in: ['UNDER_REVIEW', 'PENDING_DOCS'] },
@@ -75,7 +75,7 @@ export const getPendingKycProfiles = async () => {
 // ─── PATCH /admin/kyc/:driverProfileId ───────────────────────────────────────
 // Admin approves or rejects the full KYC submission for a driver.
 
-export const reviewDriverKyc = async (driverProfileId: string, payload: ReviewKycInput) => {
+const reviewDriverKyc = async (driverProfileId: string, payload: ReviewKycInput) => {
   // 1. Verify driver profile exists and has a document set
   const profile = await prisma.driverProfile.findUnique({
     where: { id: driverProfileId },
@@ -130,7 +130,7 @@ export const reviewDriverKyc = async (driverProfileId: string, payload: ReviewKy
 // ─── GET /admin/users ─────────────────────────────────────────────────────────
 // Returns a paginated list of users, optionally filtered by role.
 
-export const listUsers = async (query: ListUsersQuery) => {
+const listUsers = async (query: ListUsersQuery) => {
   const { role, status, page, limit } = query;
   const skip = (page - 1) * limit;
 
@@ -201,7 +201,7 @@ export const listUsers = async (query: ListUsersQuery) => {
 // ─── PATCH /admin/users/:userId/status ───────────────────────────────────────
 // Admin manually suspends, re-activates, or deactivates any user account.
 
-export const updateUserStatus = async (userId: string, payload: UpdateUserStatusInput) => {
+const updateUserStatus = async (userId: string, payload: UpdateUserStatusInput) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   if (!user) {
@@ -225,8 +225,15 @@ export const updateUserStatus = async (userId: string, payload: UpdateUserStatus
 
   // Suspension / deactivation: kill refresh sessions and live sockets immediately.
   if (payload.status !== 'ACTIVE') {
-    await revokeAllUserSessions(userId);
+    await AuthService.revokeAllUserSessions(userId);
   }
 
   return updated;
+};
+
+export const AdminService = {
+  getPendingKycProfiles,
+  reviewDriverKyc,
+  listUsers,
+  updateUserStatus,
 };

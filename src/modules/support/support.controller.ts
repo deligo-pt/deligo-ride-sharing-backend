@@ -1,236 +1,105 @@
-import { NextFunction, Request, Response } from 'express';
+import { SupportService } from './support.service';
 import {
-  BadRequestError,
-  ForbiddenError,
-  NotFoundError,
-  ValidationError,
-} from '../../utils/errors';
-import {
-  addEmergencyContact,
-  addTicketMessage,
-  createTicket,
-  getEmergencyContacts,
-  getMyTickets,
-  triggerSos,
-} from './support.service';
-import {
-  AddTicketMessageSchema,
-  CreateEmergencyContactSchema,
-  CreateTicketSchema,
-  SosSchema,
+  AddTicketMessageDto,
+  CreateEmergencyContactDto,
+  CreateTicketDto,
+  SosDto,
 } from './support.validation';
 import { sendResponse } from '../../utils/sendResponse';
+import { catchAsync } from '../../utils/catchAsync';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Support Controller  —  PRD 3.x
 // ─────────────────────────────────────────────────────────────────────────────
 
-function mapError(err: unknown): unknown {
-  if (err instanceof Error) {
-    switch (err.message) {
-      case 'EMERGENCY_CONTACTS_LIMIT_REACHED':
-        return new BadRequestError(
-          `You can only add up to 3 emergency contacts. Remove one before adding another.`,
-        );
-      case 'USER_NOT_FOUND':
-        return new NotFoundError('User');
-      case 'TICKET_NOT_FOUND':
-        return new NotFoundError('Ticket');
-      case 'TICKET_FORBIDDEN':
-        return new ForbiddenError('You do not have access to this ticket');
-      case 'TICKET_RESOLVED':
-        return new BadRequestError(
-          'This ticket has been resolved. You cannot add more messages.',
-        );
-    }
-  }
-  return err;
-}
+/** POST /api/v1/support/emergency-contacts — any authenticated user (max 3). */
+const addEmergencyContact = catchAsync(async (req, res) => {
+  const contact = await SupportService.addEmergencyContact(
+    req.user!.id,
+    req.body as CreateEmergencyContactDto,
+  );
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Emergency contact added successfully',
+    data: { contact },
+  });
+});
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/emergency-contacts
- * Role: any authenticated user
- * Add an emergency contact (max 3).
- */
-export async function addEmergencyContactHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const parsed = CreateEmergencyContactSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-    const contact = await addEmergencyContact(req.user!.id, parsed.data);
-    sendResponse(res, {
-      statusCode: 201,
-      success: true,
-      message: 'Emergency contact added successfully',
-      data: { contact },
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
+/** GET /api/v1/support/emergency-contacts — the current user's emergency contacts. */
+const getEmergencyContacts = catchAsync(async (req, res) => {
+  const contacts = await SupportService.getEmergencyContacts(req.user!.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Emergency contacts retrieved successfully',
+    data: { contacts, total: contacts.length },
+  });
+});
 
 /**
- * GET /api/v1/support/emergency-contacts
- * Role: any authenticated user
- * Returns the current user's emergency contacts.
+ * POST /api/v1/support/sos — any authenticated user.
+ * Notifies all admins (SECURITY, IN_APP + WEBSOCKET), [MOCK] SMSes emergency
+ * contacts, and escalates the linked ride to EMERGENCY (if rideId provided).
  */
-export async function getEmergencyContactsHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const contacts = await getEmergencyContacts(req.user!.id);
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Emergency contacts retrieved successfully',
-      data: { contacts, total: contacts.length },
-    });
-  } catch (err) {
-    next(err);
-  }
-}
+const triggerSos = catchAsync(async (req, res) => {
+  const result = await SupportService.triggerSos(req.user!.id, req.user!.role, req.body as SosDto);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'SOS alert triggered successfully',
+    data: result,
+  });
+});
 
-// ─────────────────────────────────────────────────────────────────────────────
+/** POST /api/v1/support/tickets — SAFETY type auto-escalates to CRITICAL. */
+const createTicket = catchAsync(async (req, res) => {
+  const ticket = await SupportService.createTicket(req.user!.id, req.body as CreateTicketDto);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Support ticket created successfully',
+    data: { ticket },
+  });
+});
+
+/** GET /api/v1/support/tickets — tickets created by the user, newest first. */
+const getMyTickets = catchAsync(async (req, res) => {
+  const tickets = await SupportService.getMyTickets(req.user!.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Support tickets retrieved successfully',
+    data: { tickets, total: tickets.length },
+  });
+});
 
 /**
- * POST /api/v1/support/sos
- * Role: any authenticated user
- *
- * Triggers an SOS alert:
- *  - Notifies all admins (SECURITY notification, IN_APP + WEBSOCKET)
- *  - [MOCK] SMS to emergency contacts
- *  - Updates ride status to EMERGENCY (if rideId provided)
+ * POST /api/v1/support/tickets/:id/messages — ticket owner or ADMIN.
+ * Adds a TicketMessage and advances OPEN → IN_PROGRESS on the first message.
+ * (Real-time broadcast to `ticket_${ticketId}` is described in support.service.ts.)
  */
-export async function triggerSosHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const parsed = SosSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-    const result = await triggerSos(req.user!.id, req.user!.role, parsed.data);
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'SOS alert triggered successfully',
-      data: result,
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
+const addTicketMessage = catchAsync(async (req, res) => {
+  const savedMessage = await SupportService.addTicketMessage(
+    req.user!.id,
+    req.user!.role,
+    req.params.id as string,
+    req.body as AddTicketMessageDto,
+  );
 
-// ─────────────────────────────────────────────────────────────────────────────
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Ticket message sent successfully',
+    data: { message: savedMessage },
+  });
+});
 
-/**
- * POST /api/v1/support/tickets
- * Role: any authenticated user
- * Creates a new support ticket. SAFETY type auto-escalates to CRITICAL.
- */
-export async function createTicketHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const parsed = CreateTicketSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-    const ticket = await createTicket(req.user!.id, parsed.data);
-    sendResponse(res, {
-      statusCode: 201,
-      success: true,
-      message: 'Support ticket created successfully',
-      data: { ticket },
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/v1/support/tickets
- * Role: any authenticated user
- * Returns all tickets created by the authenticated user, newest first.
- */
-export async function getMyTicketsHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const tickets = await getMyTickets(req.user!.id);
-    sendResponse(res, {
-      statusCode: 200,
-      success: true,
-      message: 'Support tickets retrieved successfully',
-      data: { tickets, total: tickets.length },
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/tickets/:id/messages
- * Role: any authenticated user (owner) or ADMIN
- *
- * Adds a TicketMessage to an existing ticket.
- * Also auto-advances ticket status: OPEN → IN_PROGRESS on first message.
- *
- * NOTE: After the DB write, this controller is the ideal place to broadcast
- * the message over Socket.io to the `ticket_${ticketId}` room for real-time
- * live chat. See the integration note in support.service.ts → addTicketMessage().
- */
-export async function addTicketMessageHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const ticketId = req.params.id as string;
-    if (!ticketId) {
-      throw new BadRequestError('Ticket ID is required');
-    }
-
-    const parsed = AddTicketMessageSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed', parsed.error.flatten().fieldErrors);
-    }
-
-    const savedMessage = await addTicketMessage(
-      req.user!.id,
-      req.user!.role,
-      ticketId,
-      parsed.data,
-    );
-
-    sendResponse(res, {
-      statusCode: 201,
-      success: true,
-      message: 'Ticket message sent successfully',
-      data: { message: savedMessage },
-    });
-  } catch (err) {
-    next(mapError(err));
-  }
-}
+export const SupportController = {
+  addEmergencyContact,
+  getEmergencyContacts,
+  triggerSos,
+  createTicket,
+  getMyTickets,
+  addTicketMessage,
+};

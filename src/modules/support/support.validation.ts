@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // ── POST /support/emergency-contacts ─────────────────────────────────────────
 
-export const CreateEmergencyContactSchema = z.object({
+const CreateEmergencyContactSchema = z.object({
   name: z
     .string({ error: 'name is required' })
     .min(1, 'name cannot be empty')
@@ -27,7 +27,7 @@ export type CreateEmergencyContactDto = z.infer<typeof CreateEmergencyContactSch
 
 // ── POST /support/sos ─────────────────────────────────────────────────────────
 
-export const SosSchema = z.object({
+const SosSchema = z.object({
   rideId: z.string().uuid('rideId must be a valid UUID').optional(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
@@ -37,7 +37,7 @@ export type SosDto = z.infer<typeof SosSchema>;
 
 // ── POST /support/tickets ─────────────────────────────────────────────────────
 
-export const CreateTicketSchema = z.object({
+const CreateTicketSchema = z.object({
   subject: z
     .string({ error: 'subject is required' })
     .min(3, 'subject must be at least 3 characters')
@@ -63,7 +63,7 @@ export type CreateTicketDto = z.infer<typeof CreateTicketSchema>;
 
 // ── POST /support/tickets/:id/messages ───────────────────────────────────────
 
-export const AddTicketMessageSchema = z.object({
+const AddTicketMessageSchema = z.object({
   message: z
     .string({ error: 'message is required' })
     .min(1, 'message cannot be empty')
@@ -71,3 +71,15 @@ export const AddTicketMessageSchema = z.object({
 });
 
 export type AddTicketMessageDto = z.infer<typeof AddTicketMessageSchema>;
+
+// ── POST /support/tickets/:id/messages — path param ──────────────────────────
+const TicketParamsSchema = z.object({
+  id: z.string().min(1, 'Ticket ID is required'),
+});
+
+export const SupportValidation = {
+  addEmergencyContact: { body: CreateEmergencyContactSchema },
+  triggerSos: { body: SosSchema },
+  createTicket: { body: CreateTicketSchema },
+  addTicketMessage: { params: TicketParamsSchema, body: AddTicketMessageSchema },
+};

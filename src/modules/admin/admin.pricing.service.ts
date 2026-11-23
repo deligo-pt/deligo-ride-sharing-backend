@@ -3,13 +3,13 @@ import { VehicleType } from '@prisma/client';
 import { UpdatePricingRuleInput } from './admin.pricing.validation';
 import { NotFoundError } from '../../utils/errors';
 
-export const listPricingRules = async () => {
+const listPricingRules = async () => {
   return prisma.pricingRule.findMany({
     orderBy: { vehicleType: 'asc' },
   });
 };
 
-export const updatePricingRule = async (vehicleType: VehicleType, payload: UpdatePricingRuleInput) => {
+const updatePricingRule = async (vehicleType: VehicleType, payload: UpdatePricingRuleInput) => {
   const rule = await prisma.pricingRule.findUnique({
     where: { vehicleType },
   });
@@ -22,4 +22,9 @@ export const updatePricingRule = async (vehicleType: VehicleType, payload: Updat
     where: { vehicleType },
     data: payload,
   });
+};
+
+export const AdminPricingService = {
+  listPricingRules,
+  updatePricingRule,
 };

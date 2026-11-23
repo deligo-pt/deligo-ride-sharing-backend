@@ -77,7 +77,7 @@ const isoDatetime = z
   .datetime({ message: 'Must be a valid ISO 8601 datetime (e.g. 2030-12-31T00:00:00Z)' })
   .optional();
 
-export const BulkExpiryDatesSchema = z.object({
+const BulkExpiryDatesSchema = z.object({
   DRIVING_LICENSE_expiryDate: isoDatetime,
   VEHICLE_REGISTRATION_expiryDate: isoDatetime,
   VEHICLE_INSURANCE_expiryDate: isoDatetime,
@@ -93,7 +93,7 @@ export interface SingleDocumentPayload {
 
 // ── GET /drivers/me/history — pagination query ─────────────────────────────────
 
-export const TripHistoryQuerySchema = z.object({
+const TripHistoryQuerySchema = z.object({
   page: z
     .string()
     .optional()
@@ -114,3 +114,10 @@ export const TripHistoryQuerySchema = z.object({
 });
 
 export type TripHistoryQuery = z.infer<typeof TripHistoryQuerySchema>;
+
+export const DriverValidation = {
+  /** POST /drivers/documents — optional expiry-date text fields (runs after multer). */
+  uploadDocuments: { body: BulkExpiryDatesSchema },
+  /** GET /drivers/me/history */
+  tripHistory: { query: TripHistoryQuerySchema },
+};

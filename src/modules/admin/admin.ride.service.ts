@@ -2,9 +2,9 @@ import prisma from '../../config/db';
 import { ConflictError, NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
 import { ListRidesQuery, CancelRideInput } from './admin.ride.validation';
-import { NotificationEngine } from '../notification/notification.service';
+import { NotificationService } from '../notification/notification.service';
 
-export const listRides = async (query: ListRidesQuery) => {
+const listRides = async (query: ListRidesQuery) => {
   const { status, page, limit } = query;
   const skip = (page - 1) * limit;
 
@@ -33,7 +33,7 @@ export const listRides = async (query: ListRidesQuery) => {
   return { rides, meta: buildPaginationMeta(total, page, limit) };
 };
 
-export const cancelRideByAdmin = async (rideId: string, payload: CancelRideInput) => {
+const cancelRideByAdmin = async (rideId: string, payload: CancelRideInput) => {
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     include: { customerProfile: true, driverProfile: true },
@@ -75,8 +75,8 @@ export const cancelRideByAdmin = async (rideId: string, payload: CancelRideInput
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
 
-  // NotificationEngine: alert the driver and customer
-  void NotificationEngine.dispatch({
+  // NotificationService: alert the driver and customer
+  void NotificationService.dispatch({
     userId: ride.customerProfile.userId,
     type: 'RIDE_CANCELLED',
     title: 'Ride Cancelled by Support',
@@ -85,7 +85,7 @@ export const cancelRideByAdmin = async (rideId: string, payload: CancelRideInput
   });
 
   if (ride.driverProfile) {
-    void NotificationEngine.dispatch({
+    void NotificationService.dispatch({
       userId: ride.driverProfile.userId,
       type: 'RIDE_CANCELLED',
       title: 'Ride Cancelled by Support',
@@ -95,4 +95,9 @@ export const cancelRideByAdmin = async (rideId: string, payload: CancelRideInput
   }
 
   return updatedRide;
+};
+
+export const AdminRideService = {
+  listRides,
+  cancelRideByAdmin,
 };

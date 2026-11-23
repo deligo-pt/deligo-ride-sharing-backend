@@ -5,13 +5,7 @@ import { config } from '../../config';
 import { redis } from '../../utils/redis';
 import { sendEmail } from '../../utils/email.service';
 import { AppError, BadRequestError, ConflictError, ForbiddenError } from '../../utils/errors';
-import {
-  hashSha256,
-  sanitizeUser,
-  generateUniqueReferralCode,
-  revokeAllUserSessions,
-  SanitizedUser,
-} from './auth.service';
+import { AuthService, SanitizedUser } from './auth.service';
 import { CreateAdminInput, SetAdminPasswordInput } from './admin-auth.validation';
 
 const INVITE_TOKEN_TTL_SECONDS = 86400; // 24 hours
@@ -27,7 +21,7 @@ const INVITE_TOKEN_TTL_SECONDS = 86400; // 24 hours
  * Creates a new Administrator with PENDING_VERIFICATION status and emails
  * a one-time setup link containing a cryptographically secure token.
  */
-export async function createAdmin(
+async function createAdmin(
   input: CreateAdminInput,
   creator: { id: string; role: string },
 ): Promise<{ user: SanitizedUser; message: string }> {
@@ -57,7 +51,7 @@ export async function createAdmin(
   }
 
   // 3. Generate unique referral code
-  const referralCode = await generateUniqueReferralCode();
+  const referralCode = await AuthService.generateUniqueReferralCode();
 
   // 4. Create User and AdminProfile in PostgreSQL
   // Status is PENDING_VERIFICATION to block login until password is set
@@ -87,7 +81,7 @@ export async function createAdmin(
 
   // 5. Generate secure 32-byte token and store SHA-256 hash in Redis
   const rawToken = crypto.randomBytes(32).toString('hex');
-  const tokenHash = hashSha256(rawToken);
+  const tokenHash = AuthService.hashSha256(rawToken);
   const redisKey = `admin:invite:${tokenHash}`;
 
   const payload = JSON.stringify({
@@ -143,7 +137,7 @@ export async function createAdmin(
   }
 
   return {
-    user: sanitizeUser(createdAdmin),
+    user: AuthService.sanitizeUser(createdAdmin),
     message: 'Admin created. Invitation link sent to email.',
   };
 }
@@ -152,11 +146,11 @@ export async function createAdmin(
  * Validates the one-time invitation token from Redis, sets the admin's password,
  * activates the account, and immediately invalidates the token.
  */
-export async function setAdminPassword(
+async function setAdminPassword(
   input: SetAdminPasswordInput,
 ): Promise<{ message: string }> {
   // 1. Hash incoming token and check Redis
-  const tokenHash = hashSha256(input.token.trim());
+  const tokenHash = AuthService.hashSha256(input.token.trim());
   const redisKey = `admin:invite:${tokenHash}`;
   const rawData = await redis.get(redisKey);
 
@@ -214,7 +208,12 @@ export async function setAdminPassword(
   await redis.del(redisKey);
 
   // 6. Password changed → invalidate every existing session and live socket
-  await revokeAllUserSessions(user.id);
+  await AuthService.revokeAllUserSessions(user.id);
 
   return { message: 'Password set successfully. You can now log in.' };
 }
+
+export const AdminAuthService = {
+  createAdmin,
+  setAdminPassword,
+};

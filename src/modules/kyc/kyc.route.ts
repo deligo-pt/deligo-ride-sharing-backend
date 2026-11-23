@@ -1,61 +1,46 @@
-import { Router } from "express";
-import { authenticate } from "../../middlewares/auth";
-import { kycUpload } from "../../middlewares/uploadMiddleware";
-import {
-  handleGetAllDocuments,
-  handleGetKycRequirements,
-  handleGetKycStatus,
-  handleGetMyDocuments,
-  handleGetPendingDocuments,
-  handleReviewDocument,
-  handleUploadDocuments,
-} from "./kyc.controller";
-import { REQUIRED_KYC_DOCUMENTS } from "./kyc.validation";
+import { Router } from 'express';
+import { authenticate, authorize } from '../../middlewares/auth';
+import { kycUpload } from '../../middlewares/uploadMiddleware';
+import { validateRequest } from '../../middlewares/validateRequest';
+import { KycController } from './kyc.controller';
+import { KycValidation, REQUIRED_KYC_DOCUMENTS } from './kyc.validation';
 
+// Mounted at: /api/v1/kyc (see src/routes/index.ts)
 const router: Router = Router();
 
 // ─── Public ───────────────────────────────────────────────────────────────────
+router.get('/requirements', KycController.getKycRequirements);
 
-// GET /api/v1/kyc/requirements
-// Returns the static list of all 7 required KYC documents with labels and
-// descriptions. 
-router.get("/requirements", handleGetKycRequirements);
+// ─── Driver ───────────────────────────────────────────────────────────────────
+router.get('/status', authenticate, authorize('DRIVER'), KycController.getKycStatus);
 
-// ─── Driver Routes ────────────────────────────────────────────────────────────
-
-// GET /api/v1/kyc/status
-// Driver: checklist showing upload & verification status for each of the 7 docs.
-router.get("/status", authenticate, handleGetKycStatus);
-
-// POST /api/v1/kyc/documents  (BULK UPLOAD)
-// Driver must send ALL 7 required documents as separate file fields in one
-// multipart/form-data request. Field names must match DocumentType enum values:
-//   DRIVING_LICENSE, NATIONAL_ID, VEHICLE_REGISTRATION, VEHICLE_INSURANCE,
-//   DRIVER_SELFIE, PROOF_OF_ADDRESS, TAX_ID
-// If any field is missing, the API returns a 400 with the full list of missing docs.
+// Bulk upload: every required document as a separate multipart file field named
+// after its DocumentType. A missing field returns 400 listing all absent documents.
 router.post(
-  "/documents",
+  '/documents',
   authenticate,
+  authorize('DRIVER'),
   kycUpload.fields(REQUIRED_KYC_DOCUMENTS.map((doc) => ({ name: doc.type, maxCount: 1 }))),
-  handleUploadDocuments
+  validateRequest(KycValidation.uploadDocuments),
+  KycController.uploadDocuments,
 );
 
-// GET /api/v1/kyc/documents/me
-// Driver: raw list of all uploaded documents.
-router.get("/documents/me", authenticate, handleGetMyDocuments);
+router.get('/documents/me', authenticate, authorize('DRIVER'), KycController.getMyDocuments);
 
-// ─── Admin Routes ─────────────────────────────────────────────────────────────
-
-// GET /api/v1/kyc/documents/pending
-// Admin: fetch all documents with PENDING verification status.
-router.get("/documents/pending", authenticate, handleGetPendingDocuments);
-
-// GET /api/v1/kyc/documents/all
-// Admin: fetch ALL documents regardless of status (for full review panel).
-router.get("/documents/all", authenticate, handleGetAllDocuments);
-
-// PATCH /api/v1/kyc/documents/:id/review
-// Admin: approve or reject a specific document.
-router.patch("/documents/:id/review", authenticate, handleReviewDocument);
+// ─── Admin ────────────────────────────────────────────────────────────────────
+router.get(
+  '/documents/pending',
+  authenticate,
+  authorize('ADMIN'),
+  KycController.getPendingDocuments,
+);
+router.get('/documents/all', authenticate, authorize('ADMIN'), KycController.getAllDocuments);
+router.patch(
+  '/documents/:id/review',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.reviewDocument),
+  KycController.reviewDocument,
+);
 
 export default router;

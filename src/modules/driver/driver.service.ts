@@ -1,5 +1,6 @@
 import prisma from '../../config/db';
 import type { SingleDocumentPayload, TripHistoryQuery } from './driver.validation';
+import { NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drivers Service  —  PRD 2.2: Driver Dashboard
@@ -51,7 +52,7 @@ function buildFlattenedData(documents: SingleDocumentPayload[]) {
  * Cloudinary URLs before calling this function.
  * Sets verificationStatus → PENDING and user.status → PENDING_VERIFICATION.
  */
-export async function uploadDriverDocuments(userId: string, documents: SingleDocumentPayload[]) {
+async function uploadDriverDocuments(userId: string, documents: SingleDocumentPayload[]) {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
   });
@@ -61,7 +62,7 @@ export async function uploadDriverDocuments(userId: string, documents: SingleDoc
   console.log('milestone 1');
 
   if (!driverProfile) {
-    throw new Error('DRIVER_PROFILE_NOT_FOUND');
+    throw new NotFoundError('Driver profile');
   }
 
   console.log('milestone 2');
@@ -108,7 +109,7 @@ export async function uploadDriverDocuments(userId: string, documents: SingleDoc
  *   - Nested DriverDocument (KYC status)
  *   - User identity fields (firstName, lastName, email, phone)
  */
-export async function getDriverDashboard(userId: string) {
+async function getDriverDashboard(userId: string) {
   const profile = await prisma.driverProfile.findUnique({
     where: { userId },
     include: {
@@ -131,7 +132,7 @@ export async function getDriverDashboard(userId: string) {
   });
 
   if (!profile) {
-    throw new Error('DRIVER_PROFILE_NOT_FOUND');
+    throw new NotFoundError('Driver profile');
   }
 
   return profile;
@@ -145,7 +146,7 @@ export async function getDriverDashboard(userId: string) {
  * Returns paginated COMPLETED and CANCELLED rides for the logged-in driver.
  * Includes customer details and final fare breakdown.
  */
-export async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
+async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
   // 1. Resolve the DriverProfile.id (Ride links on driverProfileId, not userId)
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
@@ -153,7 +154,7 @@ export async function getDriverTripHistory(userId: string, query: TripHistoryQue
   });
 
   if (!driverProfile) {
-    throw new Error('DRIVER_PROFILE_NOT_FOUND');
+    throw new NotFoundError('Driver profile');
   }
 
   const { page, limit } = query;
@@ -226,3 +227,9 @@ export async function getDriverTripHistory(userId: string, query: TripHistoryQue
     },
   };
 }
+
+export const DriverService = {
+  uploadDriverDocuments,
+  getDriverDashboard,
+  getDriverTripHistory,
+};

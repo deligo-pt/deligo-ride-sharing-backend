@@ -7,7 +7,7 @@ import { z } from 'zod';
 /**
  * Step 3: Business Details
  */
-export const businessDetailsSchema = z.object({
+const businessDetailsSchema = z.object({
   businessName: z.string().trim().min(1, 'Business name is required'),
   legalBusinessName: z.string().trim().optional(),
   licenseNumber: z.string().trim().min(1, 'License number is required'),
@@ -26,7 +26,7 @@ export type BusinessDetailsInput = z.infer<typeof businessDetailsSchema>;
 /**
  * Step 4: Location Details
  */
-export const locationDetailsSchema = z.object({
+const locationDetailsSchema = z.object({
   latitude: z
     .number()
     .min(-90, 'Latitude must be between -90 and 90')
@@ -48,7 +48,7 @@ export type LocationDetailsInput = z.infer<typeof locationDetailsSchema>;
 /**
  * Step 5: Bank Details
  */
-export const bankDetailsSchema = z.object({
+const bankDetailsSchema = z.object({
   accountHolderName: z.string().trim().min(1, 'Account holder name is required'),
   iban: z
     .string()
@@ -64,7 +64,7 @@ export type BankDetailsInput = z.infer<typeof bankDetailsSchema>;
 /**
  * Step 6: Verification Documents
  */
-export const documentsSchema = z
+const documentsSchema = z
   .object({
     photoUrl: z.string().url('Invalid photo URL').optional(),
     businessLicenseUrl: z.string().url('Invalid business license URL').optional(),
@@ -84,7 +84,7 @@ export type DocumentsInput = z.infer<typeof documentsSchema>;
 /**
  * Step 7: Declaration, Signer & Legal Acceptance (Submit)
  */
-export const submitOnboardingSchema = z
+const submitOnboardingSchema = z
   .object({
     signerType: z.enum(['MYSELF', 'AUTHORIZED_REPRESENTATIVE']),
     representativeName: z.string().trim().optional(),
@@ -112,3 +112,13 @@ export const submitOnboardingSchema = z
   });
 
 export type SubmitOnboardingInput = z.infer<typeof submitOnboardingSchema>;
+
+// ── Grouped validation (consumed by validateRequest in fleet-onboarding.route.ts)
+
+export const FleetOnboardingValidation = {
+  businessDetails: { body: businessDetailsSchema },
+  locationDetails: { body: locationDetailsSchema },
+  bankDetails: { body: bankDetailsSchema },
+  documents: { body: documentsSchema },
+  submit: { body: submitOnboardingSchema },
+};

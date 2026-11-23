@@ -1,8 +1,9 @@
 import prisma from '../../config/db';
 import { addScheduledRideJob } from '../../queues/ride.queue';
 import { getMultiStopRouteData } from '../../utils/map.service';
-import { PricingEngine } from './pricing.service';
-import { z } from 'zod';
+import { PricingService } from './pricing.service';
+import type { RecurringProfileDto } from './ride.validation';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Recurring Ride Factory Engine  —  PRD 3.9
@@ -14,50 +15,6 @@ import { z } from 'zod';
 //                                   execution window and queues BullMQ jobs.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Validation schema (used by the controller) ────────────────────────────────
-
-export const RecurringProfileSchema = z.object({
-  vehicleType: z.enum([
-    'Hatchback', 'Micro', 'Sedan', 'SUV', 'Motorcycle', 'PickupTruck',
-  ] as const, {
-    error: 'vehicleType must be a valid VehicleType',
-  }),
-
-  pickupAddress: z.string().min(1, 'pickupAddress is required'),
-  pickupLat:     z.number().min(-90).max(90),
-  pickupLng:     z.number().min(-180).max(180),
-
-  dropoffAddress: z.string().min(1, 'dropoffAddress is required'),
-  dropoffLat:     z.number().min(-90).max(90),
-  dropoffLng:     z.number().min(-180).max(180),
-
-  /**
-   * ISO weekday numbers: 1 = Monday … 7 = Sunday.
-   * e.g. [1, 3, 5] = Mon / Wed / Fri
-   */
-  daysOfWeek: z
-    .array(z.int().min(1).max(7))
-    .min(1, 'At least one day of week is required')
-    .max(7),
-
-  /** Local time of day in 'HH:MM' 24-hour format. e.g. "08:30" */
-  timeOfDay: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, 'timeOfDay must be in HH:MM format'),
-
-  startDate: z
-    .string()
-    .datetime({ message: 'startDate must be a valid ISO 8601 datetime' })
-    .transform((v) => new Date(v)),
-
-  endDate: z
-    .string()
-    .datetime({ message: 'endDate must be a valid ISO 8601 datetime' })
-    .transform((v) => new Date(v)),
-});
-
-export type RecurringProfileDto = z.infer<typeof RecurringProfileSchema>;
-
 // ── Service functions ─────────────────────────────────────────────────────────
 
 /**
@@ -67,16 +24,16 @@ export type RecurringProfileDto = z.infer<typeof RecurringProfileSchema>;
  * Validates that startDate < endDate and that the schedule covers at least
  * one future occurrence.
  */
-export async function createRecurringProfile(
+async function createRecurringProfile(
   userId: string,
   dto: RecurringProfileDto,
 ) {
   if (dto.endDate <= dto.startDate) {
-    throw new Error('END_DATE_BEFORE_START');
+    throw new BadRequestError('endDate must be after startDate.');
   }
 
   if (dto.endDate <= new Date()) {
-    throw new Error('END_DATE_IN_PAST');
+    throw new BadRequestError('endDate must be in the future.');
   }
 
   return prisma.recurringRideProfile.create({
@@ -103,7 +60,7 @@ export async function createRecurringProfile(
  *
  * Returns all recurring profiles for the authenticated customer.
  */
-export async function getMyRecurringProfiles(userId: string) {
+async function getMyRecurringProfiles(userId: string) {
   return prisma.recurringRideProfile.findMany({
     where:   { userId },
     orderBy: { createdAt: 'desc' },
@@ -116,15 +73,15 @@ export async function getMyRecurringProfiles(userId: string) {
  * Soft-deactivates a profile (sets isActive = false).
  * Only the owner may deactivate their own profile.
  */
-export async function deactivateRecurringProfile(userId: string, profileId: string) {
+async function deactivateRecurringProfile(userId: string, profileId: string) {
   const profile = await prisma.recurringRideProfile.findUnique({
     where: { id: profileId },
     select: { id: true, userId: true, isActive: true },
   });
 
-  if (!profile) throw new Error('PROFILE_NOT_FOUND');
-  if (profile.userId !== userId) throw new Error('PROFILE_FORBIDDEN');
-  if (!profile.isActive) throw new Error('PROFILE_ALREADY_INACTIVE');
+  if (!profile) throw new NotFoundError('Recurring ride profile');
+  if (profile.userId !== userId) throw new ForbiddenError('You do not own this recurring profile.');
+  if (!profile.isActive) throw new BadRequestError('This profile is already inactive.');
 
   return prisma.recurringRideProfile.update({
     where: { id: profileId },
@@ -210,7 +167,7 @@ async function rideAlreadyExists(
  *
  * Returns a summary object for observability.
  */
-export async function evaluateRecurringProfiles(): Promise<{
+async function evaluateRecurringProfiles(): Promise<{
   evaluated: number;
   scheduled: number;
   skipped: number;
@@ -267,7 +224,7 @@ export async function evaluateRecurringProfiles(): Promise<{
       const estimatedDuration = Math.ceil(routeData.durationSeconds / 60);
 
       // 5. Create SCHEDULED ride — use a rough fare (pickup → dropoff, no promo)
-      const fareBreakdowns = await PricingEngine.calculateEstimate(
+      const fareBreakdowns = await PricingService.calculateEstimate(
         profile.pickupLat,
         profile.pickupLng,
         profile.dropoffLat,
@@ -311,3 +268,10 @@ export async function evaluateRecurringProfiles(): Promise<{
 
   return { evaluated: profiles.length, scheduled, skipped, errors };
 }
+
+export const RecurringService = {
+  createRecurringProfile,
+  getMyRecurringProfiles,
+  deactivateRecurringProfile,
+  evaluateRecurringProfiles,
+};

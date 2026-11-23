@@ -1,4 +1,5 @@
 import prisma from "../../config/db";
+import { BadRequestError, NotFoundError } from "../../utils/errors";
 import { UpdateCustomerProfileInput, UpdateDriverProfileInput } from "./profile.validation";
 
 type ProfileData = Record<string, unknown>;
@@ -16,7 +17,7 @@ interface UserWithProfiles {
 
 // ─── GET PROFILE ────────────────────────────────────────────────────────────
 
-export const getMyProfile = async (userId: string, userRole: string) => {
+const getMyProfile = async (userId: string, userRole: string) => {
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -49,7 +50,7 @@ export const getMyProfile = async (userId: string, userRole: string) => {
     });
 
     if (!user) {
-        throw new Error("User not found.");
+        throw new NotFoundError('User', { message: 'User not found.', code: 'PROFILE_NOT_FOUND' });
     }
 
     // The select above only includes the profile relation matching the caller's role.
@@ -63,7 +64,7 @@ export const getMyProfile = async (userId: string, userRole: string) => {
 
 // ─── UPDATE PROFILE ─────────────────────────────────────────────────────────
 
-export const updateMyProfile = async (
+const updateMyProfile = async (
     userId: string,
     userRole: string,
     payload: UpdateCustomerProfileInput | UpdateDriverProfileInput
@@ -109,5 +110,10 @@ export const updateMyProfile = async (
         return updatedUser;
     }
 
-    throw new Error("Profile update is not supported for this role.");
+    throw new BadRequestError('Profile update is not supported for this role.', undefined, 'PROFILE_UPDATE_FAILED');
+};
+
+export const ProfileService = {
+  getMyProfile,
+  updateMyProfile,
 };

@@ -4,7 +4,7 @@ import { z } from 'zod';
 // Auth Validation Schemas
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const InitiateSignupSchema = z
+const InitiateSignupSchema = z
   .object({
     firstName: z.string().min(1, 'First name is required').trim(),
     lastName: z.string().min(1, 'Last name is required').trim(),
@@ -64,14 +64,14 @@ export const InitiateSignupSchema = z
 
 export type InitiateSignupInput = z.infer<typeof InitiateSignupSchema>;
 
-export const ResendOtpSchema = z.object({
+const ResendOtpSchema = z.object({
   signupSessionId: z.string().uuid('Invalid signupSessionId format'),
   channel: z.enum(['EMAIL', 'PHONE']).optional(),
 });
 
 export type ResendOtpInput = z.infer<typeof ResendOtpSchema>;
 
-export const VerifyOtpSchema = z.object({
+const VerifyOtpSchema = z.object({
   signupSessionId: z.string().uuid('Invalid signupSessionId format'),
   otp: z
     .string()
@@ -81,7 +81,7 @@ export const VerifyOtpSchema = z.object({
 
 export type VerifyOtpInput = z.infer<typeof VerifyOtpSchema>;
 
-export const LoginSchema = z.object({
+const LoginSchema = z.object({
   identifier: z.string().min(1, 'Email or phone number is required').trim(),
   password: z.string().min(1, 'Password is required'),
   rememberMe: z.boolean().optional().default(false),
@@ -89,13 +89,13 @@ export const LoginSchema = z.object({
 
 export type LoginInput = z.infer<typeof LoginSchema>;
 
-export const RefreshTokenSchema = z.object({
+const RefreshTokenSchema = z.object({
   refreshToken: z.string().optional(),
 });
 
 export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
 
-export const GoogleLoginSchema = z.object({
+const GoogleLoginSchema = z.object({
   idToken: z.string().min(1, 'Google ID token is required'),
   referralCode: z.string().trim().optional(),
   preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
@@ -104,7 +104,7 @@ export const GoogleLoginSchema = z.object({
 
 export type GoogleLoginInput = z.infer<typeof GoogleLoginSchema>;
 
-export const FacebookLoginSchema = z.object({
+const FacebookLoginSchema = z.object({
   accessToken: z.string().min(1, 'Facebook access token is required'),
   referralCode: z.string().trim().optional(),
   preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
@@ -113,7 +113,7 @@ export const FacebookLoginSchema = z.object({
 
 export type FacebookLoginInput = z.infer<typeof FacebookLoginSchema>;
 
-export const AppleLoginSchema = z.object({
+const AppleLoginSchema = z.object({
   idToken: z.string().min(1, 'Apple ID token is required'),
   user: z
     .object({
@@ -128,3 +128,14 @@ export const AppleLoginSchema = z.object({
 
 export type AppleLoginInput = z.infer<typeof AppleLoginSchema>;
 
+export const AuthValidation = {
+  initiateSignup: { body: InitiateSignupSchema },
+  resendOtp: { body: ResendOtpSchema },
+  verifyOtp: { body: VerifyOtpSchema },
+  login: { body: LoginSchema },
+  googleLogin: { body: GoogleLoginSchema },
+  facebookLogin: { body: FacebookLoginSchema },
+  appleLogin: { body: AppleLoginSchema },
+  // Cookie-only clients send no JSON body, so an absent body is treated as {}.
+  refreshToken: { body: z.preprocess((value) => value ?? {}, RefreshTokenSchema) },
+};

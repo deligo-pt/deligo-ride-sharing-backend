@@ -1,5 +1,6 @@
 import prisma from '../../config/db';
 import type { CreatePromoCodeDto, ValidatePromoCodeDto } from './promotion.validation';
+import { BadRequestError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Promotions Service  —  PRD 3.10: Promotions & Discounts
@@ -19,7 +20,7 @@ export interface ValidatePromoResult {
  * Persist a new PromoCode row.
  * The `code` value arrives already uppercased from the Zod schema transform.
  */
-export async function createPromoCode(dto: CreatePromoCodeDto) {
+async function createPromoCode(dto: CreatePromoCodeDto) {
   return prisma.promoCode.create({
     data: {
       code: dto.code,
@@ -56,7 +57,7 @@ export async function createPromoCode(dto: CreatePromoCodeDto) {
  *   PROMO_NOT_FOUND | PROMO_EXPIRED | PROMO_LIMIT_REACHED |
  *   PROMO_MIN_FARE_NOT_MET | PROMO_ALREADY_USED
  */
-export async function validatePromoCode(
+async function validatePromoCode(
   userId: string,
   dto: ValidatePromoCodeDto,
 ): Promise<ValidatePromoResult> {
@@ -66,23 +67,25 @@ export async function validatePromoCode(
   });
 
   if (!promo || !promo.isActive) {
-    throw new Error('PROMO_NOT_FOUND');
+    throw new BadRequestError('Invalid or inactive promo code');
   }
 
   // 2. Date window
   const now = new Date();
   if (now < promo.validFrom || now > promo.validUntil) {
-    throw new Error('PROMO_EXPIRED');
+    throw new BadRequestError('This promo code has expired');
   }
 
   // 3. Global usage cap
   if (promo.currentUses >= promo.maxGlobalUses) {
-    throw new Error('PROMO_LIMIT_REACHED');
+    throw new BadRequestError('This promo code has reached its usage limit');
   }
 
   // 4. Minimum fare requirement
   if (dto.estimatedFare < promo.minRideValue) {
-    throw new Error('PROMO_MIN_FARE_NOT_MET');
+    throw new BadRequestError(
+      'Your estimated fare does not meet the minimum required for this promo code',
+    );
   }
 
   // 5. Per-user uniqueness  (one redemption per customer, ever)
@@ -91,7 +94,7 @@ export async function validatePromoCode(
   });
 
   if (existingUsage) {
-    throw new Error('PROMO_ALREADY_USED');
+    throw new BadRequestError('You have already used this promo code');
   }
 
   // 6. Discount calculation
@@ -121,11 +124,11 @@ export async function validatePromoCode(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRD 3.10 — PricingEngine Integration Note
+// PRD 3.10 — PricingService Integration Note
 // ─────────────────────────────────────────────────────────────────────────────
 
 // When a ride transitions to COMPLETED and a promoCodeId is present on the
-// Ride record, PricingEngine.calculateFinalFare() (or the updateRideStatus
+// Ride record, PricingService.calculateFinalFare() (or the updateRideStatus
 // service function in ride.service.ts) must execute the following two
 // operations inside the same $transaction that settles the final fare:
 
@@ -152,3 +155,8 @@ export async function validatePromoCode(
 // `updateRideStatus` (ride.service.ts, step 7) when `ride.promoCodeId`
 // is truthy.
 // ─────────────────────────────────────────────────────────────────────────────
+
+export const PromotionService = {
+  createPromoCode,
+  validatePromoCode,
+};

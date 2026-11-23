@@ -4,7 +4,7 @@ import type { Worker } from 'bullmq';
 import { createApp } from './app';
 import prisma from './config/db';
 import { config } from './config';
-import { NotificationEngine } from './modules/notification/notification.service';
+import { NotificationService } from './modules/notification/notification.service';
 import { initSocketServer } from './sockets';
 import { rideWorker } from './queues/ride.worker';
 
@@ -27,7 +27,7 @@ async function bootstrap(): Promise<void> {
   // Attach Socket.io to the same HTTP server (same port as REST)
   const io = initSocketServer(server);
 
-  NotificationEngine.setIo(io);
+  NotificationService.setIo(io);
 
   let activeWorker: Worker | null = null;
   if (config.worker.embedded) {

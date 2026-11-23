@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // ─── PATCH /admin/kyc/:driverProfileId ────────────────────────────────────────
 
-export const ReviewKycSchema = z
+const ReviewKycSchema = z
   .object({
     /**
      * The top-level KYC decision: APPROVED or REJECTED.
@@ -40,7 +40,7 @@ export type ReviewKycInput = z.infer<typeof ReviewKycSchema>;
 
 // ─── PATCH /admin/kyc/:driverProfileId params ─────────────────────────────────
 
-export const DriverProfileIdParamSchema = z.object({
+const DriverProfileIdParamSchema = z.object({
   driverProfileId: z.string().uuid('driverProfileId must be a valid UUID'),
 });
 
@@ -48,7 +48,7 @@ export type DriverProfileIdParam = z.infer<typeof DriverProfileIdParamSchema>;
 
 // ─── GET /admin/users (paginated list) ────────────────────────────────────────
 
-export const ListUsersQuerySchema = z
+const ListUsersQuerySchema = z
   .object({
     role: z.enum(['CUSTOMER', 'DRIVER']).optional(),
     status: z.enum(['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION', 'DEACTIVATED']).optional(),
@@ -60,11 +60,11 @@ export type ListUsersQuery = z.infer<typeof ListUsersQuerySchema>;
 
 // ─── PATCH /admin/users/:userId/status ────────────────────────────────────────
 
-export const UserIdParamSchema = z.object({
+const UserIdParamSchema = z.object({
   userId: z.string().uuid('userId must be a valid UUID'),
 });
 
-export const UpdateUserStatusSchema = z.object({
+const UpdateUserStatusSchema = z.object({
   status: z.enum(['ACTIVE', 'SUSPENDED', 'DEACTIVATED'], {
     error: 'status must be ACTIVE, SUSPENDED, or DEACTIVATED',
   }),
@@ -72,3 +72,11 @@ export const UpdateUserStatusSchema = z.object({
 });
 
 export type UpdateUserStatusInput = z.infer<typeof UpdateUserStatusSchema>;
+
+// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+
+export const AdminValidation = {
+  reviewKyc: { params: DriverProfileIdParamSchema, body: ReviewKycSchema },
+  listUsers: { query: ListUsersQuerySchema },
+  updateUserStatus: { params: UserIdParamSchema, body: UpdateUserStatusSchema },
+};
