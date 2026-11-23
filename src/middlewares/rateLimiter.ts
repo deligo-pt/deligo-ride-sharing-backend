@@ -153,7 +153,7 @@ export const authRateLimiter: RequestHandler = createRateLimiter({
   max: 10,
   keys: (req) => [
     `ip:${clientIp(req)}:${req.baseUrl}${req.path}`,
-    ...['email', 'phone', 'signupSessionId', 'token'].map((field) => {
+    ...['email', 'phone', 'identifier', 'signupSessionId', 'token'].map((field) => {
       const value = bodyString(req, field);
       return value ? `id:${field}:${hashKey(value)}` : undefined;
     }),

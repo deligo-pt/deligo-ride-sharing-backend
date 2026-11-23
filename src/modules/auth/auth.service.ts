@@ -22,6 +22,7 @@ import {
 } from '../../utils/errors';
 import {
   InitiateSignupInput,
+  EmailOnlySignupInput,
   LoginInput,
   ResendOtpInput,
   VerifyOtpInput,
@@ -32,15 +33,7 @@ import {
   SetAdminPasswordInput,
 } from './auth.validation';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Auth Service
-//
-// Handles Signup (Redis session + atomic OTP attempts -> Atomic Postgres write),
-// Login (Credentials, timing attack & enumeration prevention, multi-device sessions),
-// Social Auth (Google, Facebook, Apple with Pre-Account Takeover protection),
-// Token Refresh (Atomic session rotation & breach detection),
-// and Logout (Access token JTI blacklist + Session revocation).
-// ─────────────────────────────────────────────────────────────────────────────
+type SignupInput = InitiateSignupInput | EmailOnlySignupInput;
 
 interface SignupRedisSession {
   payload: {
@@ -48,6 +41,7 @@ interface SignupRedisSession {
     lastName: string;
     email: string | null;
     phone: string | null;
+    identifier: string | null;
     passwordHash: string;
     preferredLanguage: 'EN' | 'PT';
     referralCode: string | null;
@@ -116,19 +110,15 @@ export interface GooglePayload {
   picture?: string;
 }
 
-// Dummy bcrypt hash used for constant-time comparison to prevent timing-based user enumeration
 const DUMMY_HASH = '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/HS.iK8.';
 const EXTERNAL_API_TIMEOUT_MS = 5000;
 const MAX_OTP_ATTEMPTS = 5;
 const MAX_OTP_RESENDS = 3;
 const OTP_RESEND_COOLDOWN_MS = 60_000;
+const INVITE_TOKEN_TTL_SECONDS = 86400;
 
 export const googleAuthClient = new OAuth2Client();
 const APPLE_JWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Internal Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 function hashSha256(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -191,10 +181,6 @@ function sanitizeUser(user: {
   };
 }
 
-/**
- * Generates a unique referral code for a newly registered user.
- * Retries up to 5 times against DB collisions, with a timestamp-based fallback.
- */
 async function generateUniqueReferralCode(): Promise<string> {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -210,10 +196,6 @@ async function generateUniqueReferralCode(): Promise<string> {
   return `DL${Date.now().toString(36).toUpperCase().slice(-6)}`;
 }
 
-/**
- * Issues a new Access + Refresh token pair and persists the hashed refresh token
- * as a dedicated Session row in PostgreSQL.
- */
 async function issueSessionAndTokens(
   user: {
     id: string;
@@ -289,9 +271,6 @@ async function issueSessionAndTokens(
   };
 }
 
-/**
- * Dispatches an OTP via Email or BulkGate SMS using dynamic expiry configuration.
- */
 async function dispatchOtp(
   channel: 'EMAIL' | 'PHONE',
   otp: string,
@@ -323,10 +302,6 @@ async function dispatchOtp(
   }
 }
 
-/**
- * Fires a non-blocking welcome email with safe error catching so unhandled
- * rejections never crash the Node.js process.
- */
 function sendWelcomeEmailAsync(user: {
   email: string | null;
   firstName: string | null;
@@ -348,10 +323,6 @@ function sendWelcomeEmailAsync(user: {
     console.error('[AuthService] Failed to send welcome email:', err);
   });
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// OAuth Token Verification
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function verifyGoogleIdToken(idToken: string): Promise<GooglePayload> {
   try {
@@ -390,12 +361,8 @@ async function verifyGoogleIdToken(idToken: string): Promise<GooglePayload> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Signup Operations
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function initiateSignup(
-  input: InitiateSignupInput,
+  input: SignupInput,
   role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER' = 'CUSTOMER',
 ): Promise<{
   signupSessionId: string;
@@ -407,7 +374,6 @@ async function initiateSignup(
     input.email && input.email.length > 0 ? input.email.toLowerCase().trim() : null;
   const normalizedPhone = input.phone && input.phone.length > 0 ? input.phone.trim() : null;
 
-  // Verify email does not exist
   if (normalizedEmail) {
     const existing = await prisma.user.findFirst({
       where: { email: normalizedEmail, isDeleted: false },
@@ -417,7 +383,6 @@ async function initiateSignup(
     }
   }
 
-  // Verify phone does not exist
   if (normalizedPhone) {
     const existing = await prisma.user.findFirst({
       where: { phone: normalizedPhone, isDeleted: false },
@@ -427,7 +392,6 @@ async function initiateSignup(
     }
   }
 
-  // Validate referrer's referralCode if provided
   let referrerId: string | null = null;
   if (input.referralCode) {
     const code = input.referralCode.trim().toUpperCase();
@@ -440,23 +404,22 @@ async function initiateSignup(
     referrerId = referrer.id;
   }
 
-  // Hash password before caching in Redis
   const passwordHash = await bcrypt.hash(input.password, config.bcrypt.saltRounds);
-
-  // Generate 6-digit OTP & store only its SHA-256 hash
   const rawOtp = crypto.randomInt(100000, 1000000).toString();
   const codeHash = hashSha256(rawOtp);
   const signupSessionId = crypto.randomUUID();
 
   const now = Date.now();
   const expiresAt = now + config.otp.expiresInSeconds * 1000;
+  const identifier = normalizedEmail || normalizedPhone;
 
   const sessionData: SignupRedisSession = {
     payload: {
-      firstName: input.firstName,
-      lastName: input.lastName,
+      firstName: input.firstName as string,
+      lastName: input.lastName as string,
       email: normalizedEmail,
       phone: normalizedPhone,
+      identifier,
       passwordHash,
       preferredLanguage: input.preferredLanguage,
       referralCode: input.referralCode?.trim().toUpperCase() || null,
@@ -472,17 +435,15 @@ async function initiateSignup(
     lastSentAt: now,
   };
 
-  // Store temporary signup session in Redis with TTL
   const redisKey = `signup:session:${signupSessionId}`;
   await redis.set(redisKey, JSON.stringify(sessionData), 'EX', config.otp.signupSessionTtlSeconds);
 
-  // Dispatch OTP
   await dispatchOtp(
     input.otpChannel,
     rawOtp,
     normalizedEmail,
     normalizedPhone,
-    input.firstName,
+    input.firstName as string,
     input.preferredLanguage,
   );
 
@@ -526,20 +487,17 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
   const now = Date.now();
   const elapsed = now - session.lastSentAt;
 
-  // Enforce cooldown
   if (elapsed < OTP_RESEND_COOLDOWN_MS) {
     const remainingSeconds = Math.ceil((OTP_RESEND_COOLDOWN_MS - elapsed) / 1000);
     throw new RateLimitError(`Please wait ${remainingSeconds} seconds before requesting a new OTP`);
   }
 
-  // Enforce max resend limit
   if (session.resendCount >= MAX_OTP_RESENDS) {
     throw new RateLimitError(
       'Maximum OTP resend limit reached for this session. Please restart registration.',
     );
   }
 
-  // Generate new OTP & invalidate previous one
   const rawOtp = crypto.randomInt(100000, 1000000).toString();
   const codeHash = hashSha256(rawOtp);
 
@@ -551,7 +509,6 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
   session.resendCount += 1;
   session.lastSentAt = now;
 
-  // Preserve remaining TTL in Redis
   const ttl = await redis.ttl(redisKey);
   await redis.set(
     redisKey,
@@ -560,14 +517,13 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
     ttl > 0 ? ttl : config.otp.signupSessionTtlSeconds,
   );
 
-  // Reset atomic attempt counter for the newly issued OTP
   await redis.del(attemptsKey);
 
   await dispatchOtp(
     targetChannel,
     rawOtp,
-    session.payload.email,
-    session.payload.phone,
+    targetChannel === 'EMAIL' ? session.payload.email : null,
+    targetChannel === 'PHONE' ? session.payload.phone : null,
     session.payload.firstName,
     session.payload.preferredLanguage,
   );
@@ -575,7 +531,11 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
   return {
     signupSessionId: input.signupSessionId,
     channel: targetChannel,
-    maskedTarget: maskTarget(targetChannel, session.payload.email, session.payload.phone),
+    maskedTarget: maskTarget(
+      targetChannel,
+      targetChannel === 'EMAIL' ? session.payload.email : null,
+      targetChannel === 'PHONE' ? session.payload.phone : null,
+    ),
     expiresIn: config.otp.expiresInSeconds,
   };
 }
@@ -594,12 +554,10 @@ async function verifySignupOtp(
 
   const session = JSON.parse(rawData) as SignupRedisSession;
 
-  // Check OTP expiration
   if (Date.now() > session.otp.expiresAt) {
     throw new BadRequestError('Verification code has expired. Please request a new one.');
   }
 
-  // Timing-safe OTP comparison
   const inputHash = hashSha256(input.otp);
   const expectedHash = session.otp.codeHash;
   const isMatch =
@@ -607,7 +565,6 @@ async function verifySignupOtp(
     crypto.timingSafeEqual(Buffer.from(inputHash), Buffer.from(expectedHash));
 
   if (!isMatch) {
-    // Atomic INCR prevents parallel brute-force race conditions
     const attempts = await redis.incr(attemptsKey);
     if (attempts === 1) {
       await redis.expire(attemptsKey, config.otp.signupSessionTtlSeconds);
@@ -625,13 +582,11 @@ async function verifySignupOtp(
     });
   }
 
-  // Generate a brand-new unique referral code for this new user
   const ownReferralCode = await generateUniqueReferralCode();
 
   let createdUser;
   try {
     createdUser = await prisma.$transaction(async (tx) => {
-      // 1. Create User
       const user = await tx.user.create({
         data: {
           email: session.payload.email,
@@ -648,7 +603,6 @@ async function verifySignupOtp(
         },
       });
 
-      // 2. Create Credentials Account
       await tx.account.create({
         data: {
           userId: user.id,
@@ -660,7 +614,6 @@ async function verifySignupOtp(
         },
       });
 
-      // 3. Conditionally create CustomerProfile, DriverProfile, or FleetManagerProfile based on role
       if (session.payload.role === 'DRIVER') {
         await tx.driverProfile.create({
           data: {
@@ -682,7 +635,6 @@ async function verifySignupOtp(
         });
       }
 
-      // 4. Create Wallet
       await tx.wallet.create({
         data: {
           userId: user.id,
@@ -701,19 +653,11 @@ async function verifySignupOtp(
     throw err;
   }
 
-  // Clean up temporary Redis keys
   await redis.del(redisKey, attemptsKey);
-
-  // Non-blocking welcome email
   sendWelcomeEmailAsync(createdUser);
 
-  // Reuse centralized session & token issuer
   return issueSessionAndTokens(createdUser, false, clientInfo);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Login & Social Auth Operations
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function login(
   input: LoginInput,
@@ -722,7 +666,6 @@ async function login(
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
   const identifier = input.identifier.trim();
 
-  // Find User by email OR phone
   const user = await prisma.user.findFirst({
     where: {
       OR: [{ email: identifier.toLowerCase() }, { phone: identifier }],
@@ -735,7 +678,6 @@ async function login(
     },
   });
 
-  // Timing attack prevention if user does not exist
   if (!user) {
     await bcrypt.compare(input.password, DUMMY_HASH);
     throw new UnauthorizedError('Invalid credentials');
@@ -743,7 +685,6 @@ async function login(
 
   const credentialsAccount = user.account.find((acc) => acc.provider === 'CREDENTIALS');
 
-  // Prevent account/provider enumeration by returning a generic error in constant time
   if (!credentialsAccount || !credentialsAccount.passwordHash) {
     await bcrypt.compare(input.password, DUMMY_HASH);
     throw new UnauthorizedError('Invalid credentials');
@@ -754,12 +695,7 @@ async function login(
     throw new UnauthorizedError('Invalid credentials');
   }
 
-  // Role authorization check (after password verification to prevent user/role enumeration)
-  if (
-    allowedRoles &&
-    allowedRoles.length > 0 &&
-    !allowedRoles.includes(user.role)
-  ) {
+  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     throw new ForbiddenError('This account is not authorized to sign in to this app.');
   }
 
@@ -783,7 +719,6 @@ async function handleSocialAuth(
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
   const rememberMe = options.rememberMe ?? true;
 
-  // 1. Case A — Existing active Account for (provider, providerAccountId)
   const existingAccount = await prisma.account.findUnique({
     where: {
       provider_providerAccountId: {
@@ -817,7 +752,6 @@ async function handleSocialAuth(
     return issueSessionAndTokens(user, rememberMe, clientInfo);
   }
 
-  // 2. Case B — Existing User by verified Email, not yet linked to this provider
   if (profile.email && profile.isEmailVerified) {
     const existingUserByEmail = await prisma.user.findFirst({
       where: {
@@ -832,6 +766,13 @@ async function handleSocialAuth(
     });
 
     if (existingUserByEmail) {
+      if (
+        existingUserByEmail.role !== 'CUSTOMER' ||
+        existingUserByEmail.status === 'PENDING_VERIFICATION'
+      ) {
+        throw new ForbiddenError('Social login is not allowed for this account.');
+      }
+
       if (existingUserByEmail.status === 'SUSPENDED') {
         throw new ForbiddenError(
           'Your account has been suspended. Please contact customer support.',
@@ -841,8 +782,6 @@ async function handleSocialAuth(
         throw new ForbiddenError('Your account has been deactivated.');
       }
 
-      // Pre-Account Takeover Protection:
-      // Links social provider and soft-deletes any unverified CREDENTIALS account
       const updatedUser = await prisma.$transaction(async (tx) => {
         await tx.account.upsert({
           where: {
@@ -903,7 +842,6 @@ async function handleSocialAuth(
     }
   }
 
-  // 3. Case C — Brand New User (Neither Social Account nor Verified Email Exists)
   let referrerId: string | null = null;
   if (options.referralCode) {
     const code = options.referralCode.trim().toUpperCase();
@@ -939,7 +877,6 @@ async function handleSocialAuth(
         },
       });
 
-      // Upsert handles previously soft-deleted social accounts without throwing P2002
       await tx.account.upsert({
         where: {
           provider_providerAccountId: {
@@ -1031,7 +968,6 @@ async function facebookLogin(
     throw new BadRequestError('Facebook authentication is not configured on the server');
   }
 
-  // 1. Verify Facebook Access Token via Graph API debug_token (with timeout)
   const appAccessToken = `${appId}|${appSecret}`;
   const debugUrl = `https://graph.facebook.com/v21.0/debug_token?input_token=${encodeURIComponent(
     input.accessToken,
@@ -1071,7 +1007,6 @@ async function facebookLogin(
     throw new UnauthorizedError('Facebook token did not yield a valid user ID');
   }
 
-  // 2. Fetch User Profile via Graph API /me (with timeout)
   const meUrl = `https://graph.facebook.com/v21.0/me?fields=id,email,first_name,last_name,picture.type(large)&access_token=${encodeURIComponent(
     input.accessToken,
   )}`;
@@ -1106,7 +1041,7 @@ async function facebookLogin(
   }
 
   const email = meData.email ? meData.email.toLowerCase().trim() : null;
-  const isEmailVerified = Boolean(email);
+  const isEmailVerified = false;
 
   return handleSocialAuth(
     {
@@ -1137,7 +1072,6 @@ async function appleLogin(
   let firstName = input.user?.firstName || null;
   let lastName = input.user?.lastName || null;
 
-  // 1. Check for Demo Mode Token (non-production only)
   if (input.idToken.startsWith('demo_apple_token_')) {
     if (config.isProduction) {
       throw new UnauthorizedError('Apple demo tokens are forbidden in production');
@@ -1168,7 +1102,6 @@ async function appleLogin(
     if (!firstName) firstName = 'Apple';
     if (!lastName) lastName = 'User';
   } else {
-    // 2. Production Apple ID Token Verification with jose
     try {
       const audiences = config.apple.audiences;
       if (!audiences || audiences.length === 0) {
@@ -1219,10 +1152,6 @@ async function appleLogin(
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Session Refresh & Logout Operations
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function refreshAccessToken(
   refreshToken: string,
 ): Promise<{ tokens: AuthTokens; rememberMe: boolean }> {
@@ -1241,8 +1170,6 @@ async function refreshAccessToken(
     throw new UnauthorizedError('Invalid refresh token');
   }
 
-  // Token reuse breach detection:
-  // Because rotated tokens are retained as isRevoked: true, reusing any old token triggers full revocation
   if (session.isRevoked) {
     await revokeAllUserSessions(session.userId);
     throw new UnauthorizedError('Session revoked due to detected token reuse security violation');
@@ -1295,7 +1222,6 @@ async function refreshAccessToken(
 
   const newTokenHash = hashSha256(newRefreshToken);
 
-  // Atomic rotation: atomically claim and revoke previous session and persist rotated session row
   await prisma.$transaction(async (tx) => {
     const revoked = await tx.session.updateMany({
       where: { id: session.id, isRevoked: false },
@@ -1303,7 +1229,6 @@ async function refreshAccessToken(
     });
 
     if (revoked.count === 0) {
-      // Another concurrent request already rotated this token — revoke all user sessions
       await tx.session.updateMany({
         where: { userId: session.userId },
         data: { isRevoked: true },
@@ -1335,19 +1260,12 @@ async function refreshAccessToken(
   };
 }
 
-/**
- * Revokes every login session of a user and force-disconnects their sockets.
- * Use on password change, admin suspension / ban, or detected token theft.
- */
 async function revokeAllUserSessions(userId: string): Promise<void> {
   await prisma.session.updateMany({
     where: { userId, isRevoked: false },
     data: { isRevoked: true },
   });
 
-  // Make already-issued access tokens fail on the very next REST request.
-  // Best-effort: the DB revocation above already blocks refresh, so a Redis hiccup
-  // must not make an admin ban / password change fail half-way — but log it loudly.
   try {
     await revokeUserAccessTokens(userId);
   } catch (err) {
@@ -1363,7 +1281,6 @@ async function logoutUser(options: {
   exp?: number;
   refreshToken?: string;
 }): Promise<{ message: string }> {
-  // 1. Revoke session in Postgres
   let revokedSessionId = options.sessionId;
   if (options.sessionId) {
     await prisma.session.updateMany({
@@ -1383,7 +1300,6 @@ async function logoutUser(options: {
     });
   }
 
-  // 2. Invalidate this session's access tokens immediately and close its live sockets
   if (revokedSessionId) {
     try {
       await revokeSessionAccessTokens(revokedSessionId);
@@ -1393,7 +1309,6 @@ async function logoutUser(options: {
     disconnectSessionSockets(revokedSessionId);
   }
 
-  // 3. Blacklist Access Token jti in Redis until its natural expiry
   if (options.jti) {
     const nowSec = Math.floor(Date.now() / 1000);
     const remainingSec = options.exp ? Math.max(1, options.exp - nowSec) : 900;
@@ -1403,25 +1318,10 @@ async function logoutUser(options: {
   return { message: 'Successfully logged out' };
 }
 
-const INVITE_TOKEN_TTL_SECONDS = 86400; // 24 hours
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin Auth Service
-//
-// Manages Admin creation with privilege escalation protection, Redis-based
-// one-time invitation links, and secure password setup.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Creates a new Administrator with PENDING_VERIFICATION status and emails
- * a one-time setup link containing a cryptographically secure token.
- */
 async function createAdmin(
   input: CreateAdminInput,
   creator: { id: string; role: string },
 ): Promise<{ user: SanitizedUser; message: string }> {
-  // 1. Strict Privilege Escalation Check:
-  // Only a SUPER_ADMIN can create another SUPER_ADMIN.
   if (input.role === 'SUPER_ADMIN') {
     const creatorUser = await prisma.user.findUnique({
       where: { id: creator.id },
@@ -1429,15 +1329,13 @@ async function createAdmin(
     });
 
     const isSuperAdmin =
-      creator.role === 'SUPER_ADMIN' ||
-      creatorUser?.adminProfile?.accessLabel === 'SUPER_ADMIN';
+      creator.role === 'SUPER_ADMIN' || creatorUser?.adminProfile?.accessLabel === 'SUPER_ADMIN';
 
     if (!isSuperAdmin) {
       throw new ForbiddenError('Only a SUPER_ADMIN can create another SUPER_ADMIN');
     }
   }
 
-  // 2. Check if email already exists
   const existingUser = await prisma.user.findFirst({
     where: { email: input.email, isDeleted: false },
   });
@@ -1445,11 +1343,8 @@ async function createAdmin(
     throw new ConflictError('A user with this email address already exists');
   }
 
-  // 3. Generate unique referral code
   const referralCode = await generateUniqueReferralCode();
 
-  // 4. Create User and AdminProfile in PostgreSQL
-  // Status is PENDING_VERIFICATION to block login until password is set
   const createdAdmin = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -1474,7 +1369,6 @@ async function createAdmin(
     return user;
   });
 
-  // 5. Generate secure 32-byte token and store SHA-256 hash in Redis
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashSha256(rawToken);
   const redisKey = `admin:invite:${tokenHash}`;
@@ -1487,7 +1381,6 @@ async function createAdmin(
 
   await redis.set(redisKey, payload, 'EX', INVITE_TOKEN_TTL_SECONDS);
 
-  // 6. Build one-time invite URL and send email
   const adminUrl = config.frontend.adminUrl;
   const inviteUrl = `${adminUrl.replace(/\/+$/, '')}/set-password?token=${rawToken}`;
 
@@ -1506,7 +1399,7 @@ async function createAdmin(
 
     if (!emailResult.success) {
       console.error(
-        `[adminAuth] ❌ Failed to dispatch invitation email to ${createdAdmin.email}: ${emailResult.error}`,
+        `[adminAuth] Failed to dispatch invitation email to ${createdAdmin.email}: ${emailResult.error}`,
       );
       if (config.isProduction) {
         await redis.del(redisKey);
@@ -1522,7 +1415,7 @@ async function createAdmin(
       throw err;
     }
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[adminAuth] ❌ Exception during admin invitation email dispatch: ${errMsg}`);
+    console.error(`[adminAuth] Exception during admin invitation email dispatch: ${errMsg}`);
     await redis.del(redisKey);
     throw new AppError(
       `Failed to deliver invitation email: ${errMsg}`,
@@ -1537,14 +1430,7 @@ async function createAdmin(
   };
 }
 
-/**
- * Validates the one-time invitation token from Redis, sets the admin's password,
- * activates the account, and immediately invalidates the token.
- */
-async function setAdminPassword(
-  input: SetAdminPasswordInput,
-): Promise<{ message: string }> {
-  // 1. Hash incoming token and check Redis
+async function setAdminPassword(input: SetAdminPasswordInput): Promise<{ message: string }> {
   const tokenHash = hashSha256(input.token.trim());
   const redisKey = `admin:invite:${tokenHash}`;
   const rawData = await redis.get(redisKey);
@@ -1555,7 +1441,6 @@ async function setAdminPassword(
 
   const inviteData = JSON.parse(rawData) as { userId: string; email: string };
 
-  // 2. Verify admin user exists and is not deleted
   const user = await prisma.user.findUnique({
     where: { id: inviteData.userId },
   });
@@ -1564,10 +1449,8 @@ async function setAdminPassword(
     throw new BadRequestError('Admin user account not found or has been deleted');
   }
 
-  // 3. Hash the new password
   const passwordHash = await bcrypt.hash(input.password, config.bcrypt.saltRounds);
 
-  // 4. Atomically activate user and upsert CREDENTIALS account
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: user.id },
@@ -1599,10 +1482,7 @@ async function setAdminPassword(
     });
   });
 
-  // 5. Immediately delete Redis key to prevent token reuse
   await redis.del(redisKey);
-
-  // 6. Password changed → invalidate every existing session and live socket
   await revokeAllUserSessions(user.id);
 
   return { message: 'Password set successfully. You can now log in.' };

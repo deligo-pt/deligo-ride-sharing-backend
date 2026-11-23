@@ -88,13 +88,19 @@ model DriverDocument {
   driverProfileId String        @unique
   driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
 
-  drivingLicenseUrl      String?
-  nationalIdUrl          String?
-  vehicleRegistrationUrl String?
-  vehicleInsuranceUrl    String?
-  driverSelfieUrl        String?
-  proofOfAddressUrl      String?
-  taxIdUrl               String?
+  drivingLicenseUrl            String?
+  drivingLicenseExpiresAt      DateTime?
+  nationalIdUrl                String?
+  nationalIdExpiresAt          DateTime?
+  vehicleRegistrationUrl       String?
+  vehicleRegistrationExpiresAt DateTime?
+  vehicleInsuranceUrl          String?
+  vehicleInsuranceExpiresAt    DateTime?
+  driverSelfieUrl              String?
+  proofOfAddressUrl            String?
+  proofOfAddressExpiresAt      DateTime?
+  taxIdUrl                     String?
+  taxIdExpiresAt               DateTime?
 
   verificationStatus DocumentStatus @default(PENDING)
   reviewNote         String?
