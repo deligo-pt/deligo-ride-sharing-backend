@@ -2,78 +2,94 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors';
-import { errorResponse } from '../types/api.types';
+import { ErrorSource, errorResponse } from '../types/api.types';
+import { config } from '../config';
+import { persistErrorLog, shouldPersistError } from '../utils/errorLogger';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Global Error Handling Middleware
-//
-// This is the single, centralized place where ALL errors in the app are caught
-// and transformed into a consistent JSON response. Never send error responses
-// from controllers directly — always throw or pass to next(err).
-//
-// Error handling order:
-//   1. Known operational errors (AppError subclasses)
-//   2. Zod validation errors
-//   3. Prisma client errors
-//   4. JWT errors
-//   5. Unknown/programmer errors (generic 500)
-// ─────────────────────────────────────────────────────────────────────────────
+interface ResolvedError {
+  statusCode: number;
+  message: string;
+  code: string;
+  errorSources?: ErrorSource[];
+}
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandler(
-  err: unknown,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
-): void {
-  // ── 1. Our own operational errors ────────────────────────────────────────
+const isErrorSource = (value: unknown): value is ErrorSource =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as ErrorSource).path === 'string' &&
+  typeof (value as ErrorSource).message === 'string';
+
+function toErrorSources(details: unknown): ErrorSource[] | undefined {
+  if (Array.isArray(details) && details.length > 0 && details.every(isErrorSource)) {
+    return details;
+  }
+
+  if (typeof details === 'object' && details !== null && !Array.isArray(details)) {
+    const entries = Object.entries(details);
+    if (
+      entries.length > 0 &&
+      entries.every(([, v]) => Array.isArray(v) && v.every((m: unknown) => typeof m === 'string'))
+    ) {
+      return entries.flatMap(([path, messages]) =>
+        (messages as string[]).map((message) => ({ path, message })),
+      );
+    }
+  }
+
+  return undefined;
+}
+
+function resolveError(err: unknown): ResolvedError {
   if (err instanceof AppError) {
-    res.status(err.statusCode).json(
-      errorResponse(err.message, err.code, err.details),
-    );
-    return;
+    return {
+      statusCode: err.statusCode,
+      message: err.message,
+      code: err.code,
+      errorSources: toErrorSources(err.details),
+    };
   }
 
-  // ── 2. Zod validation errors (schema validation failures) ────────────────
   if (err instanceof ZodError) {
-    const details = err.flatten().fieldErrors;
-    res.status(422).json(
-      errorResponse('Validation failed', 'VALIDATION_ERROR', details),
-    );
-    return;
+    return {
+      statusCode: 422,
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      errorSources: err.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    };
   }
 
-  // ── 3. Prisma errors ─────────────────────────────────────────────────────
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     switch (err.code) {
       case 'P2002': {
-        // Unique constraint violation
-        const fields = (err.meta?.target as string[])?.join(', ') ?? 'field';
-        res.status(409).json(
-          errorResponse(`A record with this ${fields} already exists`, 'CONFLICT'),
-        );
-        return;
+        const target = err.meta?.target;
+        const fields = Array.isArray(target) ? target.join(', ') : 'field';
+        return {
+          statusCode: 409,
+          message: `A record with this ${fields} already exists`,
+          code: 'CONFLICT',
+        };
       }
-      case 'P2025': {
-        // Record not found
-        res.status(404).json(
-          errorResponse('The requested record was not found', 'NOT_FOUND'),
-        );
-        return;
-      }
-      case 'P2003': {
-        // Foreign key constraint violation
-        res.status(400).json(
-          errorResponse('Related record does not exist', 'FOREIGN_KEY_CONSTRAINT'),
-        );
-        return;
-      }
-      case 'P2014': {
-        res.status(400).json(
-          errorResponse('Invalid relation data provided', 'INVALID_RELATION'),
-        );
-        return;
-      }
+      case 'P2025':
+        return {
+          statusCode: 404,
+          message: 'The requested record was not found',
+          code: 'NOT_FOUND',
+        };
+      case 'P2003':
+        return {
+          statusCode: 400,
+          message: 'Related record does not exist',
+          code: 'FOREIGN_KEY_CONSTRAINT',
+        };
+      case 'P2014':
+        return {
+          statusCode: 400,
+          message: 'Invalid relation data provided',
+          code: 'INVALID_RELATION',
+        };
       default:
         console.error(`[Prisma Error ${err.code}]`, err.message);
     }
@@ -81,38 +97,51 @@ export function errorHandler(
 
   if (err instanceof Prisma.PrismaClientValidationError) {
     console.error('[Prisma Validation Error]', err.message);
-    res.status(400).json(
-      errorResponse('Invalid data sent to the database', 'DATABASE_VALIDATION_ERROR', err.message),
-    );
-    return;
+    return {
+      statusCode: 400,
+      message: 'Invalid data sent to the database',
+      code: 'DATABASE_VALIDATION_ERROR',
+    };
   }
 
-  // ── 4. JWT errors ─────────────────────────────────────────────────────────
   if (err instanceof Error) {
     if (err.name === 'JsonWebTokenError') {
-      res.status(401).json(errorResponse('Invalid token', 'INVALID_TOKEN'));
-      return;
+      return { statusCode: 401, message: 'Invalid token', code: 'INVALID_TOKEN' };
     }
     if (err.name === 'TokenExpiredError') {
-      res.status(401).json(errorResponse('Token has expired', 'TOKEN_EXPIRED'));
-      return;
+      return { statusCode: 401, message: 'Token has expired', code: 'TOKEN_EXPIRED' };
     }
     if (err.name === 'NotBeforeError') {
-      res.status(401).json(errorResponse('Token not yet active', 'TOKEN_NOT_ACTIVE'));
-      return;
+      return { statusCode: 401, message: 'Token not yet active', code: 'TOKEN_NOT_ACTIVE' };
     }
   }
 
-  // ── 5. Unknown / programmer errors ────────────────────────────────────────
-  // Never leak stack traces or internal details to the client in production
-  const isDev = process.env.NODE_ENV === 'development';
   console.error('[Unhandled Error]', err);
+  return {
+    statusCode: 500,
+    message: 'An unexpected internal server error occurred',
+    code: 'INTERNAL_SERVER_ERROR',
+  };
+}
 
-  res.status(500).json(
-    errorResponse(
-      'An unexpected internal server error occurred',
-      'INTERNAL_SERVER_ERROR',
-      isDev && err instanceof Error ? err.stack : undefined,
-    ),
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
+  const resolved = resolveError(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+
+  res.status(resolved.statusCode).json(
+    errorResponse(resolved.statusCode, resolved.message, resolved.code, {
+      errorSources: resolved.errorSources,
+      stack: config.isDevelopment ? stack : undefined,
+    }),
   );
+
+  if (shouldPersistError(resolved.statusCode)) {
+    persistErrorLog(req, {
+      statusCode: resolved.statusCode,
+      code: resolved.code,
+      message: err instanceof Error && err.message ? err.message : resolved.message,
+      errorSources: resolved.errorSources,
+      stack,
+    });
+  }
 }

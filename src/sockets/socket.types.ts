@@ -9,7 +9,9 @@ import { Socket } from 'socket.io';
 
 export interface SocketUser {
   id: string;
-  role: string; // 'DRIVER' | 'CUSTOMER' | 'ADMIN' | 'GUEST'
+  role: string; // 'DRIVER' | 'CUSTOMER' | 'ADMIN'
+  email?: string;
+  sessionId: string;
 }
 
 /**
@@ -66,6 +68,9 @@ export interface ServerToClientEvents {
   /** SOS alert broadcast to the admin_security_desk room */
   sos_alert: (payload: SosAlertPayload) => void;
 
+  /** A ride changed state; sent to the ride_<rideId> room (customer + driver after join_ride) */
+  ride_status_updated: (payload: RideStatusUpdatedPayload) => void;
+
   /** Error feedback to the originating client */
   error: (payload: { message: string }) => void;
 }
@@ -99,6 +104,14 @@ export interface NotificationPayload {
   message: string;
   type: string;
   data: Record<string, unknown> | null;
+  timestamp: string; // ISO-8601
+}
+
+export interface RideStatusUpdatedPayload {
+  rideId: string;
+  status: string;
+  updatedBy: 'DRIVER' | 'CUSTOMER' | 'ADMIN' | 'SYSTEM';
+  reason?: string | null;
   timestamp: string; // ISO-8601
 }
 

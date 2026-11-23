@@ -1,4 +1,6 @@
 import type { Server } from 'socket.io';
+import prisma from '../config/db';
+import { sessionRoom, userRoom } from './socket.control';
 import type {
   AuthenticatedSocket,
   ClientToServerEvents,
@@ -22,13 +24,22 @@ const rideRoom = (rideId: string) => `ride_${rideId}`;
 
 export function registerSocketHandlers(io: IoServer): void {
   io.on('connection', (socket: AuthenticatedSocket) => {
-    const { id: userId, role } = socket.data.user;
+    const { id: userId, role, sessionId } = socket.data.user;
     console.info(`🔌 [SOCKET] Connected   | socketId=${socket.id} userId=${userId} role=${role}`);
 
     // ── Auto-join personal notification room ──────────────────────────────────
     // Every authenticated socket is automatically placed in user_<userId>.
-    // The NotificationEngine uses this room to push real-time notifications.
-    void socket.join(`user_${userId}`);
+    // The NotificationService uses this room to push real-time notifications.
+    void socket.join(userRoom(userId));
+
+    // Per-session room — lets logout / revocation disconnect just this login session.
+    void socket.join(sessionRoom(sessionId));
+
+    // Verified ADMINs receive SOS alerts on the security desk room. The role comes
+    // from the verified JWT, so it can't be self-asserted by the client.
+    if (role === 'ADMIN') {
+      void socket.join('admin_security_desk');
+    }
 
     // ── notification_subscribe ────────────────────────────────────────────────
     // Explicit subscription event — lets the client confirm the join and
@@ -53,6 +64,30 @@ export function registerSocketHandlers(io: IoServer): void {
       if (!rideId || typeof rideId !== 'string') {
         console.warn(`[SOCKET] join_ride rejected — invalid payload from ${socket.id}:`, payload);
         socket.emit('error', { message: 'join_ride requires { "rideId": "your-ride-id" }.' });
+        return;
+      }
+
+      // Only the ride's own customer / assigned driver (or an admin) may join.
+      try {
+        const ride = await prisma.ride.findFirst({
+          where: { id: rideId, isDeleted: false },
+          select: {
+            customerProfile: { select: { userId: true } },
+            driverProfile: { select: { userId: true } },
+          },
+        });
+
+        const isParticipant =
+          ride?.customerProfile.userId === userId || ride?.driverProfile?.userId === userId;
+
+        if (!ride || (!isParticipant && role !== 'ADMIN')) {
+          // Same response for "missing" and "not yours" so ride IDs can't be probed.
+          socket.emit('error', { message: 'Ride not found or you are not a participant.' });
+          return;
+        }
+      } catch (err) {
+        console.error('[SOCKET] Failed to verify ride membership:', err);
+        socket.emit('error', { message: 'Server error joining ride room.' });
         return;
       }
 

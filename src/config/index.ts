@@ -1,12 +1,17 @@
 import { env } from './env';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Unified Application Configuration
-//
-// Consolidates env variables into a structured, read-only configuration object.
-// This decouples business logic from env var naming schemes and handles
-// transformations (like parsing comma-separated origins) once at boot.
-// ─────────────────────────────────────────────────────────────────────────────
+const DEV_FALLBACK_ORIGINS = ['http://localhost:3000', 'http://localhost:5173'];
+
+function resolveAllowedOrigins(): string[] {
+  const raw = env.CORS_ORIGIN ?? env.ALLOWED_ORIGINS ?? '';
+  const configured = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (configured.length > 0) return configured;
+  return env.NODE_ENV === 'production' ? [] : DEV_FALLBACK_ORIGINS;
+}
 
 export const config = {
   env: env.NODE_ENV,
@@ -20,13 +25,20 @@ export const config = {
     url: env.DATABASE_URL,
   },
 
+  redis: {
+    url: env.REDIS_URL,
+  },
+
+  worker: {
+    embedded: env.ENABLE_WORKER,
+  },
+
   jwt: {
     secret: env.JWT_SECRET,
     expiresIn: env.JWT_EXPIRES_IN,
     accessSecret: env.JWT_ACCESS_SECRET || env.JWT_SECRET,
     accessExpiresIn: env.JWT_ACCESS_EXPIRES_IN,
     refreshSecret: env.JWT_REFRESH_SECRET,
-    refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
     refreshExpiresInDefault: env.JWT_REFRESH_EXPIRES_IN_DEFAULT,
     refreshExpiresInRemember: env.JWT_REFRESH_EXPIRES_IN_REMEMBER,
   },
@@ -42,8 +54,34 @@ export const config = {
     secure: env.SMTP_SECURE,
     user: env.SMTP_USER,
     pass: env.SMTP_PASS,
+  },
+
+  email: {
     fromName: env.EMAIL_FROM_NAME,
     fromAddress: env.EMAIL_FROM_ADDRESS,
+  },
+
+  resend: {
+    apiKey: env.RESEND_API_KEY,
+  },
+
+  cloudinary: {
+    cloudName: env.CLOUDINARY_CLOUD_NAME,
+    apiKey: env.CLOUDINARY_API_KEY,
+    apiSecret: env.CLOUDINARY_API_SECRET,
+  },
+
+  bulkgate: {
+    applicationId: env.BULKGATE_APPLICATION_ID,
+    applicationToken: env.BULKGATE_APPLICATION_TOKEN,
+  },
+
+  mapbox: {
+    accessToken: env.MAPBOX_ACCESS_TOKEN,
+  },
+
+  firebase: {
+    serviceAccountPath: env.FIREBASE_SERVICE_ACCOUNT_PATH,
   },
 
   bcrypt: {
@@ -51,12 +89,11 @@ export const config = {
   },
 
   cors: {
-    allowedOrigins: env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()),
+    allowedOrigins: resolveAllowedOrigins(),
   },
 
   google: {
     clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
     androidClientId: env.GOOGLE_ANDROID_CLIENT_ID,
     iosClientId: env.GOOGLE_IOS_CLIENT_ID,
     audiences: [
@@ -72,17 +109,14 @@ export const config = {
   },
 
   apple: {
-    clientId: env.APPLE_CLIENT_ID || 'com.deligo.web.demo',
-    bundleId: env.APPLE_BUNDLE_ID || 'com.deligo.app.demo',
-    demoMode: env.NODE_ENV !== 'production' && Boolean(env.APPLE_DEMO_MODE),
-    audiences: [
-      env.APPLE_CLIENT_ID || 'com.deligo.web.demo',
-      env.APPLE_BUNDLE_ID || 'com.deligo.app.demo',
-    ].filter((id): id is string => typeof id === 'string' && id.length > 0),
+    clientId: env.APPLE_CLIENT_ID,
+    bundleId: env.APPLE_BUNDLE_ID,
+    demoMode: env.NODE_ENV !== 'production' && env.APPLE_DEMO_MODE,
+    audiences: [env.APPLE_CLIENT_ID, env.APPLE_BUNDLE_ID].filter((id) => id.length > 0),
   },
 
   frontend: {
-    adminUrl: env.ADMIN_FRONTEND_URL || 'http://localhost:3000/admin',
+    adminUrl: env.ADMIN_FRONTEND_URL,
   },
 } as const;
 

@@ -9,8 +9,9 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "type-check": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "prisma:generate": "prisma generate",
@@ -56,6 +57,7 @@
     "ioredis": "^5.11.1",
     "jose": "^4.15.9",
     "jsonwebtoken": "^9.0.3",
+    "libphonenumber-js": "^1.13.17",
     "multer": "^2.1.1",
     "nodemailer": "^10.6.0",
     "pg": "^8.21.0",
@@ -64,6 +66,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcrypt": "^6.0.0",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",

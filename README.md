@@ -26,17 +26,31 @@ The core backend microservice for the **Deligo Ride-Sharing** platform. Built fo
 
 We strictly adhere to a **Domain-Driven, Layered Architecture**. This ensures a clear separation of concerns, making the codebase predictable, testable, and highly scalable.
 
-### Domain Structure
-Each feature is encapsulated within its own isolated domain inside the `src/domains/` directory:
+### Module Structure
+Each feature is encapsulated in its own module inside `src/modules/`, one folder per singular domain name. Files follow `<module>.<layer>.ts`:
 
 ```text
-src/domains/
-└── rides/
-    ├── rides.routes.ts      # Express endpoint definitions & middleware mapping
-    ├── rides.controller.ts  # Request parsing, service invocation, and response formatting
-    ├── rides.service.ts     # Core business logic and Prisma ORM data access
-    └── rides.validation.ts  # Zod schemas for strict request body/query validation
+src/modules/
+└── ride/
+    ├── ride.route.ts        # Declarative only: authenticate → authorize → validateRequest → controller
+    ├── ride.controller.ts   # catchAsync handlers → service call → sendResponse; exports RideController
+    ├── ride.service.ts      # HTTP-agnostic business logic + Prisma access; throws AppErrors; exports RideService
+    └── ride.validation.ts   # Zod schemas as { body?, query?, params? }; exports RideValidation
 ```
+
+Every layer exports exactly one grouped object (`<Module>Route` is the default-exported router, `<Module>Controller`, `<Module>Service`, `<Module>Validation`), e.g.:
+
+```ts
+router.post(
+  '/request',
+  authenticate,
+  authorize('CUSTOMER'),
+  validateRequest(RideValidation.requestRide),
+  RideController.requestRide,
+);
+```
+
+All module routers are registered in one place, `src/routes/index.ts`, which `src/app.ts` mounts at `/api/v1`.
 
 ---
 
@@ -44,27 +58,31 @@ src/domains/
 
 To ensure seamless frontend and mobile integration, all API endpoints must adhere to a strict, predictable JSON response format.
 
-**✅ Success Response (2XX):**
+**✅ Success Response (2XX):** built with `sendResponse` (`src/utils/sendResponse.ts`)
 ```json
 {
   "success": true,
-  "data": {
-    "id": "uuid-1234",
-    "status": "COMPLETED"
-  }
+  "statusCode": 200,
+  "message": "Ride accepted successfully",
+  "meta": { "page": 1, "limit": 20, "total": 42, "totalPage": 3 },
+  "data": { "id": "uuid-1234", "status": "ACCEPTED" }
 }
 ```
+`meta` is only present on paginated lists.
 
-**❌ Error Response (4XX / 5XX):**
+**❌ Error Response (4XX / 5XX):** produced only by the global `errorHandler`
 ```json
 {
   "success": false,
-  "error": {
-    "code": "VALIDATION_FAILED",
-    "message": "Invalid license plate format provided."
-  }
+  "statusCode": 400,
+  "message": "Validation failed",
+  "code": "VALIDATION_ERROR",
+  "errorSources": [{ "path": "body.licensePlate", "message": "Invalid license plate format." }]
 }
 ```
+`errorSources` is always an array (non-field errors get one entry with an empty `path`); `stack` appears only when `NODE_ENV=development`.
+
+Server errors (5xx) are also persisted, redacted and non-blocking, to the `error_logs` table (`ErrorLog` model). Passwords, tokens, OTPs, secrets, `authorization`/`cookie` values and sensitive query-string params are replaced with `[REDACTED]` first (`src/utils/redact.ts`). Which statuses are stored is controlled by `shouldPersistError()` in `src/utils/errorLogger.ts`.
 
 ---
 
@@ -109,8 +127,8 @@ Install dependencies and align your local database with the Prisma schema:
 # Install Node modules
 npm install
 
-# Push schema changes to PostgreSQL
-npx prisma db push
+# Apply committed migrations to PostgreSQL (use `npx prisma migrate dev` to create a new one)
+npx prisma migrate deploy
 
 # Generate the Prisma Client types
 npx prisma generate
@@ -139,6 +157,7 @@ npx prisma studio
 When contributing to this repository, please adhere to the following guidelines:
 
 - **Strict Type Safety:** The use of `any` is strictly prohibited. Define explicit TypeScript interfaces or infer them dynamically using Prisma and Zod.
-- **Graceful Error Handling:** Controllers must wrap execution in `try/catch` blocks. Unhandled exceptions should be passed to `next(error)` to be caught and formatted by the global error handler.
-- **Database Migrations:** Any modification to `prisma/schema.prisma` must be immediately followed by `npx prisma db push` and `npx prisma generate` to ensure type definitions remain synchronized.
-- **Service Isolation:** Controllers should never interact with the database directly. All Prisma logic must be abstracted into the respective Domain Service.
+- **Graceful Error Handling:** Controllers wrap handlers in `catchAsync` (no `try/catch`); services throw `AppError` subclasses (`BadRequestError`, `NotFoundError`, `ForbiddenError`, `ConflictError`, …). The global error handler formats every failure.
+- **Database Migrations:** Any modification to the Prisma schema (`prisma/schema/*.prisma`) must ship with a migration (`npx prisma migrate dev`), followed by `npx prisma generate`. Never use `prisma db push --accept-data-loss` against shared or production databases to ensure type definitions remain synchronized.
+- **Service Isolation:** Controllers should never interact with the database directly. All Prisma logic must be abstracted into the respective Domain Service, which must stay HTTP-agnostic (no `Request`/`Response`).
+- **Validation:** Zod schemas live in `<module>.validation.ts` and run through `validateRequest(...)` in the route; controllers never call `.parse()`.

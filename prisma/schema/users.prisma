@@ -2,6 +2,21 @@ enum UserRole {
   CUSTOMER
   DRIVER
   ADMIN
+  FLEET_MANAGER
+}
+
+enum FleetVerificationStatus {
+  PENDING_VERIFICATION
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum FleetSignerType {
+  MYSELF
+  AUTHORIZED_REPRESENTATIVE
 }
 
 enum UserStatus {
@@ -81,6 +96,7 @@ model User {
   customerProfile       CustomerProfile?
   driverProfile         DriverProfile?
   adminProfile          AdminProfile?
+  fleetManagerProfile   FleetManagerProfile?
   notificationsReceived Notification[]
   reviewsGiven          Review[]           @relation("ReviewAuthor")
   reviewsReceived       Review[]           @relation("ReviewTarget")
@@ -151,6 +167,66 @@ model AdminProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("admin_profiles")
+}
+
+model FleetManagerProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  businessName      String?
+  legalBusinessName String?
+  licenseNumber     String? @unique
+  nifNumber         String? @unique
+  businessEmail     String?
+  businessPhone     String?
+
+  latitude   Float?
+  longitude  Float?
+  street     String?
+  city       String?
+  district   String?
+  state      String?
+  postalCode String?
+  country    String?
+
+  accountHolderName String?
+  iban              String?
+
+  photoUrl                  String?
+  businessLicenseUrl        String?
+  businessLicenseExpiresAt  DateTime?
+  idProofFrontUrl           String?
+  idProofBackUrl            String?
+  idProofExpiresAt          DateTime?
+  addressProofUrl           String?
+  addressProofExpiresAt     DateTime?
+  activityDocumentUrl       String?
+  activityDocumentExpiresAt DateTime?
+  ibanProofUrl              String?
+  ibanProofExpiresAt        DateTime?
+
+  signerType         FleetSignerType?
+  representativeName String?
+  representativeId   String?
+  signatureUrl       String?
+  termsAcceptedAt    DateTime?
+  privacyAcceptedAt  DateTime?
+
+  verificationStatus FleetVerificationStatus @default(PENDING_VERIFICATION)
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  rejectionReason    String?
+  adminNote          String?
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([verificationStatus])
+  @@map("fleet_manager_profiles")
 }
 
 // PAYMENTS & WALLET => demo 

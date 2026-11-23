@@ -1,15 +1,23 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Environment Variable Validation
-//
-// All required environment variables are validated at startup.
-// The app will crash with a descriptive error if any are missing,
-// preventing silent failures in misconfigured environments.
-// ─────────────────────────────────────────────────────────────────────────────
+// Values that mean "someone copied .env.example / docker-compose.yml into production".
+const PLACEHOLDER_SECRET_MARKERS = [
+  'your_',
+  'change_in_production',
+  'changeme',
+  'deligo_development',
+  'mock_',
+] as const;
 
-const envSchema = z.object({
+const looksLikePlaceholder = (value: string): boolean => {
+  const lower = value.toLowerCase();
+  return PLACEHOLDER_SECRET_MARKERS.some((marker) => lower.includes(marker));
+};
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']);
+
+const envObject = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   SAMESITE_COOKIE: z.enum(['lax', 'strict', 'none']).default('lax'),
   PORT: z.coerce.number().positive().default(3000),
@@ -19,15 +27,13 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32).optional(),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
   JWT_REFRESH_EXPIRES_IN_DEFAULT: z.string().default('1d'),
   JWT_REFRESH_EXPIRES_IN_REMEMBER: z.string().default('30d'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().min(10).max(14).default(12),
-  ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
-  // OTP & Signup Session
+  CORS_ORIGIN: z.string().optional(),
+  ALLOWED_ORIGINS: z.string().optional(),
   OTP_EXPIRES_IN_SECONDS: z.coerce.number().default(300),
   SIGNUP_SESSION_TTL_SECONDS: z.coerce.number().default(900),
-  // SMTP / Nodemailer
   SMTP_HOST: z.string().default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_SECURE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
@@ -35,41 +41,74 @@ const envSchema = z.object({
   SMTP_PASS: z.string().default(''),
   EMAIL_FROM_NAME: z.string().default('Deligo Ride'),
   EMAIL_FROM_ADDRESS: z.string().default('noreply@deligo.com'),
-  // Cloudinary — document storage for KYC uploads
   CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME must be set'),
   CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY must be set'),
   CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET must be set'),
-  // Redis — geospatial driver location tracking
   REDIS_URL: z.string().default('redis://localhost:6379'),
-  // Firebase Admin — push notifications
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./firebase-service-account.json'),
-  // BulkGate — transactional SMS gateway
-  // Obtain from https://portal.bulkgate.com → Administration → Applications
+  RESEND_API_KEY: z.string().optional(),
+  MAPBOX_ACCESS_TOKEN: z.string().optional(),
+  ENABLE_WORKER: z
+    .preprocess((val) => String(val).toLowerCase() !== 'false', z.boolean())
+    .default(true),
   BULKGATE_APPLICATION_ID: z.string().optional(),
   BULKGATE_APPLICATION_TOKEN: z.string().optional(),
-  // Google OAuth
   GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
   GOOGLE_IOS_CLIENT_ID: z.string().optional(),
-  // Facebook OAuth
   FACEBOOK_APP_ID: z.string().optional(),
   FACEBOOK_APP_SECRET: z.string().optional(),
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
-  // Apple Sign-In
   APPLE_CLIENT_ID: z.string().optional().default('com.deligo.web.demo'),
   APPLE_BUNDLE_ID: z.string().optional().default('com.deligo.app.demo'),
   APPLE_DEMO_MODE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
-  // Admin Frontend
   ADMIN_FRONTEND_URL: z.string().optional().default('http://localhost:3000/admin'),
+});
+
+// ── Production-only guards ───────────────────────────────────────────────────
+// Development and test keep their convenient defaults; production must be explicit.
+const envSchema = envObject.superRefine((data, ctx) => {
+  if (data.NODE_ENV !== 'production') return;
+
+  const fail = (path: keyof typeof data, message: string): void => {
+    ctx.addIssue({ code: 'custom', path: [path], message });
+  };
+
+  // 1. JWT secrets: explicit access secret, and no placeholder/dev values.
+  if (!data.JWT_ACCESS_SECRET) {
+    fail('JWT_ACCESS_SECRET', 'JWT_ACCESS_SECRET must be set explicitly in production');
+  }
+  for (const key of ['JWT_SECRET', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'] as const) {
+    const value = data[key];
+    if (value && looksLikePlaceholder(value)) {
+      fail(key, `${key} looks like a placeholder/dev value; generate a real random secret`);
+    }
+  }
+
+  // 2. Apple Sign-In: the demo IDs must never be used to verify real tokens.
+  for (const key of ['APPLE_CLIENT_ID', 'APPLE_BUNDLE_ID'] as const) {
+    if (!data[key] || data[key].toLowerCase().includes('.demo')) {
+      fail(key, `${key} must be set to your real Apple identifier in production (not the demo value)`);
+    }
+  }
+
+  // 3. Admin frontend: invite/reset links must not point at localhost.
+  try {
+    const { hostname } = new URL(data.ADMIN_FRONTEND_URL);
+    if (LOCAL_HOSTNAMES.has(hostname.toLowerCase())) {
+      fail('ADMIN_FRONTEND_URL', 'ADMIN_FRONTEND_URL must not point to localhost in production');
+    }
+  } catch {
+    fail('ADMIN_FRONTEND_URL', 'ADMIN_FRONTEND_URL must be a valid absolute URL');
+  }
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
 
 if (!parsedEnv.success) {
   console.error('❌ Invalid environment variables detected:');
-  console.error(parsedEnv.error.flatten().fieldErrors);
+  console.error(z.flattenError(parsedEnv.error).fieldErrors);
   process.exit(1);
 }
 

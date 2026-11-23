@@ -2,9 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '@prisma/client';
 import prisma from '../config/db';
-import { env } from '../config/env';
 import { config } from '../config';
 import { redis } from '../utils/redis';
+import { isAccessTokenRevoked } from '../utils/revocation';
 import { JwtPayload } from '../types/auth.types';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 
@@ -17,6 +17,62 @@ import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 // malformed, expired, or revoked.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Verifies an access token (signature + expiry), the Redis token blacklist and the
+ * Redis user/session revocation markers (see utils/revocation.ts).
+ * Shared by the REST `authenticate` middleware and the Socket.IO handshake so
+ * both transports accept exactly the same tokens.
+ */
+export async function verifyAccessToken(token: string): Promise<JwtPayload> {
+  const secret = config.jwt.accessSecret;
+  let payload: JwtPayload;
+
+  try {
+    payload = jwt.verify(token, secret) as JwtPayload;
+  } catch {
+    if (config.jwt.secret !== secret) {
+      try {
+        payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
+      } catch {
+        throw new UnauthorizedError('Invalid or expired token');
+      }
+    } else {
+      throw new UnauthorizedError('Invalid or expired token');
+    }
+  }
+
+  // Check Redis token blacklist
+  if (payload.jti) {
+    const isBlacklisted = await redis.get(`blacklist:token:${payload.jti}`);
+    if (isBlacklisted) {
+      throw new UnauthorizedError('Token has been revoked');
+    }
+  }
+
+  // Instant revocation: user suspended / sessions revoked / session logged out
+  if (await isAccessTokenRevoked(payload)) {
+    throw new UnauthorizedError('Session has been revoked. Please sign in again.');
+  }
+
+  return payload;
+}
+
+/**
+ * Confirms the session referenced by a token is still live: it exists, belongs to
+ * the token's user, has not been revoked (logout / refresh rotation / reuse
+ * detection) and has not expired.
+ */
+export async function assertSessionActive(sessionId: string, userId: string): Promise<void> {
+  const session = await prisma.session.findFirst({
+    where: { id: sessionId, userId, isRevoked: false, expiresAt: { gt: new Date() } },
+    select: { id: true },
+  });
+
+  if (!session) {
+    throw new UnauthorizedError('Session is no longer active');
+  }
+}
+
 export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
@@ -25,31 +81,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw new UnauthorizedError('No bearer token provided');
     }
 
-    const token = authHeader.slice(7);
-    const secret = config.jwt.accessSecret || env.JWT_SECRET;
-    let payload: JwtPayload;
-
-    try {
-      payload = jwt.verify(token, secret) as JwtPayload;
-    } catch {
-      if (env.JWT_SECRET && env.JWT_SECRET !== secret) {
-        try {
-          payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
-        } catch {
-          throw new UnauthorizedError('Invalid or expired token');
-        }
-      } else {
-        throw new UnauthorizedError('Invalid or expired token');
-      }
-    }
-
-    // Check Redis token blacklist
-    if (payload.jti) {
-      const isBlacklisted = await redis.get(`blacklist:token:${payload.jti}`);
-      if (isBlacklisted) {
-        throw new UnauthorizedError('Token has been revoked');
-      }
-    }
+    const payload = await verifyAccessToken(authHeader.slice(7));
 
     req.user = {
       id: payload.sub,
@@ -117,4 +149,23 @@ export function requireRole(...allowedRoles: string[]) {
       next(err);
     }
   };
+}
+
+/**
+ * Attaches req.user when a Bearer token is supplied, but never rejects: an
+ * absent, expired or invalid token simply proceeds without req.user. Used by
+ * endpoints that must also work for cookie-only clients (e.g. logout).
+ */
+export async function optionalAuthenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    return authenticate(req, res, () => {
+      // Token verification failed (or succeeded): proceed either way.
+      next();
+    });
+  }
+  next();
 }

@@ -1,6 +1,10 @@
 import { Worker, Job } from 'bullmq';
 import prisma from '../config/db';
 import { LocationService } from '../utils/redis';
+import {
+  NotificationService,
+  logNotificationFailure,
+} from '../modules/notification/notification.service';
 import { RIDE_QUEUE_NAME, ScheduledRideJobData, bullmqConnection } from './ride.queue';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,6 +35,7 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
       pickupLatitude: true,
       pickupLongitude: true,
       vehicleType: true,
+      pickupAddress: true,
     },
   });
 
@@ -42,9 +47,7 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
 
   // ── 2. Guard: skip terminal states ────────────────────────────────────────
   if (ride.status === 'CANCELLED' || ride.status === 'COMPLETED') {
-    console.info(
-      `[RideWorker] Ride ${rideId} is already ${ride.status}. Skipping dispatch.`,
-    );
+    console.info(`[RideWorker] Ride ${rideId} is already ${ride.status}. Skipping dispatch.`);
     return;
   }
 
@@ -67,7 +70,9 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
   );
 
   if (candidateUserIds.length === 0) {
-    console.warn(`[RideWorker] No drivers in Redis geo-set near ride ${rideId}. Dispatch queued but no candidates found.`);
+    console.warn(
+      `[RideWorker] No drivers in Redis geo-set near ride ${rideId}. Dispatch queued but no candidates found.`,
+    );
     return;
   }
 
@@ -88,25 +93,28 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
 
   console.info(
     `[RideWorker] Ride ${rideId} dispatched to ${dispatchedDriverIds.length} driver(s): ` +
-    `[${dispatchedDriverIds.join(', ')}]`,
+      `[${dispatchedDriverIds.join(', ')}]`,
   );
 
-  // TODO: emit a Socket.io event to each driver room here once the
-  // socket layer is wired to the worker process.
+  if (dispatchedDriverIds.length > 0) {
+    // In-app + socket (when this process owns the Socket.IO server) + FCM push, batched.
+    await NotificationService.sendToUsers(dispatchedDriverIds, {
+      type: 'RIDE_REQUEST',
+      title: 'New ride request',
+      message: `Pickup: ${ride.pickupAddress}`,
+      data: { rideId: ride.id, vehicleType: ride.vehicleType, pickupAddress: ride.pickupAddress },
+    }).catch(logNotificationFailure('scheduled-ride-request'));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker singleton — exported so server.ts can close it on graceful shutdown.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const rideWorker = new Worker<ScheduledRideJobData>(
-  RIDE_QUEUE_NAME,
-  processScheduledRide,
-  {
-    connection: bullmqConnection,
-    concurrency: 5, // process up to 5 jobs in parallel
-  },
-);
+export const rideWorker = new Worker<ScheduledRideJobData>(RIDE_QUEUE_NAME, processScheduledRide, {
+  connection: bullmqConnection,
+  concurrency: 5, // process up to 5 jobs in parallel
+});
 
 rideWorker.on('completed', (job) => {
   console.info(`[RideWorker] Job ${job.id} completed successfully.`);

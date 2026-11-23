@@ -1,7 +1,7 @@
 <%
   const isPt = preferredLanguage === 'PT';
   const heading = isPt ? 'Verificação de Conta' : 'Verify Your Account';
-  const greeting = name ? (isPt ? `Olá, ${name}!` : `Hello, ${name}!`) : (isPt ? 'Olá!' : 'Hello!');
+  const greeting = locals.name ? (isPt ? `Olá, ${locals.name}!` : `Hello, ${locals.name}!`) : (isPt ? 'Olá!' : 'Hello!');
   const intro = isPt 
     ? 'Obrigado por se cadastrar no Deligo. Use o código de verificação abaixo para confirmar sua conta:'
     : 'Thank you for registering with Deligo. Please use the verification code below to confirm your account:';

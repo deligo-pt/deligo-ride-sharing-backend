@@ -6,11 +6,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+# pnpm is the single package manager (pnpm-lock.yaml is the only lockfile)
+ARG PNPM_VERSION=11
+RUN npm install -g pnpm@${PNPM_VERSION}
 
 # ── Stage 2: Full Dependencies (Build & Test) ───────────────────────────
 FROM base AS dependencies
-COPY package*.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # ── Stage 3: TypeScript & Client Builder ────────────────────────────────
 FROM dependencies AS builder
@@ -22,10 +25,13 @@ RUN npm run build
 
 # ── Stage 4: Production Runtime Dependencies ────────────────────────────
 FROM base AS prod-deps
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY prisma.config.ts ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev --ignore-scripts && npx prisma generate
+# prisma (CLI) is a devDependency: install everything, generate the client, then prune dev packages
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+    && pnpm exec prisma generate \
+    && pnpm prune --prod --ignore-scripts
 
 # ── Stage 5: Hardened Production Runner ──────────────────────────────────
 FROM base AS runner

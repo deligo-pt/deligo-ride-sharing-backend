@@ -1,11 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Custom Application Error Hierarchy
-//
-// All operational errors extend AppError, which carries an HTTP status code
-// and a machine-readable error code for the client. This lets the global
-// error handler differentiate between programmer errors (bugs) and known
-// operational failures without any instanceof checks scattered around the app.
-// ─────────────────────────────────────────────────────────────────────────────
+import { ZodError } from 'zod';
 
 export class AppError extends Error {
   public readonly statusCode: number;
@@ -27,64 +20,84 @@ export class AppError extends Error {
     this.isOperational = isOperational;
     this.details = details;
 
-    // Restore prototype chain (required when extending built-in classes in TS)
     Object.setPrototypeOf(this, new.target.prototype);
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
-// ─── 400 Bad Request ─────────────────────────────────────────────────────────
 export class BadRequestError extends AppError {
-  constructor(message = 'Bad Request', details?: unknown) {
-    super(message, 400, 'BAD_REQUEST', details);
+  constructor(message = 'Bad Request', details?: unknown, code = 'BAD_REQUEST') {
+    super(message, 400, code, details);
   }
 }
 
-// ─── 401 Unauthorized ────────────────────────────────────────────────────────
 export class UnauthorizedError extends AppError {
   constructor(message = 'Authentication required') {
     super(message, 401, 'UNAUTHORIZED');
   }
 }
 
-// ─── 403 Forbidden ───────────────────────────────────────────────────────────
 export class ForbiddenError extends AppError {
   constructor(message = 'You do not have permission to perform this action') {
     super(message, 403, 'FORBIDDEN');
   }
 }
 
-// ─── 404 Not Found ───────────────────────────────────────────────────────────
 export class NotFoundError extends AppError {
-  constructor(resource = 'Resource') {
-    super(`${resource} not found`, 404, 'NOT_FOUND');
+  constructor(resource = 'Resource', options: { message?: string; code?: string } = {}) {
+    super(options.message ?? `${resource} not found`, 404, options.code ?? 'NOT_FOUND');
   }
 }
 
-// ─── 409 Conflict ────────────────────────────────────────────────────────────
 export class ConflictError extends AppError {
   constructor(message = 'Resource already exists') {
     super(message, 409, 'CONFLICT');
   }
 }
 
-// ─── 422 Unprocessable Entity ────────────────────────────────────────────────
 export class ValidationError extends AppError {
   constructor(message = 'Validation failed', details?: unknown) {
     super(message, 422, 'VALIDATION_ERROR', details);
   }
 }
 
-// ─── 429 Too Many Requests ───────────────────────────────────────────────────
 export class RateLimitError extends AppError {
   constructor(message = 'Too many requests, please try again later') {
     super(message, 429, 'RATE_LIMIT_EXCEEDED');
   }
 }
 
-// ─── 500 Internal Server Error ───────────────────────────────────────────────
 export class InternalError extends AppError {
-  constructor(message = 'An unexpected error occurred') {
-    super(message, 500, 'INTERNAL_SERVER_ERROR', undefined, false);
+  constructor(message = 'An unexpected error occurred', code = 'INTERNAL_SERVER_ERROR') {
+    super(message, 500, code, undefined, false);
+  }
+}
+
+export interface ControllerFailure {
+  statusCode: 400 | 404 | 500;
+  code: string;
+  message: string;
+}
+
+export function toAppError(error: unknown, failure: ControllerFailure): AppError {
+  if (error instanceof AppError) return error;
+
+  if (error instanceof ZodError) {
+    return new BadRequestError(
+      error.issues[0]?.message ?? 'Validation failed',
+      error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+      'VALIDATION_ERROR',
+    );
+  }
+
+  const message = (error as { message?: string } | null)?.message ?? failure.message;
+
+  switch (failure.statusCode) {
+    case 404:
+      return new NotFoundError('Resource', { message, code: failure.code });
+    case 500:
+      return new InternalError(message, failure.code);
+    default:
+      return new BadRequestError(message, undefined, failure.code);
   }
 }

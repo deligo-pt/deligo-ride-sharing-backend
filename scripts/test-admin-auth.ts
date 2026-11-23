@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { createApp } from '../src/app';
 import prisma from '../src/config/db';
 import { redis } from '../src/utils/redis';
-import { hashSha256 } from '../src/domains/auth/auth.service';
+import { hashSha256 } from '../src/modules/auth/auth.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Authentication & One-Time Set-Password Invite Flow E2E Tests

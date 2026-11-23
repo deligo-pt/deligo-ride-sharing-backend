@@ -5,20 +5,10 @@ import path from 'path';
 import fs from 'fs';
 import { config } from '../config';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Production-grade Email Service (Nodemailer + EJS)
-//
-// Features:
-//  • Connection pooling (`pool: true`)
-//  • Safe template compilation with layout wrapper
-//  • Automatic fallback path resolution for both dev (ts-node) and prod (dist)
-//  • Non-crashing graceful error logging
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface SendEmailOptions<T = Record<string, unknown>> {
   to: string;
   subject: string;
-  template: 'otp-verification' | 'welcome' | string;
+  template: string;
   data: T;
 }
 
@@ -75,9 +65,6 @@ class EmailService {
     }
   }
 
-  /**
-   * Render an EJS template wrapped in layout.ejs
-   */
   public async renderTemplate<T extends Record<string, unknown>>(
     templateName: string,
     data: T,
@@ -106,23 +93,24 @@ class EmailService {
     return innerHtml;
   }
 
-  /**
-   * Send an email with compiled EJS template safely
-   */
   public async sendEmail<T extends Record<string, unknown>>(
     options: SendEmailOptions<T>,
   ): Promise<EmailResult> {
     try {
       const html = await this.renderTemplate(options.template, options.data, options.subject);
 
-      const fromAddress = config.smtp.fromAddress || 'noreply@deligo.com';
-      const fromName = config.smtp.fromName || 'Deligo Ride';
+      const fromAddress = config.email.fromAddress || 'noreply@deligo.com';
+      const fromName = config.email.fromName || 'Deligo Ride';
       const from = `"${fromName}" <${fromAddress}>`;
 
-      // In local dev without credentials, gracefully log instead of failing
       if (!config.smtp.user || !config.smtp.pass) {
-        console.log(`[EmailService DEV FALLBACK] → To: ${options.to} | Subject: ${options.subject}`);
-        console.log(`[EmailService DEV Content preview]: Template: ${options.template}, Data:`, options.data);
+        console.log(
+          `[EmailService DEV FALLBACK] → To: ${options.to} | Subject: ${options.subject}`,
+        );
+        console.log(
+          `[EmailService DEV Content preview]: Template: ${options.template}, Data:`,
+          options.data,
+        );
         return { success: true, messageId: 'dev-mock-id' };
       }
 

@@ -1,10 +1,7 @@
 import { UserRole } from '@prisma/client';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JWT Payload — stored inside the token
-// ─────────────────────────────────────────────────────────────────────────────
 export interface JwtPayload {
-  sub: string; // User ID
+  sub: string;
   email?: string | null;
   role: UserRole;
   sessionId?: string;
@@ -13,19 +10,16 @@ export interface JwtPayload {
   exp?: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Express Request Augmentation
-// Adds the authenticated user context to every protected request
-// ─────────────────────────────────────────────────────────────────────────────
 export interface AuthenticatedUser {
   id: string;
-  email?: string; // optional — not available in mock auth context
-  role: string; // string (not enum) so mock headers work without enum casting
+  email?: string;
+  role: string;
   sessionId?: string;
   jti?: string;
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: AuthenticatedUser;

@@ -3,8 +3,8 @@ import http from 'http';
 import type { Worker } from 'bullmq';
 import { createApp } from './app';
 import prisma from './config/db';
-import { env } from './config/env';
-import { NotificationEngine } from './domains/notifications/notifications.service';
+import { config } from './config';
+import { NotificationService } from './modules/notification/notification.service';
 import { initSocketServer } from './sockets';
 import { rideWorker } from './queues/ride.worker';
 
@@ -27,32 +27,29 @@ async function bootstrap(): Promise<void> {
   // Attach Socket.io to the same HTTP server (same port as REST)
   const io = initSocketServer(server);
 
-  // Give NotificationEngine access to the io instance so it can push
-  // real-time notifications to user rooms from anywhere in the codebase.
-  NotificationEngine.setIo(io);
+  NotificationService.setIo(io);
 
-  // ── Optional: Embedded Worker (if not running dedicated worker container) ──
   let activeWorker: Worker | null = null;
-  if (process.env.ENABLE_WORKER !== 'false') {
+  if (config.worker.embedded) {
     activeWorker = rideWorker;
     console.info('⚙️  Embedded BullMQ worker initialized in server process');
   } else {
     console.info('ℹ️  Embedded BullMQ worker disabled (ENABLE_WORKER=false)');
   }
 
-  server.listen(env.PORT, () => {
-    console.info(`🚀 Server running on http://localhost:${env.PORT}`);
-    console.info(`   Environment : ${env.NODE_ENV}`);
-    console.info(`   Health      : http://localhost:${env.PORT}/health`);
-    console.info(`   API         : http://localhost:${env.PORT}/api/v1`);
-    console.info(`   WebSocket   : ws://localhost:${env.PORT}`);
+  server.listen(config.port, () => {
+    console.info(`🚀 Server running on http://localhost:${config.port}`);
+    console.info(`   Environment : ${config.env}`);
+    console.info(`   Health      : http://localhost:${config.port}/health`);
+    console.info(`   API         : http://localhost:${config.port}/api/v1`);
+    console.info(`   WebSocket   : ws://localhost:${config.port}`);
   });
 
   // ── 3. Graceful Shutdown ───────────────────────────────────────────────────
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = (signal: string): void => {
     console.info(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
-    server.close(async () => {
+    const cleanup = async (): Promise<void> => {
       console.info('   HTTP server closed');
       try {
         if (activeWorker) {
@@ -66,6 +63,10 @@ async function bootstrap(): Promise<void> {
       }
       console.info('✅ Shutdown complete');
       process.exit(0);
+    };
+
+    server.close(() => {
+      void cleanup();
     });
 
     // Force shutdown after 10 seconds if graceful shutdown stalls
@@ -75,18 +76,18 @@ async function bootstrap(): Promise<void> {
     }, 10_000);
   };
 
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
-  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
   // ── 4. Unhandled rejection / exception handlers ────────────────────────────
   process.on('unhandledRejection', (reason: unknown) => {
     console.error('💥 Unhandled Promise Rejection:', reason);
-    void shutdown('unhandledRejection');
+    shutdown('unhandledRejection');
   });
 
   process.on('uncaughtException', (err: Error) => {
     console.error('💥 Uncaught Exception:', err);
-    void shutdown('uncaughtException');
+    shutdown('uncaughtException');
   });
 }
 

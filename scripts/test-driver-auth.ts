@@ -1,6 +1,6 @@
 import prisma from '../src/config/db';
 import { redis } from '../src/utils/redis';
-import { initiateSignup, verifySignupOtp, login } from '../src/domains/auth/auth.service';
+import { initiateSignup, verifySignupOtp, login } from '../src/modules/auth/auth.service';
 import { ForbiddenError } from '../src/utils/errors';
 import crypto from 'crypto';
 
