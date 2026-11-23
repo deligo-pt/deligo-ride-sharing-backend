@@ -1,12 +1,14 @@
 import { AuthService } from './auth.service';
 import {
   AppleLoginInput,
+  CreateAdminInput,
   FacebookLoginInput,
   GoogleLoginInput,
   InitiateSignupInput,
   LoginInput,
   RefreshTokenInput,
   ResendOtpInput,
+  SetAdminPasswordInput,
   VerifyOtpInput,
 } from './auth.validation';
 import {
@@ -165,6 +167,105 @@ const logout = catchAsync(async (req, res) => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Role-specific entry points. The role is fixed server-side — never read from the body.
+// Non-matching accounts are rejected with 403 after password verification.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** POST /api/v1/auth/driver/signup/initiate — registration for the DRIVER role. */
+const driverInitiateSignup = catchAsync(async (req, res) => {
+  const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'DRIVER');
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Driver signup initiated. Verification code sent',
+    data: result,
+  });
+});
+
+/** POST /api/v1/auth/driver/login */
+const driverLogin = catchAsync(async (req, res) => {
+  const input = req.body as LoginInput;
+  const result = await AuthService.login(input, getClientInfo(req), ['DRIVER']);
+
+  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Driver login successful',
+    data: result,
+  });
+});
+
+/** POST /api/v1/auth/fleet/signup/initiate — registration for the FLEET_MANAGER role. */
+const fleetInitiateSignup = catchAsync(async (req, res) => {
+  const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'FLEET_MANAGER');
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Fleet manager signup initiated. Verification code sent',
+    data: result,
+  });
+});
+
+/** POST /api/v1/auth/fleet/login */
+const fleetLogin = catchAsync(async (req, res) => {
+  const input = req.body as LoginInput;
+  const result = await AuthService.login(input, getClientInfo(req), ['FLEET_MANAGER']);
+
+  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Fleet manager login successful',
+    data: result,
+  });
+});
+
+/** POST /api/v1/auth/admin/login */
+const adminLogin = catchAsync(async (req, res) => {
+  const input = req.body as LoginInput;
+  const result = await AuthService.login(input, getClientInfo(req), ['ADMIN']);
+
+  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Admin login successful',
+    data: result,
+  });
+});
+
+/** POST /api/v1/auth/admin/create — ADMIN / SUPER_ADMIN invites a new administrator. */
+const createAdmin = catchAsync(async (req, res) => {
+  const creator = { id: req.user!.id, role: req.user!.role };
+  const result = await AuthService.createAdmin(req.body as CreateAdminInput, creator);
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Admin invitation sent successfully',
+    data: result,
+  });
+});
+
+/** POST /api/v1/auth/admin/set-password — public; uses the one-time invitation token. */
+const setAdminPassword = catchAsync(async (req, res) => {
+  const result = await AuthService.setAdminPassword(req.body as SetAdminPasswordInput);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Admin password set successfully',
+    data: result,
+  });
+});
+
 export const AuthController = {
   initiateSignup,
   resendOtp,
@@ -175,4 +276,11 @@ export const AuthController = {
   appleLogin,
   refreshToken,
   logout,
+  driverInitiateSignup,
+  driverLogin,
+  fleetInitiateSignup,
+  fleetLogin,
+  adminLogin,
+  createAdmin,
+  setAdminPassword,
 };

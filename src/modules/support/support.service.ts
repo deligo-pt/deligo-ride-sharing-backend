@@ -1,9 +1,14 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import type {
   AddTicketMessageDto,
   CreateEmergencyContactDto,
   CreateTicketDto,
+  ListTicketsQuery,
+  UpdateTicketInput,
 } from './support.validation';
+import { buildPaginationMeta } from '../../types/api.types';
+import { NotificationService } from '../notification/notification.service';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,18 +88,42 @@ async function createTicket(userId: string, dto: CreateTicketDto) {
 
 /**
  * GET /api/v1/support/tickets
- * Returns all tickets created by the authenticated user, newest first.
+ *
+ * One endpoint, scoped by role:
+ *   - any user → ONLY their own tickets (with the message thread), newest first
+ *   - ADMIN    → every ticket (with the reporter and assigned admin), filterable by
+ *                ?status= and ?priority=
+ * Both are paginated.
  */
-async function getMyTickets(userId: string) {
-  return prisma.supportTicket.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      messages: {
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  });
+async function listTickets(viewer: { id: string; role: string }, query: ListTicketsQuery) {
+  const { status, priority, page, limit } = query;
+  const isAdmin = viewer.role === 'ADMIN';
+
+  const where: Prisma.SupportTicketWhereInput = {
+    ...(!isAdmin && { userId: viewer.id }),
+    ...(status && { status }),
+    ...(priority && { priority }),
+  };
+
+  const include: Prisma.SupportTicketInclude = isAdmin
+    ? {
+        user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+        admin: { select: { id: true, firstName: true, lastName: true, email: true } },
+      }
+    : { messages: { orderBy: { createdAt: 'asc' } } };
+
+  const [tickets, total] = await prisma.$transaction([
+    prisma.supportTicket.findMany({
+      where,
+      include,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.supportTicket.count({ where }),
+  ]);
+
+  return { tickets, meta: buildPaginationMeta(total, page, limit) };
 }
 
 // ── Ticket Messages (Live Chat) ───────────────────────────────────────────────
@@ -103,7 +132,8 @@ async function getMyTickets(userId: string) {
  * POST /api/v1/support/tickets/:id/messages
  *
  * Appends a new message to an existing ticket.
- * Guards: ticket must exist AND belong to the user (or user is ADMIN).
+ * Guards: ticket must exist AND belong to the caller (or the caller is an ADMIN).
+ * An ADMIN reply also assigns an unassigned ticket to that admin and notifies the owner.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WEBSOCKET INTEGRATION NOTE (Live Chat with Admins)
@@ -135,52 +165,94 @@ async function getMyTickets(userId: string) {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 async function addTicketMessage(
-  userId: string,
-  role: string,
+  actor: { id: string; role: string },
   ticketId: string,
   dto: AddTicketMessageDto,
 ) {
-  // Verify ticket exists
+  const isAdmin = actor.role === 'ADMIN';
+
   const ticket = await prisma.supportTicket.findUnique({
     where: { id: ticketId },
-    select: { id: true, userId: true, status: true },
+    select: { id: true, userId: true, status: true, adminId: true },
   });
 
   if (!ticket) throw new NotFoundError('Ticket');
 
-  // Only the ticket owner OR an admin may post
-  if (ticket.userId !== userId && role !== 'ADMIN') {
+  // Owners may post on their own tickets; any ADMIN may post on any ticket.
+  if (!isAdmin && ticket.userId !== actor.id) {
     throw new ForbiddenError('You do not have access to this ticket');
   }
 
   // Prevent messages on resolved tickets (admins can still post)
-  if (ticket.status === 'RESOLVED' && role !== 'ADMIN') {
+  if (ticket.status === 'RESOLVED' && !isAdmin) {
     throw new BadRequestError('This ticket has been resolved. You cannot add more messages.');
   }
 
   const savedMessage = await prisma.ticketMessage.create({
     data: {
       ticketId,
-      senderId: userId,
-      message:  dto.message,
+      senderId: actor.id,
+      message: dto.message,
     },
   });
 
-  // If the ticket was OPEN and a message comes in, move it to IN_PROGRESS
-  if (ticket.status === 'OPEN') {
+  // OPEN → IN_PROGRESS on the first message; the first admin to reply claims the ticket.
+  const claim = isAdmin && !ticket.adminId;
+  if (claim || ticket.status === 'OPEN') {
     await prisma.supportTicket.update({
       where: { id: ticketId },
-      data:  { status: 'IN_PROGRESS' },
+      data: {
+        ...(claim && { adminId: actor.id }),
+        ...(ticket.status === 'OPEN' || claim ? { status: 'IN_PROGRESS' as const } : {}),
+      },
+    });
+  }
+
+  // An admin reply notifies the ticket owner.
+  if (isAdmin) {
+    void NotificationService.dispatch({
+      userId: ticket.userId,
+      type: 'SYSTEM',
+      title: `New reply on Support Ticket #${ticketId.slice(0, 8)}`,
+      message: dto.message,
+      data: { ticketId, messageId: savedMessage.id },
     });
   }
 
   return savedMessage;
 }
 
+/**
+ * PATCH /api/v1/support/admin/tickets/:id  (ADMIN)
+ * Updates ticket status / priority; the first admin to touch a ticket claims it.
+ */
+async function updateTicket(ticketId: string, adminId: string, payload: UpdateTicketInput) {
+  const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+
+  if (!ticket) {
+    throw new NotFoundError('Ticket');
+  }
+
+  const dataToUpdate: Prisma.SupportTicketUncheckedUpdateInput = {
+    ...payload,
+    ...(!ticket.adminId && { adminId }),
+  };
+
+  return prisma.supportTicket.update({
+    where: { id: ticketId },
+    data: dataToUpdate,
+    include: {
+      user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      admin: { select: { id: true, firstName: true, lastName: true, email: true } },
+    },
+  });
+}
+
 export const SupportService = {
   addEmergencyContact,
   getEmergencyContacts,
   createTicket,
-  getMyTickets,
+  listTickets,
   addTicketMessage,
+  updateTicket,
 };

@@ -1,5 +1,9 @@
 import { NotificationService } from './notification.service';
-import { ListNotificationsQuery, TestSmsDto } from './notification.validation';
+import {
+  BroadcastNotificationInput,
+  ListNotificationsQuery,
+  TestSmsDto,
+} from './notification.validation';
 import { sendBulkGateSms } from '../../utils/bulkgate';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
@@ -58,7 +62,21 @@ const testSms = catchAsync(async (req, res) => {
   });
 });
 
+/** POST /api/v1/notifications/broadcast — ADMIN. SYSTEM notification to a role (or everyone). */
+const broadcast = catchAsync(async (req, res) => {
+  const result = await NotificationService.broadcastNotification(
+    req.body as BroadcastNotificationInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Notification broadcast successfully',
+    data: result,
+  });
+});
+
 export const NotificationController = {
+  broadcast,
   listNotifications,
   readNotification,
   readAllNotifications,

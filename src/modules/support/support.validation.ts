@@ -62,13 +62,32 @@ const AddTicketMessageSchema = z.object({
 
 export type AddTicketMessageDto = z.infer<typeof AddTicketMessageSchema>;
 
-// ── POST /support/tickets/:id/messages — path param ──────────────────────────
+// ── Path param shared by the ticket routes ───────────────────────────────────
 const TicketParamsSchema = z.object({
-  id: z.string().min(1, 'Ticket ID is required'),
+  id: z.string().uuid('id must be a valid UUID'),
 });
+
+// ── GET /support/tickets — role-scoped, paginated list ────────────────────────
+// `status` / `priority` filters apply to both users and admins.
+const ListTicketsQuerySchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type ListTicketsQuery = z.infer<typeof ListTicketsQuerySchema>;
+
+// ── PATCH /support/admin/tickets/:id  (ADMIN) ─────────────────────────────────
+const UpdateTicketSchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+});
+export type UpdateTicketInput = z.infer<typeof UpdateTicketSchema>;
 
 export const SupportValidation = {
   addEmergencyContact: { body: CreateEmergencyContactSchema },
   createTicket: { body: CreateTicketSchema },
+  listTickets: { query: ListTicketsQuerySchema },
+  updateTicket: { params: TicketParamsSchema, body: UpdateTicketSchema },
   addTicketMessage: { params: TicketParamsSchema, body: AddTicketMessageSchema },
 };

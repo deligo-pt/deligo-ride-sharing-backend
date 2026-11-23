@@ -1,11 +1,11 @@
-import { FleetOnboardingService } from './fleet-onboarding.service';
+import { FleetService } from './fleet.service';
 import {
   BankDetailsInput,
   BusinessDetailsInput,
   DocumentsInput,
   LocationDetailsInput,
   SubmitOnboardingInput,
-} from './fleet-onboarding.validation';
+} from './fleet.validation';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
@@ -16,7 +16,7 @@ import { catchAsync } from '../../utils/catchAsync';
 
 /** GET /api/v1/fleet/onboarding/status */
 const getOnboardingStatus = catchAsync(async (req, res) => {
-  const result = await FleetOnboardingService.getOnboardingStatus(req.user!.id);
+  const result = await FleetService.getOnboardingStatus(req.user!.id);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -27,7 +27,7 @@ const getOnboardingStatus = catchAsync(async (req, res) => {
 
 /** PATCH /api/v1/fleet/onboarding/business — Step 3 */
 const updateBusinessDetails = catchAsync(async (req, res) => {
-  const result = await FleetOnboardingService.updateBusinessDetails(
+  const result = await FleetService.updateBusinessDetails(
     req.user!.id,
     req.body as BusinessDetailsInput,
   );
@@ -41,7 +41,7 @@ const updateBusinessDetails = catchAsync(async (req, res) => {
 
 /** PATCH /api/v1/fleet/onboarding/location — Step 4 */
 const updateLocationDetails = catchAsync(async (req, res) => {
-  const result = await FleetOnboardingService.updateLocationDetails(
+  const result = await FleetService.updateLocationDetails(
     req.user!.id,
     req.body as LocationDetailsInput,
   );
@@ -55,10 +55,7 @@ const updateLocationDetails = catchAsync(async (req, res) => {
 
 /** PATCH /api/v1/fleet/onboarding/bank — Step 5 */
 const updateBankDetails = catchAsync(async (req, res) => {
-  const result = await FleetOnboardingService.updateBankDetails(
-    req.user!.id,
-    req.body as BankDetailsInput,
-  );
+  const result = await FleetService.updateBankDetails(req.user!.id, req.body as BankDetailsInput);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -69,10 +66,7 @@ const updateBankDetails = catchAsync(async (req, res) => {
 
 /** PATCH /api/v1/fleet/onboarding/documents — Step 6 */
 const updateDocuments = catchAsync(async (req, res) => {
-  const result = await FleetOnboardingService.updateDocuments(
-    req.user!.id,
-    req.body as DocumentsInput,
-  );
+  const result = await FleetService.updateDocuments(req.user!.id, req.body as DocumentsInput);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -83,7 +77,7 @@ const updateDocuments = catchAsync(async (req, res) => {
 
 /** POST /api/v1/fleet/onboarding/submit — Step 7: accept terms, sign, submit for review */
 const submitOnboarding = catchAsync(async (req, res) => {
-  const result = await FleetOnboardingService.submitOnboarding(
+  const result = await FleetService.submitOnboarding(
     req.user!.id,
     req.body as SubmitOnboardingInput,
   );
@@ -95,7 +89,7 @@ const submitOnboarding = catchAsync(async (req, res) => {
   });
 });
 
-export const FleetOnboardingController = {
+export const FleetController = {
   getOnboardingStatus,
   updateBusinessDetails,
   updateLocationDetails,

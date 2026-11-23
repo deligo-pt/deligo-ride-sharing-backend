@@ -43,4 +43,14 @@ router.patch(
   KycController.reviewDocument,
 );
 
+// Driver-profile level KYC review queue (approve/reject the whole submission)
+router.get('/profiles/pending', authenticate, authorize('ADMIN'), KycController.getPendingProfiles);
+router.patch(
+  '/profiles/:driverProfileId/review',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.reviewProfile),
+  KycController.reviewProfile,
+);
+
 export default router;

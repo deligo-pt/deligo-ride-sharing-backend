@@ -1,6 +1,12 @@
 import prisma from '../../config/db';
-import type { CreatePromoCodeDto, ValidatePromoCodeDto } from './promotion.validation';
-import { BadRequestError } from '../../utils/errors';
+import type {
+  CreatePromoCodeDto,
+  ValidatePromoCodeDto,
+  ListPromotionsQuery,
+  DeactivatePromotionInput,
+} from './promotion.validation';
+import { BadRequestError, NotFoundError } from '../../utils/errors';
+import { buildPaginationMeta } from '../../types/api.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Promotions Service  —  PRD 3.10: Promotions & Discounts
@@ -156,7 +162,38 @@ async function validatePromoCode(
 // is truthy.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const listPromotions = async (query: ListPromotionsQuery) => {
+  const { page, limit } = query;
+  const skip = (page - 1) * limit;
+
+  const [promotions, total] = await prisma.$transaction([
+    prisma.promoCode.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.promoCode.count(),
+  ]);
+
+  return { promotions, meta: buildPaginationMeta(total, page, limit) };
+};
+
+const updatePromotionStatus = async (id: string, payload: DeactivatePromotionInput) => {
+  const promo = await prisma.promoCode.findUnique({ where: { id } });
+
+  if (!promo) {
+    throw new NotFoundError('PromoCode');
+  }
+
+  return prisma.promoCode.update({
+    where: { id },
+    data: { isActive: payload.isActive },
+  });
+};
+
 export const PromotionService = {
   createPromoCode,
   validatePromoCode,
+  listPromotions,
+  updatePromotionStatus,
 };

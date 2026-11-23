@@ -174,6 +174,20 @@ router.post(
 );
 
 /**
+ * PATCH /api/v1/rides/:id/admin-cancel
+ * Admin → force-cancel any non-terminal ride (frees the driver, notifies customer + driver)
+ * Auth: Bearer JWT (role: ADMIN)
+ * Body: { reason }
+ */
+router.patch(
+  '/:id/admin-cancel',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(RideValidation.adminCancelRide),
+  RideController.adminCancelRide,
+);
+
+/**
  * POST /api/v1/rides/:id/share
  * Customer or Driver (ride participants only) → generate 24-hour tracking token + public URL
  * Auth: Bearer JWT (role: CUSTOMER or DRIVER)

@@ -1,23 +1,16 @@
 import { Router } from 'express';
-import { optionalAuthenticate } from '../../middlewares/auth';
+import { authenticate, optionalAuthenticate, requireRole } from '../../middlewares/auth';
 import { authRateLimiter } from '../../middlewares/rateLimiter';
 import { validateRequest } from '../../middlewares/validateRequest';
 import { AuthController } from './auth.controller';
 import { AuthValidation } from './auth.validation';
-import driverAuthRouter from './driver-auth.route';
-import adminAuthRouter from './admin-auth.route';
-import fleetAuthRouter from './fleet-auth.route';
 
 // Mounted at: /api/v1/auth (see src/routes/index.ts)
+// Credential endpoints are rate limited per route; session endpoints (/refresh-token, /logout)
+// are shared by every role.
 const router: Router = Router();
 
-// ── Driver, Admin & Fleet Auth Sub-Routers ────────────────────────────────────
-router.use('/driver', authRateLimiter, driverAuthRouter);
-router.use('/admin', authRateLimiter, adminAuthRouter);
-router.use('/fleet', authRateLimiter, fleetAuthRouter);
-router.use('/fleet-manager', authRateLimiter, fleetAuthRouter);
-
-// ── Registration Flow ─────────────────────────────────────────────────────────
+// ── Registration (customer) ───────────────────────────────────────────────────
 router.post(
   '/signup/initiate',
   authRateLimiter,
@@ -37,7 +30,7 @@ router.post(
   AuthController.verifyOtp,
 );
 
-// ── Login, Token Refresh & Logout Flow ────────────────────────────────────────
+// ── Login, token refresh & logout (customer + social + shared session endpoints) ──
 router.post('/login', authRateLimiter, validateRequest(AuthValidation.login), AuthController.login);
 router.post(
   '/google',
@@ -65,5 +58,61 @@ router.post(
 
 // Bearer token is optional so cookie-only clients can still log out.
 router.post('/logout', optionalAuthenticate, AuthController.logout);
+
+// ── Driver ────────────────────────────────────────────────────────────────────
+router.post(
+  '/driver/signup/initiate',
+  authRateLimiter,
+  validateRequest(AuthValidation.initiateSignup),
+  AuthController.driverInitiateSignup,
+);
+router.post(
+  '/driver/login',
+  authRateLimiter,
+  validateRequest(AuthValidation.login),
+  AuthController.driverLogin,
+);
+
+// ── Fleet manager (/fleet and the /fleet-manager alias) ───────────────────────
+for (const prefix of ['/fleet', '/fleet-manager']) {
+  router.post(
+    `${prefix}/signup/initiate`,
+    authRateLimiter,
+    validateRequest(AuthValidation.initiateSignup),
+    AuthController.fleetInitiateSignup,
+  );
+  router.post(
+    `${prefix}/login`,
+    authRateLimiter,
+    validateRequest(AuthValidation.login),
+    AuthController.fleetLogin,
+  );
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+router.post(
+  '/admin/login',
+  authRateLimiter,
+  validateRequest(AuthValidation.login),
+  AuthController.adminLogin,
+);
+
+// ADMIN / SUPER_ADMIN invites a new administrator
+router.post(
+  '/admin/create',
+  authRateLimiter,
+  authenticate,
+  requireRole('ADMIN', 'SUPER_ADMIN'),
+  validateRequest(AuthValidation.createAdmin),
+  AuthController.createAdmin,
+);
+
+// Public: set the password from the one-time invitation link
+router.post(
+  '/admin/set-password',
+  authRateLimiter,
+  validateRequest(AuthValidation.setAdminPassword),
+  AuthController.setAdminPassword,
+);
 
 export default router;

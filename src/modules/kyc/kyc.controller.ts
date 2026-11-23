@@ -4,6 +4,7 @@ import {
   REQUIRED_DOCUMENT_TYPES,
   REQUIRED_KYC_DOCUMENTS,
   ReviewDocumentInput,
+  ReviewKycInput,
 } from './kyc.validation';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { sendResponse } from '../../utils/sendResponse';
@@ -172,7 +173,34 @@ const reviewDocument = catchAsync(async (req, res) => {
   });
 });
 
+/** GET /kyc/profiles/pending — admin: driver profiles waiting in the KYC review queue. */
+const getPendingProfiles = catchAsync(async (_req, res) => {
+  const profiles = await KycService.getPendingKycProfiles();
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pending KYC profiles retrieved successfully',
+    data: { count: profiles.length, profiles },
+  });
+});
+
+/** PATCH /kyc/profiles/:driverProfileId/review — admin approves or rejects a driver's full KYC. */
+const reviewProfile = catchAsync(async (req, res) => {
+  const result = await KycService.reviewDriverKyc(
+    req.params.driverProfileId as string,
+    req.body as ReviewKycInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Driver KYC reviewed successfully',
+    data: result,
+  });
+});
+
 export const KycController = {
+  getPendingProfiles,
+  reviewProfile,
   getKycRequirements,
   getKycStatus,
   uploadDocuments,

@@ -1,5 +1,10 @@
 import { PromotionService } from './promotion.service';
-import { CreatePromoCodeDto, ValidatePromoCodeDto } from './promotion.validation';
+import {
+  CreatePromoCodeDto,
+  DeactivatePromotionInput,
+  ListPromotionsQuery,
+  ValidatePromoCodeDto,
+} from './promotion.validation';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
@@ -47,7 +52,39 @@ const validatePromoCode = catchAsync(async (req, res) => {
   });
 });
 
+/** GET /api/v1/promotions — Role: ADMIN. Paginated list of all promo codes. */
+const listPromotions = catchAsync(async (req, res) => {
+  const { promotions, meta } = await PromotionService.listPromotions(
+    req.query as unknown as ListPromotionsQuery,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Promotions retrieved successfully',
+    meta,
+    data: { promotions },
+  });
+});
+
+/** PATCH /api/v1/promotions/:id — Role: ADMIN. Activate or deactivate a promo code. */
+const updatePromotion = catchAsync(async (req, res) => {
+  const updated = await PromotionService.updatePromotionStatus(
+    req.params.id as string,
+    req.body as DeactivatePromotionInput,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Promotion updated successfully',
+    data: updated,
+  });
+});
+
 export const PromotionController = {
+  listPromotions,
+  updatePromotion,
   createPromoCode,
   validatePromoCode,
 };

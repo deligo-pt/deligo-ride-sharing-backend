@@ -4,7 +4,7 @@ import { catchAsync } from '../../utils/catchAsync';
 import { PricingRuleService } from './pricing.service';
 import { UpdatePricingRuleInput } from './pricing.validation';
 
-/** GET /api/v1/admin/pricing */
+/** GET /api/v1/pricing */
 const getPricingRules = catchAsync(async (_req, res) => {
   const rules = await PricingRuleService.listPricingRules();
   sendResponse(res, {
@@ -15,7 +15,7 @@ const getPricingRules = catchAsync(async (_req, res) => {
   });
 });
 
-/** PATCH /api/v1/admin/pricing/:vehicleType */
+/** PATCH /api/v1/pricing/:vehicleType */
 const updatePricingRule = catchAsync(async (req, res) => {
   const updated = await PricingRuleService.updatePricingRule(
     req.params.vehicleType as VehicleType,

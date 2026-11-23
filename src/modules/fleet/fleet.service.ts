@@ -12,7 +12,7 @@ import {
   DocumentsInput,
   LocationDetailsInput,
   SubmitOnboardingInput,
-} from './fleet-onboarding.validation';
+} from './fleet.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fleet Manager Onboarding Service (Steps 3–7)
@@ -254,7 +254,7 @@ async function submitOnboarding(
   });
 }
 
-export const FleetOnboardingService = {
+export const FleetService = {
   getEditableProfile,
   getOnboardingStatus,
   updateBusinessDetails,

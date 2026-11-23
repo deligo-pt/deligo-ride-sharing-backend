@@ -183,9 +183,16 @@ const RideIdParamSchema = z.object({
   id: z.string().uuid('id must be a valid UUID'),
 });
 
+// ── PATCH /api/v1/rides/:id/admin-cancel  (ADMIN) ────────────────────────────
+const AdminCancelRideSchema = z.object({
+  reason: z.string().min(5).max(500),
+});
+export type AdminCancelRideInput = z.infer<typeof AdminCancelRideSchema>;
+
 // ── Grouped validation (consumed by validateRequest in ride.route.ts) ─────────
 
 export const RideValidation = {
+  adminCancelRide: { params: RideIdParamSchema, body: AdminCancelRideSchema },
   listRides: { query: ListRidesQuerySchema },
   getRide: { params: RideIdParamSchema },
   updateLocation: { body: UpdateLocationSchema },

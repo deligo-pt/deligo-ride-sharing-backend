@@ -13,8 +13,10 @@ import type {
   UpdateRideStatusDto,
   CancelRideDto,
   ListRidesQuery,
+  AdminCancelRideInput,
 } from './ride.validation';
 import { ReceiptService } from './receipt.service';
+import { NotificationService } from '../notification/notification.service';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
 
@@ -792,7 +794,76 @@ async function getRide(viewer: RideViewer, rideId: string) {
   return ride;
 }
 
+/**
+ * PATCH /api/v1/rides/:id/admin-cancel  (ADMIN)
+ * Force-cancels any non-terminal ride, frees the driver and notifies both parties.
+ */
+const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) => {
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    include: { customerProfile: true, driverProfile: true },
+  });
+
+  if (!ride) {
+    throw new NotFoundError('Ride');
+  }
+
+  // Terminal rides cannot be cancelled (completed fares / receipts must not be rewritten)
+  if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
+    throw new ConflictError(`Ride is already ${ride.status} and cannot be cancelled.`);
+  }
+
+  // Update Ride status to CANCELLED, save the reason and release the driver — atomically.
+  // The status read above is pinned in the WHERE so a concurrent completion/cancel wins.
+  const updatedRide = await prisma.$transaction(async (tx) => {
+    const result = await tx.ride.updateMany({
+      where: { id: rideId, status: ride.status },
+      data: {
+        status: 'CANCELLED',
+        cancellationReason: `ADMIN_CANCELLED: ${payload.reason}`,
+        cancelledAt: new Date(),
+      },
+    });
+
+    if (result.count === 0) {
+      throw new ConflictError('The ride was modified by another request. Please refresh and try again.');
+    }
+
+    // If a driver was assigned, update their DriverProfile.isAvailable to true
+    if (ride.driverProfileId) {
+      await tx.driverProfile.update({
+        where: { id: ride.driverProfileId },
+        data: { isAvailable: true },
+      });
+    }
+
+    return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
+  });
+
+  // NotificationService: alert the driver and customer
+  void NotificationService.dispatch({
+    userId: ride.customerProfile.userId,
+    type: 'RIDE_CANCELLED',
+    title: 'Ride Cancelled by Support',
+    message: `Your ride was cancelled by an admin. Reason: ${payload.reason}`,
+    data: { rideId },
+  });
+
+  if (ride.driverProfile) {
+    void NotificationService.dispatch({
+      userId: ride.driverProfile.userId,
+      type: 'RIDE_CANCELLED',
+      title: 'Ride Cancelled by Support',
+      message: `The current ride was cancelled by an admin. Reason: ${payload.reason}`,
+      data: { rideId },
+    });
+  }
+
+  return updatedRide;
+};
+
 export const RideService = {
+  cancelRideByAdmin,
   listRides,
   getRide,
   updateDriverLocation,

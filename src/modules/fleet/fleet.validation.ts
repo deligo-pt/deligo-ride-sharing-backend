@@ -113,9 +113,9 @@ const submitOnboardingSchema = z
 
 export type SubmitOnboardingInput = z.infer<typeof submitOnboardingSchema>;
 
-// ── Grouped validation (consumed by validateRequest in fleet-onboarding.route.ts)
+// ── Grouped validation (consumed by validateRequest in fleet.route.ts)
 
-export const FleetOnboardingValidation = {
+export const FleetValidation = {
   businessDetails: { body: businessDetailsSchema },
   locationDetails: { body: locationDetailsSchema },
   bankDetails: { body: bankDetailsSchema },

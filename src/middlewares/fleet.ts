@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import prisma from '../../config/db';
-import { ForbiddenError, UnauthorizedError } from '../../utils/errors';
+import prisma from '../config/db';
+import { ForbiddenError, UnauthorizedError } from '../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fleet Operational Guard Middleware

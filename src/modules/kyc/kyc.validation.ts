@@ -129,9 +129,52 @@ const reviewDocumentBodySchema = z
 
 export type ReviewDocumentInput = z.infer<typeof reviewDocumentBodySchema>;
 
+// ─── PATCH /kyc/profiles/:driverProfileId/review ────────────────────────────────────────
+
+const ReviewKycSchema = z
+  .object({
+    /**
+     * The top-level KYC decision: APPROVED or REJECTED.
+     * Determines whether the driver profile is activated.
+     */
+    kycStatus: z.enum(['APPROVED', 'REJECTED'], {
+      error: 'kycStatus must be APPROVED or REJECTED',
+    }),
+
+    /**
+     * Required when kycStatus === 'REJECTED'. Explains why the submission failed.
+     */
+    rejectionReason: z.string().min(10).max(500).optional(),
+
+    /**
+     * Optional admin note (visible internally, not exposed to driver).
+     */
+    reviewNote: z.string().max(500).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kycStatus === 'REJECTED' && !data.rejectionReason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['rejectionReason'],
+        message: 'rejectionReason is required when kycStatus is REJECTED',
+      });
+    }
+  });
+
+export type ReviewKycInput = z.infer<typeof ReviewKycSchema>;
+
+// ─── PATCH /kyc/profiles/:driverProfileId/review params ─────────────────────────────────
+
+const DriverProfileIdParamSchema = z.object({
+  driverProfileId: z.string().uuid('driverProfileId must be a valid UUID'),
+});
+
+export type DriverProfileIdParam = z.infer<typeof DriverProfileIdParamSchema>;
+
 // ─── Grouped validation (consumed by validateRequest in kyc.route.ts) ─────────
 
 export const KycValidation = {
+  reviewProfile: { params: DriverProfileIdParamSchema, body: ReviewKycSchema },
   /** POST /kyc/documents — optional expiry-date text fields (runs after multer). */
   uploadDocuments: { body: bulkExpiryDatesSchema },
   /** PATCH /kyc/documents/:id/review */

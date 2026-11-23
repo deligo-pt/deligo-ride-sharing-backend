@@ -10,6 +10,7 @@ import type {
   SocketData,
 } from '../../sockets/socket.types';
 import type {
+  BroadcastNotificationInput,
   DispatchOptions,
   ListNotificationsQuery,
   NotificationChannel,
@@ -279,6 +280,7 @@ export const NotificationService = {
   getInbox,
   markAsRead,
   markAllAsRead,
+  broadcastNotification,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,6 +363,37 @@ async function markAllAsRead(userId: string) {
   });
   return { updatedCount: result.count };
 }
+
+// ── Admin broadcast ───────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/notifications/broadcast  (ADMIN)
+ * Sends a SYSTEM notification to every user of the target role (or all users).
+ */
+async function broadcastNotification(payload: BroadcastNotificationInput) {
+  const where = payload.targetRole === 'ALL' ? {} : { role: payload.targetRole };
+
+  // For a large system this should be paginated or queued in a background job (e.g. BullMQ).
+  const users = await prisma.user.findMany({
+    where,
+    select: { id: true },
+  });
+
+  let sentCount = 0;
+
+  for (const user of users) {
+    void NotificationService.dispatch({
+      userId: user.id,
+      type: 'SYSTEM',
+      title: payload.title,
+      message: payload.message,
+    });
+    sentCount++;
+  }
+
+  return { success: true, sentCount, targetRole: payload.targetRole };
+}
+
 
 // Re-export the type so callers don't need two imports
 export { NotificationType };

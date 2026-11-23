@@ -15,6 +15,15 @@ router.get(
   NotificationController.listNotifications,
 );
 
+// ADMIN: broadcast a SYSTEM notification to a role (CUSTOMER | DRIVER | ALL)
+router.post(
+  '/broadcast',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(NotificationValidation.broadcast),
+  NotificationController.broadcast,
+);
+
 // MUST stay before /:id/read so "read-all" is not matched as :id
 router.patch('/read-all', authenticate, NotificationController.readAllNotifications);
 

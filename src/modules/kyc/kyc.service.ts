@@ -2,6 +2,7 @@ import type { DocumentStatus, KycStatus, UserStatus } from '@prisma/client';
 import prisma from '../../config/db';
 import {
   ReviewDocumentInput,
+  ReviewKycInput,
   REQUIRED_KYC_DOCUMENTS,
   SingleDocumentPayload,
 } from './kyc.validation';
@@ -75,7 +76,7 @@ const uploadAllDocuments = async (userId: string, documents: SingleDocumentPaylo
         ...flattenedData,
       },
     }),
-    // UNDER_REVIEW is what puts the driver in the admin review queue (GET /admin/kyc/pending).
+    // UNDER_REVIEW is what puts the driver in the admin review queue (GET /kyc/profiles/pending).
     prisma.driverProfile.update({
       where: { id: driverProfile.id },
       data: { kycStatus: 'UNDER_REVIEW' },
@@ -168,7 +169,7 @@ const getAllDocuments = async () => {
 
 // ─── KYC review (single source of truth) ──────────────────────────────────────
 // Both review endpoints — PATCH /kyc/documents/:id/review and
-// PATCH /admin/kyc/:driverProfileId — end up here, so a review ALWAYS updates the
+// PATCH /kyc/profiles/:driverProfileId/review — end up here, so a review ALWAYS updates the
 // document, DriverProfile.kycStatus and User.status together in ONE transaction.
 // (ride acceptance requires kycStatus === APPROVED *and* user.status === ACTIVE.)
 
@@ -250,6 +251,86 @@ const reviewDocument = async (documentId: string, payload: ReviewDocumentInput) 
   return document;
 };
 
+const driverProfileKycSelect = {
+  id: true,
+  licenseNumber: true,
+  kycStatus: true,
+  isAvailable: true,
+  averageRating: true,
+  totalRides: true,
+  createdAt: true,
+  user: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      status: true,
+    },
+  },
+  document: { select: documentSelect },
+  vehicle: {
+    select: {
+      id: true,
+      vehicleClass: true,
+      vehicleType: true,
+      brand: true,
+      model: true,
+      licensePlate: true,
+      approvalStatus: true,
+    },
+  },
+} as const;
+
+// ─── GET /kyc/profiles/pending ───────────────────────────────────────────────────
+// Returns all DriverProfiles where kycStatus is UNDER_REVIEW or PENDING_DOCS.
+
+const getPendingKycProfiles = async () => {
+  return prisma.driverProfile.findMany({
+    where: {
+      kycStatus: { in: ['UNDER_REVIEW', 'PENDING_DOCS'] },
+    },
+    select: driverProfileKycSelect,
+    orderBy: { createdAt: 'asc' }, // oldest submissions first (FIFO review queue)
+  });
+};
+
+// ─── PATCH /kyc/profiles/:driverProfileId/review ───────────────────────────────────────
+// Admin approves or rejects the full KYC submission for a driver.
+
+const reviewDriverKyc = async (driverProfileId: string, payload: ReviewKycInput) => {
+  const profile = await prisma.driverProfile.findUnique({
+    where: { id: driverProfileId },
+    include: { document: true, user: { select: { id: true } } },
+  });
+
+  if (!profile) {
+    throw new NotFoundError('DriverProfile');
+  }
+
+  if (!profile.document) {
+    throw new BadRequestError('This driver has not submitted any KYC documents yet.');
+  }
+
+  // Shared with PATCH /kyc/documents/:id/review — document, kycStatus and user.status
+  // are updated atomically in applyKycDecision.
+  const { document } = await applyKycDecision({
+    driverProfileId,
+    userId: profile.user.id,
+    decision: payload.kycStatus,
+    reviewNote: payload.reviewNote,
+    rejectionReason: payload.rejectionReason,
+  });
+
+  const updatedProfile = await prisma.driverProfile.findUniqueOrThrow({
+    where: { id: driverProfileId },
+    select: driverProfileKycSelect,
+  });
+
+  return { document, profile: updatedProfile };
+};
+
 // ─── GET /kyc/documents/me ───────────────────────────────────────────────────
 
 const getMyDocuments = async (userId: string) => {
@@ -285,6 +366,8 @@ export const KycService = {
   getAllDocuments,
   reviewDocument,
   applyKycDecision,
+  getPendingKycProfiles,
+  reviewDriverKyc,
   getMyDocuments,
   getKycRequirements,
 };

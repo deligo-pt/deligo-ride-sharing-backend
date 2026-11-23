@@ -1817,6 +1817,149 @@
             },
             "description": "Customer generates a 24-hour public tracking token and live share URL."
           }
+        },
+        {
+          "name": "Admin - List Platform Rides (Paginated)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Platform rides listed\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rides?status=REQUESTED&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "REQUESTED",
+                  "description": "Filter by ride status"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Limit"
+                }
+              ]
+            },
+            "description": "Admin monitors all platform rides with status filtering.\n\n(Role: ADMIN. Path: /rides)"
+          }
+        },
+        {
+          "name": "Admin - Force Cancel Ride (Admin Override)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ride cancelled by admin\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Administrative cancellation due to driver vehicle breakdown.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rides/:id/admin-cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides",
+                ":id",
+                "admin-cancel"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activeRideId}}",
+                  "description": "Ride ID"
+                }
+              ]
+            },
+            "description": "Admin overrides and cancels any active ride.\n\n(Role: ADMIN. Path: /rides/:id/admin-cancel)"
+          }
         }
       ]
     },
@@ -2780,6 +2923,135 @@
             },
             "description": "Admin marks single document as APPROVED, REJECTED, SUSPENDED, or TEMPORARILY_BLOCKED."
           }
+        },
+        {
+          "name": "Admin - Get Pending Driver KYC Applications",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Pending KYC drivers retrieved\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/kyc/profiles/pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kyc",
+                "profiles",
+                "pending"
+              ]
+            },
+            "description": "Lists all DriverProfiles under review with attached document URLs.\n\n(Role: ADMIN. Path: /kyc/profiles/pending)"
+          }
+        },
+        {
+          "name": "Admin - Review Driver KYC Submission (Approve / Reject)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"KYC review decision recorded\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kycStatus\": \"APPROVED\",\n  \"reviewNote\": \"All 7 documents inspected and verified against motor vehicles registry.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kyc/profiles/:driverProfileId/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kyc",
+                "profiles",
+                ":driverProfileId",
+                "review"
+              ],
+              "variable": [
+                {
+                  "key": "driverProfileId",
+                  "value": "{{driverProfileId}}",
+                  "description": "Driver Profile UUID"
+                }
+              ]
+            },
+            "description": "Approves or rejects driver KYC. Activates user and driver profile on approval.\n\n(Role: ADMIN. Path: /kyc/profiles/:driverProfileId/review)"
+          }
         }
       ]
     },
@@ -3202,6 +3474,70 @@
             },
             "description": "Utility endpoint to test BulkGate SMS provider integration."
           }
+        },
+        {
+          "name": "Admin - Broadcast System Notification",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Broadcast notification sent\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Severe Weather Advisory\",\n  \"message\": \"Heavy snow conditions in downtown area. Expect longer wait times and drive safely.\",\n  \"targetRole\": \"ALL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/notifications/broadcast",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "broadcast"
+              ]
+            },
+            "description": "Broadcasts an announcement notification to CUSTOMER, DRIVER, or ALL users.\n\n(Role: ADMIN. Path: /notifications/broadcast)"
+          }
         }
       ]
     },
@@ -3344,6 +3680,143 @@
               ]
             },
             "description": "Customer checks promo code eligibility against an estimated fare before requesting."
+          }
+        },
+        {
+          "name": "Admin - List Platform Promotions",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Promotions listed\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/promotions?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "promotions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Limit"
+                }
+              ]
+            },
+            "description": "Admin views all active and inactive promo codes with usage totals.\n\n(Role: ADMIN. Path: /promotions)"
+          }
+        },
+        {
+          "name": "Admin - Deactivate or Toggle Promo Code",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Promo code status changed\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/promotions/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "promotions",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activePromoId}}",
+                  "description": "Promo code ID"
+                }
+              ]
+            },
+            "description": "Deactivates or re-enables a promo code.\n\n(Role: ADMIN. Path: /promotions/:id)"
           }
         }
       ]
@@ -3730,6 +4203,229 @@
             },
             "description": "Adds message to an ongoing support ticket thread (ticket owner or admin)."
           }
+        },
+        {
+          "name": "Admin - List All Support Tickets",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Admin tickets retrieved\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/support/tickets?status=OPEN&priority=HIGH&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "support",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OPEN",
+                  "description": "Filter by OPEN, IN_PROGRESS, RESOLVED"
+                },
+                {
+                  "key": "priority",
+                  "value": "HIGH",
+                  "description": "Filter by LOW, MEDIUM, HIGH, CRITICAL"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Limit"
+                }
+              ]
+            },
+            "description": "Admin retrieves platform-wide support tickets with filters.\n\n(Role: ADMIN. Path: /support/tickets)"
+          }
+        },
+        {
+          "name": "Admin - Update Ticket Status / Priority",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ticket status updated\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"priority\": \"CRITICAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/support/admin/tickets/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "support",
+                "admin",
+                "tickets",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activeTicketId}}",
+                  "description": "Ticket ID"
+                }
+              ]
+            },
+            "description": "Admin updates ticket lifecycle state and priority.\n\n(Role: ADMIN. Path: /support/admin/tickets/:id)"
+          }
+        },
+        {
+          "name": "Admin - Add Admin Message to Ticket",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Admin message appended\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Deligo Safety Response Team is actively investigating this report.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/support/tickets/:id/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "support",
+                "tickets",
+                ":id",
+                "messages"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activeTicketId}}",
+                  "description": "Ticket ID"
+                }
+              ]
+            },
+            "description": "Admin responds in the customer support ticket thread.\n\n(Role: ADMIN. Path: /support/tickets/:id/messages)"
+          }
         }
       ]
     },
@@ -3929,1249 +4625,6 @@
       ]
     },
     {
-      "name": "Admin",
-      "description": "Full administrative suite: KYC reviews, user status moderation, platform ride dispatch controls, broadcast messaging, dynamic pricing rules, promo management, financial ledger, and BI analytics.",
-      "item": [
-        {
-          "name": "KYC - Get Pending Driver KYC Applications",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Pending KYC drivers retrieved\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/kyc/pending",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "kyc",
-                "pending"
-              ]
-            },
-            "description": "Lists all DriverProfiles under review with attached document URLs."
-          }
-        },
-        {
-          "name": "KYC - Review Driver KYC Submission (Approve / Reject)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"KYC review decision recorded\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"kycStatus\": \"APPROVED\",\n  \"reviewNote\": \"All 7 documents inspected and verified against motor vehicles registry.\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/kyc/:driverProfileId",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "kyc",
-                ":driverProfileId"
-              ],
-              "variable": [
-                {
-                  "key": "driverProfileId",
-                  "value": "{{driverProfileId}}",
-                  "description": "Driver Profile UUID"
-                }
-              ]
-            },
-            "description": "Approves or rejects driver KYC. Activates user and driver profile on approval."
-          }
-        },
-        {
-          "name": "Users - List Users (Paginated & Filterable)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Users list retrieved\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/users?role=CUSTOMER&status=ACTIVE&page=1&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "users"
-              ],
-              "query": [
-                {
-                  "key": "role",
-                  "value": "CUSTOMER",
-                  "description": "Filter by CUSTOMER or DRIVER"
-                },
-                {
-                  "key": "status",
-                  "value": "ACTIVE",
-                  "description": "Filter by ACTIVE, SUSPENDED, PENDING_VERIFICATION, DEACTIVATED"
-                },
-                {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page number"
-                },
-                {
-                  "key": "limit",
-                  "value": "20",
-                  "description": "Limit"
-                }
-              ]
-            },
-            "description": "Paginated user management list with role and status filtering."
-          }
-        },
-        {
-          "name": "Users - Update User Account Status",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"User account status updated\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"SUSPENDED\",\n  \"reason\": \"Temporary suspension pending investigation of policy violation report.\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/users/:userId/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                ":userId",
-                "status"
-              ],
-              "variable": [
-                {
-                  "key": "userId",
-                  "value": "{{targetUserId}}",
-                  "description": "User ID"
-                }
-              ]
-            },
-            "description": "Admin changes account status to ACTIVE, SUSPENDED, or DEACTIVATED."
-          }
-        },
-        {
-          "name": "Support - List All Support Tickets",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Admin tickets retrieved\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/support/tickets?status=OPEN&priority=HIGH&page=1&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "support",
-                "tickets"
-              ],
-              "query": [
-                {
-                  "key": "status",
-                  "value": "OPEN",
-                  "description": "Filter by OPEN, IN_PROGRESS, RESOLVED"
-                },
-                {
-                  "key": "priority",
-                  "value": "HIGH",
-                  "description": "Filter by LOW, MEDIUM, HIGH, CRITICAL"
-                },
-                {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page"
-                },
-                {
-                  "key": "limit",
-                  "value": "20",
-                  "description": "Limit"
-                }
-              ]
-            },
-            "description": "Admin retrieves platform-wide support tickets with filters."
-          }
-        },
-        {
-          "name": "Support - Update Ticket Status / Priority",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Ticket status updated\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"priority\": \"CRITICAL\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/support/tickets/:id",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "support",
-                "tickets",
-                ":id"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "{{activeTicketId}}",
-                  "description": "Ticket ID"
-                }
-              ]
-            },
-            "description": "Admin updates ticket lifecycle state and priority."
-          }
-        },
-        {
-          "name": "Support - Add Admin Message to Ticket",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Admin message appended\", function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"message\": \"Deligo Safety Response Team is actively investigating this report.\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/support/tickets/:id/messages",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "support",
-                "tickets",
-                ":id",
-                "messages"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "{{activeTicketId}}",
-                  "description": "Ticket ID"
-                }
-              ]
-            },
-            "description": "Admin responds in the customer support ticket thread."
-          }
-        },
-        {
-          "name": "Rides - List Platform Rides (Paginated)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Platform rides listed\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/rides?status=REQUESTED&page=1&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "rides"
-              ],
-              "query": [
-                {
-                  "key": "status",
-                  "value": "REQUESTED",
-                  "description": "Filter by ride status"
-                },
-                {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page"
-                },
-                {
-                  "key": "limit",
-                  "value": "20",
-                  "description": "Limit"
-                }
-              ]
-            },
-            "description": "Admin monitors all platform rides with status filtering."
-          }
-        },
-        {
-          "name": "Rides - Force Cancel Ride (Admin Override)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Ride cancelled by admin\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Administrative cancellation due to driver vehicle breakdown.\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/rides/:id/cancel",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "rides",
-                ":id",
-                "cancel"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "{{activeRideId}}",
-                  "description": "Ride ID"
-                }
-              ]
-            },
-            "description": "Admin overrides and cancels any active ride."
-          }
-        },
-        {
-          "name": "Notifications - Broadcast System Notification",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Broadcast notification sent\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Severe Weather Advisory\",\n  \"message\": \"Heavy snow conditions in downtown area. Expect longer wait times and drive safely.\",\n  \"targetRole\": \"ALL\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/notifications/broadcast",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "notifications",
-                "broadcast"
-              ]
-            },
-            "description": "Broadcasts an announcement notification to CUSTOMER, DRIVER, or ALL users."
-          }
-        },
-        {
-          "name": "Pricing - Get All Vehicle Pricing Rules",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Pricing rules fetched\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/pricing",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "pricing"
-              ]
-            },
-            "description": "Fetches pricing configuration across all vehicle classes."
-          }
-        },
-        {
-          "name": "Pricing - Update Pricing Rule by Vehicle Type",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Pricing rule updated\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"baseFare\": 3.5,\n  \"perKmRate\": 2.2,\n  \"perMinRate\": 0.18,\n  \"surgeMultiplier\": 1.2,\n  \"adminFeePercentage\": 20\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/pricing/:vehicleType",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "pricing",
-                ":vehicleType"
-              ],
-              "variable": [
-                {
-                  "key": "vehicleType",
-                  "value": "Sedan",
-                  "description": "Vehicle type enum"
-                }
-              ]
-            },
-            "description": "Modifies base fares, distance/time rates, surge multipliers, and platform commission."
-          }
-        },
-        {
-          "name": "Promotions - List Platform Promotions",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Promotions listed\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/promotions?page=1&limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "promotions"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1",
-                  "description": "Page"
-                },
-                {
-                  "key": "limit",
-                  "value": "20",
-                  "description": "Limit"
-                }
-              ]
-            },
-            "description": "Admin views all active and inactive promo codes with usage totals."
-          }
-        },
-        {
-          "name": "Promotions - Deactivate or Toggle Promo Code",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Promo code status changed\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"isActive\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/promotions/:id",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "promotions",
-                ":id"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "{{activePromoId}}",
-                  "description": "Promo code ID"
-                }
-              ]
-            },
-            "description": "Deactivates or re-enables a promo code."
-          }
-        },
-        {
-          "name": "Finances - Get Financial Ledger",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Ledger records fetched\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/finances/ledger?startDate=2026-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.000Z",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "finances",
-                "ledger"
-              ],
-              "query": [
-                {
-                  "key": "startDate",
-                  "value": "2026-01-01T00:00:00.000Z",
-                  "description": "ISO start date"
-                },
-                {
-                  "key": "endDate",
-                  "value": "2026-12-31T23:59:59.000Z",
-                  "description": "ISO end date"
-                }
-              ]
-            },
-            "description": "Audit log of platform commissions, driver earnings, and customer transactions."
-          }
-        },
-        {
-          "name": "Analytics - High-Level KPI Dashboard",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"KPI dashboard retrieved\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/dashboard",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "analytics",
-                "dashboard"
-              ]
-            },
-            "description": "Executive dashboard KPI metrics: total rides, active drivers, gross revenue, net commission."
-          }
-        },
-        {
-          "name": "Analytics - Temporal Revenue & Trip Trends",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Trends data retrieved\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.success).to.be.true;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/trends?interval=DAILY&startDate=2026-01-01T00:00:00.000Z&endDate=2026-01-31T23:59:59.000Z",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "analytics",
-                "trends"
-              ],
-              "query": [
-                {
-                  "key": "interval",
-                  "value": "DAILY",
-                  "description": "DAILY, WEEKLY, or MONTHLY"
-                },
-                {
-                  "key": "startDate",
-                  "value": "2026-01-01T00:00:00.000Z",
-                  "description": "Start date"
-                },
-                {
-                  "key": "endDate",
-                  "value": "2026-01-31T23:59:59.000Z",
-                  "description": "End date"
-                }
-              ]
-            },
-            "description": "Time-series aggregated analytics for revenue, trips, and driver activity."
-          }
-        },
-        {
-          "name": "Analytics - Export Operational Report CSV",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Export generated\", function () {",
-                  "    pm.expect(pm.response.code).to.equal(200);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminAccessToken}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/analytics/export?reportType=REVENUE",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "analytics",
-                "export"
-              ],
-              "query": [
-                {
-                  "key": "reportType",
-                  "value": "REVENUE",
-                  "description": "REVENUE, RIDES, or DRIVERS"
-                }
-              ]
-            },
-            "description": "Streams downloadable CSV export of business performance reports."
-          }
-        }
-      ]
-    },
-    {
       "name": "Users",
       "description": "User profile management (role-aware customer and driver profiles) and FCM device push token registration.",
       "item": [
@@ -5323,6 +4776,548 @@
               ]
             },
             "description": "Updates personal info (home/work addresses for customers; phone/name for drivers)."
+          }
+        },
+        {
+          "name": "Admin - List Users (Paginated & Filterable)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Users list retrieved\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?role=CUSTOMER&status=ACTIVE&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "CUSTOMER",
+                  "description": "Filter by CUSTOMER or DRIVER"
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "description": "Filter by ACTIVE, SUSPENDED, PENDING_VERIFICATION, DEACTIVATED"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Limit"
+                }
+              ]
+            },
+            "description": "Paginated user management list with role and status filtering.\n\n(Role: ADMIN. Path: /users)"
+          }
+        },
+        {
+          "name": "Admin - Update User Account Status",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"User account status updated\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SUSPENDED\",\n  \"reason\": \"Temporary suspension pending investigation of policy violation report.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/:userId/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                ":userId",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "{{targetUserId}}",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Admin changes account status to ACTIVE, SUSPENDED, or DEACTIVATED.\n\n(Role: ADMIN. Path: /users/:userId/status)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pricing",
+      "item": [
+        {
+          "name": "Admin - Get All Vehicle Pricing Rules",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Pricing rules fetched\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pricing",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pricing"
+              ]
+            },
+            "description": "Fetches pricing configuration across all vehicle classes.\n\n(Role: ADMIN. Path: /pricing)"
+          }
+        },
+        {
+          "name": "Admin - Update Pricing Rule by Vehicle Type",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Pricing rule updated\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"baseFare\": 3.5,\n  \"perKmRate\": 2.2,\n  \"perMinRate\": 0.18,\n  \"surgeMultiplier\": 1.2,\n  \"adminFeePercentage\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pricing/:vehicleType",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pricing",
+                ":vehicleType"
+              ],
+              "variable": [
+                {
+                  "key": "vehicleType",
+                  "value": "Sedan",
+                  "description": "Vehicle type enum"
+                }
+              ]
+            },
+            "description": "Modifies base fares, distance/time rates, surge multipliers, and platform commission.\n\n(Role: ADMIN. Path: /pricing/:vehicleType)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Finances",
+      "item": [
+        {
+          "name": "Admin - Get Financial Ledger",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ledger records fetched\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/finances/ledger?startDate=2026-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.000Z",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "finances",
+                "ledger"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01T00:00:00.000Z",
+                  "description": "ISO start date"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-12-31T23:59:59.000Z",
+                  "description": "ISO end date"
+                }
+              ]
+            },
+            "description": "Audit log of platform commissions, driver earnings, and customer transactions.\n\n(Role: ADMIN. Path: /finances/ledger)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Admin - High-Level KPI Dashboard",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"KPI dashboard retrieved\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "analytics",
+                "dashboard"
+              ]
+            },
+            "description": "Executive dashboard KPI metrics: total rides, active drivers, gross revenue, net commission.\n\n(Role: ADMIN. Path: /analytics/dashboard)"
+          }
+        },
+        {
+          "name": "Admin - Temporal Revenue & Trip Trends",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trends data retrieved\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/trends?interval=DAILY&startDate=2026-01-01T00:00:00.000Z&endDate=2026-01-31T23:59:59.000Z",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "analytics",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "interval",
+                  "value": "DAILY",
+                  "description": "DAILY, WEEKLY, or MONTHLY"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01T00:00:00.000Z",
+                  "description": "Start date"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-01-31T23:59:59.000Z",
+                  "description": "End date"
+                }
+              ]
+            },
+            "description": "Time-series aggregated analytics for revenue, trips, and driver activity.\n\n(Role: ADMIN. Path: /analytics/trends)"
+          }
+        },
+        {
+          "name": "Admin - Export Operational Report CSV",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-set mock headers for role-specific endpoint",
+                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
+                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Export generated\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/export?reportType=REVENUE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "analytics",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "reportType",
+                  "value": "REVENUE",
+                  "description": "REVENUE, RIDES, or DRIVERS"
+                }
+              ]
+            },
+            "description": "Streams downloadable CSV export of business performance reports.\n\n(Role: ADMIN. Path: /analytics/export)"
           }
         }
       ]

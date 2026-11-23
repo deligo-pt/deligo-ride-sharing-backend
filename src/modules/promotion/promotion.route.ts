@@ -16,6 +16,15 @@ router.post(
   PromotionController.createPromoCode,
 );
 
+// List all promo codes (paginated) — ADMIN
+router.get(
+  '/',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(PromotionValidation.list),
+  PromotionController.listPromotions,
+);
+
 // Validate a promo code against an estimated fare — CUSTOMER.
 // Declared before any future /:id routes to avoid param shadowing.
 router.post(
@@ -24,6 +33,15 @@ router.post(
   authorize('CUSTOMER'),
   validateRequest(PromotionValidation.validate),
   PromotionController.validatePromoCode,
+);
+
+// Activate / deactivate a promo code — ADMIN. Declared after /validate so it never shadows it.
+router.patch(
+  '/:id',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(PromotionValidation.update),
+  PromotionController.updatePromotion,
 );
 
 export default router;

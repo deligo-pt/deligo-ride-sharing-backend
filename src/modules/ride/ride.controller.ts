@@ -1,6 +1,7 @@
 import { RideService } from './ride.service';
 import { RecurringService } from './recurring.service';
 import {
+  AdminCancelRideInput,
   CancelRideDto,
   EstimateFareDto,
   ListRidesQuery,
@@ -248,7 +249,23 @@ const triggerRecurringEvaluate = catchAsync(async (_req, res) => {
   });
 });
 
+/** PATCH /api/v1/rides/:id/admin-cancel — Role: ADMIN. Force-cancel with notifications to both parties. */
+const adminCancelRide = catchAsync(async (req, res) => {
+  const result = await RideService.cancelRideByAdmin(
+    String(req.params.id),
+    req.body as AdminCancelRideInput,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Ride cancelled successfully',
+    data: result,
+  });
+});
+
 export const RideController = {
+  adminCancelRide,
   listRides,
   getRide,
   updateLocation,

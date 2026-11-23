@@ -83,7 +83,26 @@ const ValidatePromoCodeSchema = z.object({
 
 export type ValidatePromoCodeDto = z.infer<typeof ValidatePromoCodeSchema>;
 
+const ListPromotionsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type ListPromotionsQuery = z.infer<typeof ListPromotionsQuerySchema>;
+
+const DeactivatePromotionSchema = z.object({
+  isActive: z.boolean(),
+});
+export type DeactivatePromotionInput = z.infer<typeof DeactivatePromotionSchema>;
+
+const PromoIdParamSchema = z.object({
+  id: z.string().uuid('id must be a valid UUID'),
+});
+
+// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
+
 export const PromotionValidation = {
   create: { body: CreatePromoCodeSchema },
   validate: { body: ValidatePromoCodeSchema },
+  list: { query: ListPromotionsQuerySchema },
+  update: { params: PromoIdParamSchema, body: DeactivatePromotionSchema },
 };

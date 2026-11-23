@@ -3,6 +3,8 @@ import {
   AddTicketMessageDto,
   CreateEmergencyContactDto,
   CreateTicketDto,
+  ListTicketsQuery,
+  UpdateTicketInput,
 } from './support.validation';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
@@ -47,14 +49,21 @@ const createTicket = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/support/tickets — tickets created by the user, newest first. */
-const getMyTickets = catchAsync(async (req, res) => {
-  const tickets = await SupportService.getMyTickets(req.user!.id);
+/**
+ * GET /api/v1/support/tickets — any authenticated user.
+ * Users see only their own tickets; ADMIN sees all tickets (filter with ?status, ?priority).
+ */
+const listTickets = catchAsync(async (req, res) => {
+  const { tickets, meta } = await SupportService.listTickets(
+    { id: req.user!.id, role: req.user!.role },
+    req.query as unknown as ListTicketsQuery,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Support tickets retrieved successfully',
-    data: { tickets, total: tickets.length },
+    meta,
+    data: { tickets, total: meta.total },
   });
 });
 
@@ -65,8 +74,7 @@ const getMyTickets = catchAsync(async (req, res) => {
  */
 const addTicketMessage = catchAsync(async (req, res) => {
   const savedMessage = await SupportService.addTicketMessage(
-    req.user!.id,
-    req.user!.role,
+    { id: req.user!.id, role: req.user!.role },
     req.params.id as string,
     req.body as AddTicketMessageDto,
   );
@@ -79,10 +87,26 @@ const addTicketMessage = catchAsync(async (req, res) => {
   });
 });
 
+/** PATCH /api/v1/support/admin/tickets/:id — ADMIN. Update status / priority (claims the ticket). */
+const updateTicket = catchAsync(async (req, res) => {
+  const result = await SupportService.updateTicket(
+    req.params.id as string,
+    req.user!.id,
+    req.body as UpdateTicketInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Support ticket updated successfully',
+    data: result,
+  });
+});
+
 export const SupportController = {
+  updateTicket,
   addEmergencyContact,
   getEmergencyContacts,
   createTicket,
-  getMyTickets,
+  listTickets,
   addTicketMessage,
 };
