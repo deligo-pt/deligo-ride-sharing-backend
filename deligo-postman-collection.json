@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e1d2c3b4-5678-490a-bcde-deligo000001",
     "name": "DeliGo Ride-Sharing API",
-    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nAll protected endpoints (REST and Socket.IO) require a JWT: send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, or `Bearer {{adminAccessToken}}`. For Socket.IO pass the same token as `auth.token` in the handshake (or the `Authorization` header).\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n   - The legacy `x-mock-user-id` / `x-mock-role` headers are no longer supported.\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken`, `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
+    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nAll protected endpoints (REST and Socket.IO) require a JWT: send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, `Bearer {{fleetAccessToken}}` (fleet manager) or `Bearer {{adminAccessToken}}`. For Socket.IO pass the same token as `auth.token` in the handshake (or the `Authorization` header).\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n   - The legacy `x-mock-user-id` / `x-mock-role` headers are no longer supported.\n\n### Routes & roles\nThere is no `/admin` URL prefix. Every module is mounted once (`/users`, `/rides`, `/support`, ...) and each request is labelled with its role in the request description. List/detail endpoints such as `GET /rides` and `GET /support/tickets` are role-scoped: customers and drivers only see their own data, admins see everything.\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken`, `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -59,12 +59,6 @@
       "value": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
       "type": "string",
       "description": "Default mock Customer User ID (Jane Doe)"
-    },
-    {
-      "key": "mockRole",
-      "value": "CUSTOMER",
-      "type": "string",
-      "description": "Default mock role (CUSTOMER | DRIVER | ADMIN)"
     },
     {
       "key": "mockDriverId",
@@ -1059,17 +1053,6 @@
           "name": "Driver - Update Live GPS Location",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1122,16 +1105,6 @@
         {
           "name": "Customer - Search Nearby Available Drivers",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -1187,16 +1160,6 @@
           "name": "Customer - Estimate Fare Across Vehicle Tiers",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1250,16 +1213,6 @@
         {
           "name": "Customer - Request Ride (Dispatch / Scheduled)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -1321,16 +1274,6 @@
           "name": "Customer - Create Recurring Ride Profile",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1391,16 +1334,6 @@
           "name": "Customer - Get My Recurring Profiles",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1444,17 +1377,6 @@
         {
           "name": "Admin - Trigger Recurring Ride Factory Sweep",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -1500,16 +1422,6 @@
         {
           "name": "Customer - Deactivate Recurring Profile",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -1563,17 +1475,6 @@
           "name": "Driver - Atomically Accept Requested Ride",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1625,17 +1526,6 @@
         {
           "name": "Driver - Update Ride Status (Arrived / In Progress / Completed)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -1759,16 +1649,6 @@
           "name": "Customer - Generate Live Trip Tracking Token (Share Ride)",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1819,19 +1699,128 @@
           }
         },
         {
-          "name": "Admin - List Platform Rides (Paginated)",
+          "name": "Customer - List My Rides",
           "event": [
             {
-              "listen": "prerequest",
+              "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
+                  "pm.test(\"Rides listed\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
                 ]
               }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rides?status=REQUESTED&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "REQUESTED",
+                  "description": "Filter by ride status (RideStatus enum)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page (default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size (1-100, default 20)"
+                }
+              ]
             },
+            "description": "Customer lists only their own rides. Scope is enforced server-side in the query.\n\n(Role: CUSTOMER. Path: /rides)"
+          }
+        },
+        {
+          "name": "Driver - List My Rides",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rides listed\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rides?status=COMPLETED&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "COMPLETED",
+                  "description": "Filter by ride status (RideStatus enum)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page (default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size (1-100, default 20)"
+                }
+              ]
+            },
+            "description": "Driver lists only rides assigned to them. Scope is enforced server-side in the query.\n\n(Role: DRIVER. Path: /rides)"
+          }
+        },
+        {
+          "name": "Admin - List Platform Rides (Paginated)",
+          "event": [
             {
               "listen": "test",
               "script": {
@@ -1883,26 +1872,174 @@
                   "key": "limit",
                   "value": "20",
                   "description": "Limit"
+                },
+                {
+                  "key": "userId",
+                  "value": "{{targetUserId}}",
+                  "description": "Admin only: restrict to rides where this user is customer or driver",
+                  "disabled": true
                 }
               ]
             },
-            "description": "Admin monitors all platform rides with status filtering.\n\n(Role: ADMIN. Path: /rides)"
+            "description": "Admin lists all platform rides with status filtering. Optionally filter by a specific customer or driver with `userId` (ignored for non-admin roles).\n\n(Role: ADMIN. Path: /rides)"
+          }
+        },
+        {
+          "name": "Customer - Get Ride Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ride details returned\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rides/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activeRideId}}",
+                  "description": "Ride UUID"
+                }
+              ]
+            },
+            "description": "Returns one ride the customer owns. Rides outside the caller's scope return 404.\n\n(Role: CUSTOMER. Path: /rides/:id)"
+          }
+        },
+        {
+          "name": "Driver - Get Ride Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ride details returned\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rides/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activeRideId}}",
+                  "description": "Ride UUID"
+                }
+              ]
+            },
+            "description": "Returns one ride assigned to the driver. Rides outside the caller's scope return 404.\n\n(Role: DRIVER. Path: /rides/:id)"
+          }
+        },
+        {
+          "name": "Admin - Get Ride Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ride details returned\", function () {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rides/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rides",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{activeRideId}}",
+                  "description": "Ride UUID"
+                }
+              ]
+            },
+            "description": "Returns any ride with full customer/driver details.\n\n(Role: ADMIN. Path: /rides/:id)"
           }
         },
         {
           "name": "Admin - Force Cancel Ride (Admin Override)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -1971,17 +2108,6 @@
           "name": "Driver - Get Dashboard & Lifetime Metrics",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2025,17 +2151,6 @@
         {
           "name": "Driver - Get Paginated Trip History",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2100,17 +2215,6 @@
           "name": "Driver - Register Vehicle",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2170,17 +2274,6 @@
           "name": "Driver - Get My Vehicle Details",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2224,17 +2317,6 @@
         {
           "name": "Driver - Update Vehicle Details (Resets to Pending Review)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2288,17 +2370,6 @@
           "name": "Driver - Upload Vehicle Photos (Multipart)",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2347,17 +2418,6 @@
         {
           "name": "Admin - List All Vehicles (Filter by Status)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2408,17 +2468,6 @@
         {
           "name": "Admin - Review Vehicle (Approve / Reject / Suspend)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2527,17 +2576,6 @@
           "name": "Driver - Get KYC Checklist & Verification Status",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2581,17 +2619,6 @@
         {
           "name": "Driver - Bulk Upload All 7 KYC Documents (Multipart)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2687,17 +2714,6 @@
           "name": "Driver - Get My Uploaded Documents",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"DRIVER\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockDriverId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2742,17 +2758,6 @@
         {
           "name": "Admin - Get Pending KYC Documents",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2799,17 +2804,6 @@
           "name": "Admin - Get All KYC Documents",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2854,17 +2848,6 @@
         {
           "name": "Admin - Review Single KYC Document",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -2928,17 +2911,6 @@
           "name": "Admin - Get Pending Driver KYC Applications",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -2983,17 +2955,6 @@
         {
           "name": "Admin - Review Driver KYC Submission (Approve / Reject)",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -3428,7 +3389,7 @@
           }
         },
         {
-          "name": "Test SMS Gateway Dispatch",
+          "name": "Admin - Test SMS Gateway Dispatch",
           "event": [
             {
               "listen": "test",
@@ -3451,6 +3412,11 @@
                 "key": "Content-Type",
                 "value": "application/json",
                 "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -3472,23 +3438,12 @@
                 "test-sms"
               ]
             },
-            "description": "Utility endpoint to test BulkGate SMS provider integration."
+            "description": "Utility endpoint to test BulkGate SMS provider integration.\n\n(Role: ADMIN. Path: /notifications/test-sms)"
           }
         },
         {
           "name": "Admin - Broadcast System Notification",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -3548,17 +3503,6 @@
         {
           "name": "Admin - Create Promo Code",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -3623,16 +3567,6 @@
           "name": "Customer - Validate Promo Code Against Fare",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"CUSTOMER\");"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -3685,17 +3619,6 @@
         {
           "name": "Admin - List Platform Promotions",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -3751,17 +3674,6 @@
         {
           "name": "Admin - Deactivate or Toggle Promo Code",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -4208,17 +4120,6 @@
           "name": "Admin - List All Support Tickets",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -4285,17 +4186,6 @@
           "name": "Admin - Update Ticket Status / Priority",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -4357,17 +4247,6 @@
         {
           "name": "Admin - Add Admin Message to Ticket",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -4436,17 +4315,6 @@
         {
           "name": "Admin - Get All Active Emergency Alerts",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -4552,17 +4420,6 @@
         {
           "name": "Admin - Resolve Emergency Alert",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -4782,17 +4639,6 @@
           "name": "Admin - List Users (Paginated & Filterable)",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -4857,17 +4703,6 @@
         {
           "name": "Admin - Update User Account Status",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -4935,17 +4770,6 @@
           "name": "Admin - Get All Vehicle Pricing Rules",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -4988,17 +4812,6 @@
         {
           "name": "Admin - Update Pricing Rule by Vehicle Type",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -5065,17 +4878,6 @@
           "name": "Admin - Get Financial Ledger",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -5137,17 +4939,6 @@
           "name": "Admin - High-Level KPI Dashboard",
           "event": [
             {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
-            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -5191,17 +4982,6 @@
         {
           "name": "Admin - Temporal Revenue & Trip Trends",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -5263,17 +5043,6 @@
         {
           "name": "Admin - Export Operational Report CSV",
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Auto-set mock headers for role-specific endpoint",
-                  "pm.variables.set(\"mockRole\", \"ADMIN\");",
-                  "pm.variables.set(\"mockUserId\", pm.collectionVariables.get(\"mockAdminId\") || pm.variables.get(\"mockUserId\"));"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
