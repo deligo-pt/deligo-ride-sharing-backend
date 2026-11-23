@@ -50,7 +50,12 @@ router.post(
   validateRequest(AuthValidation.refreshToken),
   AuthController.refreshToken,
 );
-router.post('/logout', optionalAuthenticate, AuthController.logout);
+router.post(
+  '/logout',
+  optionalAuthenticate,
+  validateRequest(AuthValidation.logout),
+  AuthController.logout,
+);
 
 router.post(
   '/driver/signup/initiate',

@@ -10,7 +10,7 @@ import { NotificationType } from '@prisma/client';
 const ListNotificationsSchema = z.object({
   page:   z.coerce.number().int().positive().default(1),
   limit:  z.coerce.number().int().positive().max(100).default(20),
-  unread: z.enum(['true', 'false']).optional(), // filter by isRead = false
+  unread: z.enum(['true', 'false']).optional(), // 'true' => unread only; omitted/'false' => all
 });
 export type ListNotificationsQuery = z.infer<typeof ListNotificationsSchema>;
 
@@ -21,6 +21,14 @@ export type ListNotificationsQuery = z.infer<typeof ListNotificationsSchema>;
 // ── Internal: NotificationService.dispatch() ───────────────────────────────────
 export const NOTIFICATION_CHANNELS = ['IN_APP', 'WEBSOCKET', 'PUSH', 'SMS', 'EMAIL'] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+/** Payload shared by every recipient of NotificationService.sendToUsers(). */
+export interface BulkNotificationPayload {
+  title: string;
+  message: string;
+  type: NotificationType;
+  data?: Record<string, unknown>;
+}
 
 export interface DispatchOptions {
   userId:    string;
@@ -51,7 +59,7 @@ export type TestSmsDto = z.infer<typeof TestSmsBodySchema>;
 const BroadcastNotificationSchema = z.object({
   title: z.string().min(1).max(100),
   message: z.string().min(1).max(500),
-  targetRole: z.enum(['CUSTOMER', 'DRIVER', 'ALL']),
+  targetRole: z.enum(['CUSTOMER', 'DRIVER', 'FLEET_MANAGER', 'ALL']),
 });
 export type BroadcastNotificationInput = z.infer<typeof BroadcastNotificationSchema>;
 

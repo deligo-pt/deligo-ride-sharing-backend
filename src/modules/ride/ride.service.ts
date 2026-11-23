@@ -1,4 +1,4 @@
-import { Prisma, RideStatus } from '@prisma/client';
+import { NotificationType, Prisma, RideStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import prisma from '../../config/db';
 import { LocationService, redis } from '../../utils/redis';
@@ -16,7 +16,7 @@ import type {
   AdminCancelRideInput,
 } from './ride.validation';
 import { ReceiptService } from './receipt.service';
-import { NotificationService } from '../notification/notification.service';
+import { NotificationService, logNotificationFailure } from '../notification/notification.service';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
 
@@ -24,13 +24,87 @@ import { buildPaginationMeta } from '../../types/api.types';
 // Service Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ride notifications (fail-safe: never throws, never blocks the API response)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RideChange {
+  rideId: string;
+  status: RideStatus;
+  updatedBy: 'DRIVER' | 'CUSTOMER' | 'ADMIN' | 'SYSTEM';
+  /** Which participant is told: the other side of whoever made the change. */
+  notify: 'CUSTOMER' | 'DRIVER';
+  type: NotificationType;
+  title: string;
+  message: string;
+  reason?: string | null;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Pushes the change to the ride room (`ride_status_updated`, for apps that joined via join_ride) and
+ * sends the counterparty an in-app + socket + FCM notification.
+ */
+async function announceRideChange(change: RideChange): Promise<void> {
+  NotificationService.emitRideStatus({
+    rideId: change.rideId,
+    status: change.status,
+    updatedBy: change.updatedBy,
+    reason: change.reason ?? null,
+  });
+
+  const ride = await prisma.ride.findUnique({
+    where: { id: change.rideId },
+    select: {
+      customerProfile: { select: { userId: true } },
+      driverProfile: { select: { userId: true } },
+    },
+  });
+  const recipientId =
+    change.notify === 'CUSTOMER' ? ride?.customerProfile.userId : ride?.driverProfile?.userId;
+  if (!recipientId) return;
+
+  await NotificationService.dispatch(
+    {
+      userId: recipientId,
+      type: change.type,
+      title: change.title,
+      message: change.message,
+      data: { rideId: change.rideId, status: change.status, ...change.data },
+    },
+    ['IN_APP', 'WEBSOCKET', 'PUSH'],
+  );
+}
+
+function notifyRideStatus(rideId: string, status: RideStatus): void {
+  const notice = RIDE_STATUS_NOTICES[status];
+  if (!notice) return;
+  void announceRideChange({
+    rideId,
+    status,
+    updatedBy: 'DRIVER',
+    notify: 'CUSTOMER',
+    type: 'RIDE_UPDATE',
+    ...notice,
+  }).catch(logNotificationFailure(`ride-${status.toLowerCase()}`));
+}
+
+const RIDE_STATUS_NOTICES: Partial<Record<RideStatus, { title: string; message: string }>> = {
+  DRIVER_ARRIVED: {
+    title: 'Your driver has arrived',
+    message: 'Your driver is waiting at the pickup location.',
+  },
+  IN_PROGRESS: { title: 'Trip started', message: 'Your trip is now in progress.' },
+  COMPLETED: {
+    title: 'Trip completed',
+    message: 'You have reached your destination. Thanks for riding with Deligo!',
+  },
+};
+
 /**
  * Persist the driver's live coordinates in Redis AND Postgres.
  */
-async function updateDriverLocation(
-  driverId: string,
-  dto: UpdateLocationDto,
-): Promise<void> {
+async function updateDriverLocation(driverId: string, dto: UpdateLocationDto): Promise<void> {
   // 1. Update fast, ephemeral geospatial index in Redis
   await LocationService.updateDriverLocation(driverId, dto.lng, dto.lat);
 
@@ -144,7 +218,11 @@ async function requestRide(userId: string, dto: RequestRideDto): Promise<Request
 
   const cachedEstimates = JSON.parse(estimateCache ?? 'null') as { subtotal?: number }[] | null;
   if (dto.estimatedFare !== cachedEstimates?.[0]?.subtotal) {
-    throw new BadRequestError('Estimated fare does not match the latest estimate. Please request a new fare estimate.', undefined, 'ESTIMATED_FARE_MISMATCH');
+    throw new BadRequestError(
+      'Estimated fare does not match the latest estimate. Please request a new fare estimate.',
+      undefined,
+      'ESTIMATED_FARE_MISMATCH',
+    );
   }
 
   // 2. Build full coordinate chain and fetch cumulative route data
@@ -222,6 +300,15 @@ async function requestRide(userId: string, dto: RequestRideDto): Promise<Request
     dispatchedDriverIds = eligibleDrivers.map((d) => d.userId);
   }
 
+  if (dispatchedDriverIds.length > 0) {
+    void NotificationService.sendToUsers(dispatchedDriverIds, {
+      type: 'RIDE_REQUEST',
+      title: 'New ride request',
+      message: `Pickup: ${ride.pickupAddress}`,
+      data: { rideId: ride.id, vehicleType: dto.vehicleType, pickupAddress: ride.pickupAddress },
+    }).catch(logNotificationFailure('ride-request'));
+  }
+
   return { ride, dispatchedDriverIds, scheduled: false };
 }
 
@@ -284,7 +371,7 @@ const rideStateConflict = () =>
  * WHERE), so one driver cannot accept two rides at once either.
  */
 async function acceptRide(driverUserId: string, rideId: string) {
-  return prisma.$transaction(async (tx) => {
+  const acceptedRide = await prisma.$transaction(async (tx) => {
     // 1. Resolve the driver profile + eligibility (404 vs 403 vs "busy" decided here)
     const driverProfile = await tx.driverProfile.findUnique({
       where: { userId: driverUserId },
@@ -339,11 +426,25 @@ async function acceptRide(driverUserId: string, rideId: string) {
     if (claim.count === 0) {
       // Throwing rolls back the driver lock above.
       const exists = await tx.ride.findUnique({ where: { id: rideId }, select: { id: true } });
-      throw exists ? new BadRequestError('Ride is no longer available for acceptance.') : new NotFoundError('Ride');
+      throw exists
+        ? new BadRequestError('Ride is no longer available for acceptance.')
+        : new NotFoundError('Ride');
     }
 
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
+
+  void announceRideChange({
+    rideId,
+    status: 'ACCEPTED',
+    updatedBy: 'DRIVER',
+    notify: 'CUSTOMER',
+    type: 'RIDE_ACCEPTED',
+    title: 'Driver found',
+    message: 'A driver accepted your ride and is on the way to the pickup location.',
+  }).catch(logNotificationFailure('ride-accepted'));
+
+  return acceptedRide;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -369,11 +470,7 @@ const STATUS_TIMESTAMP_MAP = {
  * - On COMPLETED: puts the driver back on the map and increments totalRides
  *   for both the driver and the customer — in the same transaction, exactly once.
  */
-async function updateRideStatus(
-  driverUserId: string,
-  rideId: string,
-  dto: UpdateRideStatusDto,
-) {
+async function updateRideStatus(driverUserId: string, rideId: string, dto: UpdateRideStatusDto) {
   // 1. Fetch full ride to validate ownership and current status
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
@@ -419,6 +516,7 @@ async function updateRideStatus(
       if (result.count === 0) throw rideStateConflict();
       return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
     });
+    notifyRideStatus(rideId, dto.status);
     return { ride: updatedRide, fareBreakdown: null };
   }
 
@@ -461,6 +559,7 @@ async function updateRideStatus(
 
   // Fire-and-forget: send receipt email + SMS — does NOT block the API response
   void ReceiptService.generateAndSendReceipt(rideId);
+  notifyRideStatus(rideId, 'COMPLETED');
 
   return { ride: updatedRide, fareBreakdown };
 
@@ -520,7 +619,7 @@ async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
 
   assertRideTransition(ride.status, 'CANCELLED');
 
-  return prisma.$transaction(async (tx) => {
+  const cancelledRide = await prisma.$transaction(async (tx) => {
     // Pin both the status and the assigned driver we validated above.
     const result = await tx.ride.updateMany({
       where: { id: rideId, status: ride.status, driverProfileId: ride.driverProfileId },
@@ -543,6 +642,21 @@ async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
 
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
+
+  // Tell the other side of the ride (customer cancels -> driver is told, and vice versa).
+  const cancelledByCustomer = ride.customerProfile.userId === userId;
+  void announceRideChange({
+    rideId,
+    status: 'CANCELLED',
+    updatedBy: cancelledByCustomer ? 'CUSTOMER' : 'DRIVER',
+    notify: cancelledByCustomer ? 'DRIVER' : 'CUSTOMER',
+    type: 'RIDE_CANCELLED',
+    title: 'Ride cancelled',
+    message: `The ${cancelledByCustomer ? 'customer' : 'driver'} cancelled this ride. Reason: ${dto.reason}`,
+    reason: dto.reason,
+  }).catch(logNotificationFailure('ride-cancelled'));
+
+  return cancelledRide;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -587,10 +701,7 @@ async function assertCanRaiseEmergency(
  * was read. Conditional write — a ride that changed state in the meantime is
  * left alone. Returns whether the ride was actually updated.
  */
-async function escalateRideToEmergency(ride: {
-  id: string;
-  status: RideStatus;
-}): Promise<boolean> {
+async function escalateRideToEmergency(ride: { id: string; status: RideStatus }): Promise<boolean> {
   if (!canTransitionRide(ride.status, 'EMERGENCY')) return false;
 
   const result = await prisma.ride.updateMany({
@@ -826,7 +937,9 @@ const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) 
     });
 
     if (result.count === 0) {
-      throw new ConflictError('The ride was modified by another request. Please refresh and try again.');
+      throw new ConflictError(
+        'The ride was modified by another request. Please refresh and try again.',
+      );
     }
 
     // If a driver was assigned, update their DriverProfile.isAvailable to true
@@ -840,14 +953,21 @@ const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) 
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
 
-  // NotificationService: alert the driver and customer
+  // Alert the ride room, the customer and (if assigned) the driver.
+  NotificationService.emitRideStatus({
+    rideId,
+    status: 'CANCELLED',
+    updatedBy: 'ADMIN',
+    reason: payload.reason,
+  });
+
   void NotificationService.dispatch({
     userId: ride.customerProfile.userId,
     type: 'RIDE_CANCELLED',
     title: 'Ride Cancelled by Support',
     message: `Your ride was cancelled by an admin. Reason: ${payload.reason}`,
     data: { rideId },
-  });
+  }).catch(logNotificationFailure('admin-cancel-customer'));
 
   if (ride.driverProfile) {
     void NotificationService.dispatch({
@@ -856,7 +976,7 @@ const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) 
       title: 'Ride Cancelled by Support',
       message: `The current ride was cancelled by an admin. Reason: ${payload.reason}`,
       data: { rideId },
-    });
+    }).catch(logNotificationFailure('admin-cancel-driver'));
   }
 
   return updatedRide;

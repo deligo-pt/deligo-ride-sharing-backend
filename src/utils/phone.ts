@@ -1,9 +1,9 @@
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
-export function normalizePhoneE164(raw: string): string | null {
-  const cleaned = raw.trim().replace(/[\s\-()]/g, '');
-  if (!cleaned.startsWith('+')) return null;
+export const PORTUGUESE_PHONE_MESSAGE =
+  'Contact number must be a valid Portuguese (+351) phone number';
 
-  const parsed = parsePhoneNumberFromString(cleaned);
-  return parsed && parsed.isValid() ? parsed.number : null;
+export function normalizePortuguesePhone(raw: string): string | null {
+  const parsed = parsePhoneNumberFromString(raw.trim(), 'PT');
+  return parsed?.isValid() && parsed.country === 'PT' ? parsed.number : null;
 }

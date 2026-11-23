@@ -7,6 +7,7 @@ import {
   GoogleLoginInput,
   InitiateSignupInput,
   LoginInput,
+  LogoutInput,
   RefreshTokenInput,
   ResendOtpInput,
   SetAdminPasswordInput,
@@ -149,12 +150,15 @@ const refreshToken = catchAsync(async (req, res) => {
 
 const logout = catchAsync(async (req, res) => {
   const cookies = (req.cookies ?? {}) as Record<string, string | undefined>;
-  const body = (req.body ?? {}) as { refreshToken?: string };
+  const body = req.body as LogoutInput;
 
   const result = await AuthService.logoutUser({
     sessionId: req.user?.sessionId,
     jti: req.user?.jti,
+    userId: req.user?.id,
     refreshToken: body.refreshToken || cookies[REFRESH_COOKIE_NAME],
+    fcmToken: body.fcmToken,
+    clearFcmToken: body.clearFcmToken,
   });
 
   clearRefreshTokenCookie(res);

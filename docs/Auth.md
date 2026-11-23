@@ -1,194 +1,181 @@
-# Deligo Authentication & Email Service Documentation
+# Deligo Auth API
 
-This document describes the architecture, database models, security mechanisms, API routes, email templates, and testing procedures for the **Authentication**, **Session Management**, and **Nodemailer + EJS Email Service** in the Deligo Ride-Sharing Backend.
+Integration guide for web and mobile clients. Source of truth: `src/modules/auth/` (`auth.route.ts`, `auth.controller.ts`, `auth.service.ts`, `auth.validation.ts`).
 
----
-
-## 1. Architecture & Security Overview
-
-### Key Highlights
-- **Locked Prisma Schema Compliance**: Strictly adheres to existing `User`, `Account`, `Session`, `CustomerProfile`, and `Wallet` models.
-- **Two-Step Registration with OTP**: Pending registrations reside in Redis (`signup:session:<id>`) with a 15-minute TTL until verified. Only upon successful OTP verification is the user committed to PostgreSQL atomically.
-- **Dynamic Channel Switching**: Users can switch between `EMAIL` and `PHONE` verification on the fly, with rate-limiting cooldowns (60s) and max resend limits (3 attempts).
-- **Atomic Database Writes**: `prisma.$transaction` guarantees that `User`, `Account` (provider `CREDENTIALS`), `CustomerProfile`, and `Wallet` (USD 0.00) are created together or rolled back. Unique referral codes (`DLXXXXXX`) are generated automatically.
-- **Multi-Device Session Management**: Each login or signup issues a cryptographically signed Access Token (15m) and Refresh Token (1d default, 30d if `rememberMe`). Refresh token hashes (`SHA-256`) are persisted in the PostgreSQL `Session` table.
-- **Token Rotation & Breach Detection**: Every refresh rotates the refresh token. If a previously rotated (or revoked) token is presented, the system detects a token reuse attack and revokes **all** active sessions for that user.
-- **Instant Logout via Blacklisting**: Logout revokes the session in PostgreSQL and immediately blacklists the Access Token's `jti` in Redis for its remaining lifespan. The `authenticate` middleware rejects blacklisted tokens.
-- **Timing Attack Prevention**: Login uses a dummy `bcrypt` comparison when an identifier is not found, mitigating timing-based user enumeration.
-- **Production-Grade Nodemailer & EJS**: Employs connection pooling (`pool: true`), a responsive `layout.ejs` wrapper, multi-language support (`EN` / `PT`), and structured error handling that avoids unhandled promise crashes.
+Base URL: `/api/v1` · All bodies are JSON · Protected calls send `Authorization: Bearer <accessToken>`.
 
 ---
 
-## 2. Mermaid Sequence Diagrams
+## 1. Endpoint table
 
-### A. Signup & OTP Verification Flow
+| #   | Method & path                              | Who                     | Auth                   | Purpose                              |
+| --- | ------------------------------------------ | ----------------------- | ---------------------- | ------------------------------------ |
+| 1   | `POST /auth/signup/initiate`               | Customer                | Public                 | Start signup (email **or** PT phone) |
+| 2   | `POST /auth/signup/resend-otp`             | Customer, Driver, Fleet | Public                 | Resend the signup OTP                |
+| 3   | `POST /auth/signup/verify-otp`             | Customer, Driver, Fleet | Public                 | Verify OTP, create account, sign in  |
+| 4   | `POST /auth/driver/signup/initiate`        | Driver                  | Public                 | Start driver signup (email only)     |
+| 5   | `POST /auth/fleet/signup/initiate`         | Fleet manager           | Public                 | Start fleet signup (email only)      |
+| 6   | `POST /auth/fleet-manager/signup/initiate` | Fleet manager           | Public                 | Alias of #5                          |
+| 7   | `POST /auth/login`                         | Customer                | Public                 | Customer login                       |
+| 8   | `POST /auth/driver/login`                  | Driver                  | Public                 | Driver login                         |
+| 9   | `POST /auth/fleet/login`                   | Fleet manager           | Public                 | Fleet login                          |
+| 10  | `POST /auth/fleet-manager/login`           | Fleet manager           | Public                 | Alias of #9                          |
+| 11  | `POST /auth/admin/login`                   | Admin                   | Public                 | Admin / super-admin login            |
+| 12  | `POST /auth/google`                        | Customer                | Public                 | Google sign-in                       |
+| 13  | `POST /auth/facebook`                      | Customer                | Public                 | Facebook sign-in                     |
+| 14  | `POST /auth/apple`                         | Customer                | Public                 | Apple sign-in                        |
+| 15  | `POST /auth/admin/create`                  | `ADMIN`, `SUPER_ADMIN`  | Bearer                 | Invite a new admin (see note)        |
+| 16  | `POST /auth/admin/set-password`            | Invited admin           | Public (invite token)  | Set password from invite link        |
+| 17  | `POST /auth/refresh-token`                 | Any                     | Public (refresh token) | Rotate tokens                        |
+| 18  | `POST /auth/logout`                        | Any                     | Optional Bearer        | End the session                      |
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant API as Express API
-    participant Redis as Redis Cache
-    participant SMTP as Nodemailer (EJS)
-    participant DB as PostgreSQL (Prisma)
+Notes:
 
-    Client->>API: POST /api/v1/auth/signup/initiate (Payload, channel: EMAIL)
-    API->>DB: Check if email/phone exists
-    API->>API: Hash password (bcrypt) & Generate 6-digit OTP
-    API->>Redis: SET signup:session:<uuid> (TTL 15m)
-    API->>SMTP: sendEmail (otp-verification.ejs)
-    API-->>Client: 200 OK { signupSessionId, channel, maskedTarget, expiresIn }
-
-    opt User switches channel or requests resend
-        Client->>API: POST /api/v1/auth/signup/resend-otp { signupSessionId, channel: "PHONE" }
-        API->>Redis: Check cooldown (60s) & max resends (3)
-        API->>API: Generate new OTP & invalidate previous
-        API->>API: Send SMS via BulkGate
-        API-->>Client: 200 OK { signupSessionId, channel: "PHONE" }
-    end
-
-    Client->>API: POST /api/v1/auth/signup/verify-otp { signupSessionId, otp }
-    API->>Redis: GET session & Timing-safe OTP compare
-    API->>DB: prisma.$transaction (User + Account + CustomerProfile + Wallet)
-    API->>Redis: DEL signup:session:<uuid>
-    API->>DB: Create Session row (tokenHash, expiresAt)
-    API->>SMTP: (Non-blocking) sendEmail (welcome.ejs)
-    API-->>Client: 201 Created { user, tokens: { accessToken, refreshToken } }
-```
-
-### B. Login, Token Refresh & Logout Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant API as Express API
-    participant Redis as Redis Cache
-    participant DB as PostgreSQL (Prisma)
-
-    Client->>API: POST /api/v1/auth/login { identifier, password, rememberMe }
-    API->>DB: Find user by email OR phone + CREDENTIALS account
-    API->>API: Constant-time bcrypt check (timing attack safe)
-    API->>DB: Create Session row (SHA-256 tokenHash, 1d / 30d expiry)
-    API-->>Client: 200 OK (Tokens in body & httpOnly cookie)
-
-    Client->>API: POST /api/v1/auth/refresh-token { refreshToken }
-    API->>DB: Find Session by SHA-256(refreshToken)
-    alt Session isRevoked === true (Token Reuse Attack Detected!)
-        API->>DB: Revoke ALL sessions for this userId
-        API-->>Client: 401 Unauthorized (Security breach)
-    else Active Session
-        API->>DB: Update Session with new tokenHash & extended expiry
-        API-->>Client: 200 OK { new AccessToken, new RefreshToken }
-    end
-
-    Client->>API: POST /api/v1/auth/logout (Bearer AccessToken + RefreshToken)
-    API->>DB: UPDATE Session SET isRevoked = true
-    API->>Redis: SET blacklist:token:<jti> "revoked" (EX remainingTokenTTL)
-    API-->>Client: 200 OK { message: "Successfully logged out" }
-```
-
-### C. Google Sign-In Flow (Account Linking & Pre-Account Takeover Protection)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant API as Express API
-    participant Google as Google OAuth2 (google-auth-library)
-    participant DB as PostgreSQL (Prisma)
-
-    Client->>API: POST /api/v1/auth/google { idToken, referralCode?, preferredLanguage?, rememberMe? }
-    API->>Google: verifyIdToken({ idToken, audience })
-    Google-->>API: Valid TokenPayload (sub, email, email_verified: true, name, picture)
-
-    alt Case A: Existing Google Account (provider: GOOGLE, sub)
-        API->>DB: Find Account by [provider: GOOGLE, providerAccountId: sub]
-        API->>API: Enforce status check (SUSPENDED / DEACTIVATED -> 403)
-        API->>DB: Create Session row
-        API-->>Client: 200 OK { user, tokens }
-    else Case B: Existing User by Email, Not Linked to Google
-        API->>DB: Find User by email
-        API->>API: Enforce status check (SUSPENDED / DEACTIVATED -> 403)
-        API->>DB: prisma.$transaction:
-        Note over API,DB: Link Google Account + Mark isEmailVerified: true<br/>Invalidate squatted unverified CREDENTIALS accounts<br/>Backfill picture if missing
-        API->>DB: Create Session row
-        API-->>Client: 200 OK { user, tokens }
-    else Case C: Brand New User
-        opt Referral code provided
-            API->>DB: Validate referrer exists & not deleted
-        end
-        API->>API: Generate unique referralCode (DLXXXXXX)
-        API->>DB: prisma.$transaction:
-        Note over API,DB: Create User (isEmailVerified: true) +<br/>Google Account + CustomerProfile + Wallet ($0)
-        API->>API: Non-blocking welcome email dispatch
-        API->>DB: Create Session row
-        API-->>Client: 200 OK { user, tokens }
-    end
-```
+- Each login endpoint only accepts its own role. Signing in with the wrong role (after the password check) returns `403 "This account is not authorized to sign in to this app."`. `/auth/login` accepts `CUSTOMER` only, `/auth/driver/login` `DRIVER`, `/auth/fleet*/login` `FLEET_MANAGER`, `/auth/admin/login` `ADMIN` (this includes super-admins; `SUPER_ADMIN` is an access label on an `ADMIN` account, not a separate role).
+- **`/auth/admin/create` is open to every `ADMIN`**, not only super-admins. Inviting a _regular_ admin works for any admin; **inviting a `SUPER_ADMIN` requires the caller to be a `SUPER_ADMIN`** (`403` otherwise).
+- Driver, fleet and customer signups all verify through the same `signup/resend-otp` and `signup/verify-otp` endpoints. The role is fixed server-side when signup is initiated.
 
 ---
 
-## 3. Environment Variables Reference
+## 2. Conventions
 
-Add the following to your `.env` file (see `.env.example`):
+### Response envelope
 
-```bash
-# JWT Configuration
-JWT_ACCESS_SECRET="your_super_secret_jwt_access_key_here_at_least_32_characters"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_SECRET="your_super_secret_refresh_key_here_at_least_32_characters"
-JWT_REFRESH_EXPIRES_IN_DEFAULT="1d"
-JWT_REFRESH_EXPIRES_IN_REMEMBER="30d"
-
-# OTP & Registration Session Configuration
-OTP_EXPIRES_IN_SECONDS=300
-SIGNUP_SESSION_TTL_SECONDS=900
-
-# SMTP / Nodemailer Email Service
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER="your_email@gmail.com"
-SMTP_PASS="your_app_password"
-EMAIL_FROM_NAME="Deligo Ride"
-EMAIL_FROM_ADDRESS="noreply@deligo.com"
-
-# Google OAuth
-GOOGLE_CLIENT_ID="your_google_client_id.apps.googleusercontent.com"
-GOOGLE_ANDROID_CLIENT_ID="your_android_client_id_optional"
-GOOGLE_IOS_CLIENT_ID="your_ios_client_id_optional"
+```json
+{ "success": true, "statusCode": 200, "message": "...", "data": {} }
 ```
 
----
+### Error envelope
 
-## 4. API Endpoints Reference
-
-Base path: `/api/v1/auth`
-
-### 1. Initiate Signup
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/signup/initiate`
-- **Auth**: Public
-- **Request Body**:
 ```json
 {
-  "firstName": "John",
-  "lastName": "Doe",
-  "email": "john.doe@example.com",
-  "phone": "+15551234567",
-  "password": "Password123!",
-  "preferredLanguage": "EN",
-  "referralCode": "DLABC123",
-  "otpChannel": "EMAIL"
+  "success": false,
+  "statusCode": 422,
+  "message": "Validation failed",
+  "code": "VALIDATION_ERROR",
+  "errorSources": [
+    {
+      "path": "contactNumber",
+      "message": "Contact number must be a valid Portuguese (+351) phone number"
+    }
+  ]
 }
 ```
-*Note: At least one of `email` or `phone` is required. `otpChannel` can be `EMAIL` or `PHONE`.*
 
-- **Response (200 OK)**:
+(`stack` is added in development only.)
+
+### Contact fields: `email` or `contactNumber`
+
+Signup, OTP and login all use two explicit, mutually exclusive fields. There is no `identifier` field.
+
+| Field           | Rule                                                                                                                                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `email`         | Valid email. Trimmed and lowercased.                                                                                                                                                                                                                                                                                                                   |
+| `contactNumber` | Must be a valid **Portuguese (`+351`)** number. National (`912345678`), spaced (`912 345 678`) and international (`+351 912 345 678`) forms are all normalized to E.164 `+351912345678`. Numbers from other countries (e.g. `+8801712345678`, `+14155552671`) are rejected with `422` "Contact number must be a valid Portuguese (+351) phone number". |
+
+Signup and login require **exactly one** (both or neither: `422`). The OTP endpoints accept at most one.
+
+### Password rules
+
+At least 8 characters with an uppercase letter, a lowercase letter, a digit and a special character.
+
+### Authenticated user object
+
+Returned as `data.user` by every login and verify endpoint:
+
+```json
+{
+  "id": "3665278e-5acf-41e9-939d-1d9f81514a5b",
+  "email": "john.doe@example.com",
+  "phone": null,
+  "firstName": null,
+  "lastName": null,
+  "role": "CUSTOMER",
+  "status": "ACTIVE",
+  "profilePicture": null,
+  "preferredLanguage": "EN",
+  "referralCode": "DLFKCZ3G",
+  "isEmailVerified": true,
+  "isPhoneVerified": false,
+  "createdAt": "2026-11-23T08:00:00.000Z"
+}
+```
+
+---
+
+## 3. Token delivery (platform-aware)
+
+Access tokens live 15 minutes (`expiresIn: 900`). Refresh tokens live 1 day, or 30 days when `rememberMe: true`.
+
+The refresh token is **always** set as an `httpOnly` cookie named `refreshToken` (path `/api/v1/auth`; `Secure` in production or when `SAMESITE_COOKIE=none`). Whether it is **also** returned in the JSON depends on the client platform:
+
+| Client                                             | How it is detected | Cookie | JSON `tokens`                              |
+| -------------------------------------------------- | ------------------ | ------ | ------------------------------------------ |
+| **Web** (default: admin & fleet portals, browsers) | No mobile signal   | Yes    | `{ accessToken, expiresIn }`               |
+| **Mobile** (Android / iOS apps)                    | See below          | Yes    | `{ accessToken, refreshToken, expiresIn }` |
+
+A request is **mobile** when the first matching rule applies (checked in this order):
+
+1. Header `x-client-platform` or `x-platform` is `mobile`, `android` or `ios` (case-insensitive). Any other value (e.g. `web`) means web and wins over rules 2 and 3.
+2. Body contains `"includeRefreshToken": true` (accepted by login, verify-otp, google, facebook, apple and refresh-token).
+3. The `User-Agent` is a native HTTP stack (`okhttp`, `Dart`, `CFNetwork`, `Expo`, `ReactNative`). Mobile _browsers_ are web clients.
+
+Mobile apps should store the returned `refreshToken` in SecureStore / Keychain. Browser JavaScript can never read the refresh token. Do not send `x-client-platform` from a browser (it is also not an allowed CORS header).
+
+**`POST /auth/refresh-token` and `POST /auth/logout` accept the refresh token from either the `refreshToken` cookie or the JSON body** (`{ "refreshToken": "..." }`). If both are present the body wins. The response follows the same platform rules.
+
+### Token lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    participant API
+    Client->>API: POST /auth/login (+ x-client-platform: mobile on apps)
+    API-->>Client: 200 { user, tokens } + Set-Cookie refreshToken
+    Client->>API: Any API call (Authorization: Bearer accessToken)
+    Note over Client,API: accessToken expires after 15 min
+    Client->>API: POST /auth/refresh-token (cookie or body)
+    API-->>Client: 200 { tokens } + rotated Set-Cookie
+    Client->>API: POST /auth/logout
+    API-->>Client: 200 (cookie cleared, session revoked)
+```
+
+---
+
+## 4. Customer signup
+
+Flow: **initiate** (returns `signupSessionId`) → **verify-otp** (creates the account and signs in). Keep the `signupSessionId`; it identifies the signup in `resend-otp` and `verify-otp`.
+
+### 4.1 `POST /auth/signup/initiate`
+
+Body (email):
+
+```json
+{ "email": "john.doe@example.com", "password": "Password123!", "referralCode": "DLABC123" }
+```
+
+Body (Portuguese phone):
+
+```json
+{ "contactNumber": "912 345 678", "password": "Password123!" }
+```
+
+| Field                          | Required    | Notes                                                        |
+| ------------------------------ | ----------- | ------------------------------------------------------------ |
+| `email` **or** `contactNumber` | exactly one | See [contact fields](#contact-fields-email-or-contactnumber) |
+| `password`                     | yes         | See password rules                                           |
+| `referralCode`                 | no          | Another user's code; `400` if unknown                        |
+
+**Not accepted at signup:** `identifier`, `firstName`, `lastName`, `preferredLanguage` (and `otpChannel`, `phone`). Unknown extra fields are ignored, but a body with only `identifier` fails with `422` ("Either email or contactNumber is required"). The account is created with `firstName`/`lastName` = `null` and the default language (`EN`); names are filled in later through the profile endpoints.
+
+Response `200`:
+
 ```json
 {
   "success": true,
+  "statusCode": 200,
+  "message": "Verification code sent successfully",
   "data": {
     "signupSessionId": "27b42eec-5bf1-437e-8283-0eed44874e40",
     "channel": "EMAIL",
@@ -198,525 +185,338 @@ Base path: `/api/v1/auth`
 }
 ```
 
----
+`channel` is derived: `email` → `EMAIL` (OTP by email), `contactNumber` → `PHONE` (OTP by SMS). Errors: `409` email/phone already registered, `400` invalid referral code, `422` validation, `429` rate limited.
 
-### 2. Resend OTP (with Channel Switching)
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/signup/resend-otp`
-- **Auth**: Public
-- **Request Body**:
+### 4.2 `POST /auth/signup/resend-otp`
+
 ```json
-{
-  "signupSessionId": "27b42eec-5bf1-437e-8283-0eed44874e40",
-  "channel": "PHONE"
-}
+{ "signupSessionId": "27b42eec-5bf1-437e-8283-0eed44874e40" }
 ```
-*Note: Omitting `channel` resends on the current channel. Enforces a 60-second cooldown and a maximum of 3 resends per session.*
 
-- **Response (200 OK)**:
+Optional `email` **or** `contactNumber` (not both): a cross-check that must equal the contact the session was created for, otherwise `400`. The OTP is always resent on the session's original channel (no channel switching). Response `200` has the same `data` shape as initiate (`"message": "Verification code resent successfully"`).
+
+Errors: `404` session expired/unknown, `429` cooldown (60 s between sends) or resend limit (3 per session) reached, `400` contact mismatch, `422` validation.
+
+### 4.3 `POST /auth/signup/verify-otp`
+
+```json
+{ "signupSessionId": "27b42eec-5bf1-437e-8283-0eed44874e40", "otp": "123456" }
+```
+
+Optional `email` **or** `contactNumber` cross-check (as above) and optional `includeRefreshToken`.
+
+Response `201` (web shown; mobile also gets `tokens.refreshToken`):
+
 ```json
 {
   "success": true,
-  "data": {
-    "signupSessionId": "27b42eec-5bf1-437e-8283-0eed44874e40",
-    "channel": "PHONE",
-    "maskedTarget": "+15***67",
-    "expiresIn": 300
-  }
-}
-```
-
----
-
-### 3. Verify OTP & Complete Signup
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/signup/verify-otp`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "signupSessionId": "27b42eec-5bf1-437e-8283-0eed44874e40",
-  "otp": "123456"
-}
-```
-
-- **Response (201 Created)**:
-```json
-{
-  "success": true,
+  "statusCode": 201,
+  "message": "Account verified and created successfully",
   "data": {
     "user": {
-      "id": "3665278e-5acf-41e9-939d-1d9f81514a5b",
+      "id": "…",
       "email": "john.doe@example.com",
-      "phone": "+15551234567",
-      "firstName": "John",
-      "lastName": "Doe",
+      "phone": null,
+      "firstName": null,
+      "lastName": null,
       "role": "CUSTOMER",
       "status": "ACTIVE",
-      "profilePicture": null,
       "preferredLanguage": "EN",
-      "referralCode": "DLFKCZ3G",
       "isEmailVerified": true,
       "isPhoneVerified": false,
-      "createdAt": "2026-11-17T09:00:00.000Z"
+      "…": "…"
     },
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "expiresIn": 900
-    }
-  }
-}
-```
-*(Also sets `refreshToken` in `httpOnly` secure cookie).*
-
----
-
-### 4. Login (Email or Phone)
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/login`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "identifier": "john.doe@example.com",
-  "password": "Password123!",
-  "rememberMe": true
-}
-```
-*Note: `identifier` accepts either the user's registered email or phone number.*
-
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "user": { ... },
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "expiresIn": 900
-    }
+    "tokens": { "accessToken": "eyJhbGciOi…", "expiresIn": 900 }
   }
 }
 ```
 
+A phone signup creates the user with `phone` = `+351…`, `email` = `null`, `isPhoneVerified: true`. Account creation is one database transaction: `User` + credentials `Account` + `CustomerProfile` + `Wallet` (0.00).
+
+Errors: `404` session expired, `400` wrong code (`"Invalid verification code"`; the remaining-attempt count is not returned to the client), expired code or contact mismatch, `429` too many wrong codes (the session is destroyed after 5), `409` the email/phone was registered in the meantime.
+
 ---
 
-### 5. Driver Signup Initiation
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/driver/signup/initiate`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "firstName": "John",
-  "lastName": "Driver",
-  "email": "john.driver@example.com",
-  "phone": "+15559876543",
-  "password": "Password123!",
-  "preferredLanguage": "EN",
-  "referralCode": "DL123456",
-  "otpChannel": "EMAIL"
-}
-```
-*Note: The server strictly hardcodes `role: "DRIVER"` in the Redis session and never trusts role input from the client. After OTP verification via `/auth/signup/verify-otp`, a `DriverProfile` row is created automatically and `User.status` is set to `ACTIVE`.*
+## 5. Driver & fleet manager signup
 
-- **Response (200 OK)**:
+Email-only, no names or phone. Body for both:
+
+```json
+{ "email": "john.driver@example.com", "password": "Password123!", "referralCode": "DL123456" }
+```
+
+| Endpoint                                                                         | Role created    |
+| -------------------------------------------------------------------------------- | --------------- |
+| `POST /auth/driver/signup/initiate`                                              | `DRIVER`        |
+| `POST /auth/fleet/signup/initiate` (alias `/auth/fleet-manager/signup/initiate`) | `FLEET_MANAGER` |
+
+`contactNumber`, `firstName`, `lastName` and `preferredLanguage` are not accepted (a `contactNumber` without `email` fails `422`). The OTP is always sent by email. The response is the same as customer initiate; then use the shared `signup/resend-otp` and `signup/verify-otp` (section 4).
+
+On verify the server also creates the role profile:
+
+- **Driver:** `DriverProfile` with `kycStatus: NOT_SUBMITTED`, `isAvailable: false` (the driver must complete KYC before accepting rides).
+- **Fleet manager:** `FleetManagerProfile` with `verificationStatus: PENDING_VERIFICATION` (completed through `/fleet/onboarding/*`).
+
+---
+
+## 6. Login
+
+All logins share one body. Provide exactly one of `email` / `contactNumber`:
+
+```json
+{ "email": "john.doe@example.com", "password": "Password123!", "rememberMe": true }
+```
+
+```json
+{ "contactNumber": "+351 912 345 678", "password": "Password123!" }
+```
+
+| Field                          | Required             | Notes                                             |
+| ------------------------------ | -------------------- | ------------------------------------------------- |
+| `email` **or** `contactNumber` | exactly one          | `identifier` is no longer accepted (`422`)        |
+| `password`                     | yes                  |                                                   |
+| `rememberMe`                   | no (default `false`) | Cookie / refresh token lasts 30 days instead of 1 |
+| `includeRefreshToken`          | no                   | Forces mobile-style token delivery                |
+
+Endpoints: `/auth/login` (customer), `/auth/driver/login`, `/auth/fleet/login` (alias `/auth/fleet-manager/login`), `/auth/admin/login`.
+
+Response `200`:
+
 ```json
 {
   "success": true,
+  "statusCode": 200,
+  "message": "Logged in successfully",
   "data": {
-    "signupSessionId": "4bf729bc-4b36-47b1-9f93-c423cb11210a",
-    "channel": "EMAIL",
-    "maskedTarget": "j***r@example.com",
-    "expiresIn": 300
+    "user": { "id": "…", "role": "CUSTOMER", "status": "ACTIVE", "…": "…" },
+    "tokens": { "accessToken": "eyJhbGciOi…", "expiresIn": 900 }
   }
 }
 ```
 
----
+(Mobile requests also get `tokens.refreshToken`.)
 
-### 6. Driver Login
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/driver/login`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "identifier": "john.driver@example.com",
-  "password": "Password123!",
-  "rememberMe": true
-}
-```
-*Note: Validates driver credentials and enforces role isolation. Non-driver accounts attempting to sign in here are rejected with `403 Forbidden` (`This account is not authorized to sign in to this app.`) after timing-safe password verification.*
-
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "8dcc91ec-0b15-4293-b15a-39649139c226",
-      "email": "john.driver@example.com",
-      "phone": "+15559876543",
-      "firstName": "John",
-      "lastName": "Driver",
-      "role": "DRIVER",
-      "status": "ACTIVE",
-      "referralCode": "DL99XYZ1",
-      "isEmailVerified": true,
-      "isPhoneVerified": false,
-      "createdAt": "2026-11-21T08:00:00.000Z"
-    },
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "expiresIn": 900
-    }
-  }
-}
-```
-*(Sets `refreshToken` in `httpOnly` secure cookie).*
+Errors: `401 "Invalid credentials"` (unknown user, wrong password or no password on the account; the same message and timing for all), `403` wrong role for this endpoint, `403` account `SUSPENDED` / `DEACTIVATED` / `PENDING_VERIFICATION`, `422` validation, `429` rate limited. A login by phone only matches numbers stored in `+351…` form.
 
 ---
 
-### 7. Google Sign-In
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/google`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "idToken": "<GOOGLE_ID_TOKEN_FROM_CLIENT_SDK>",
-  "referralCode": "DLABC123",
-  "preferredLanguage": "EN",
-  "rememberMe": true
-}
-```
-*Note: `idToken` is verified against configured Google Client IDs using `google-auth-library`. `rememberMe` defaults to `true` (30 days).*
+## 7. Social sign-in (customers)
 
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "3665278e-5acf-41e9-939d-1d9f81514a5b",
-      "email": "user@gmail.com",
-      "firstName": "John",
-      "lastName": "Doe",
-      "role": "CUSTOMER",
-      "status": "ACTIVE",
-      "profilePicture": "https://lh3.googleusercontent.com/photo.jpg",
-      "preferredLanguage": "EN",
-      "referralCode": "DLFKCZ3G",
-      "isEmailVerified": true,
-      "isPhoneVerified": false,
-      "createdAt": "2026-11-18T08:00:00.000Z"
-    },
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "expiresIn": 900
-    }
-  }
-}
-```
+All three create (or link to) a `CUSTOMER` account and return the same payload and platform-aware tokens as login (`message` e.g. "Logged in with Google successfully").
+
+| Endpoint              | Required body                                                                                 | Server-side verification                                                                                                                                                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /auth/google`   | `idToken`                                                                                     | Google ID token, audience checked against the web/Android/iOS client IDs; email must be verified                                                                                                                                                                               |
+| `POST /auth/facebook` | `accessToken`                                                                                 | Facebook Graph API `/me` lookup                                                                                                                                                                                                                                                |
+| `POST /auth/apple`    | `idToken`, optional `user: { firstName, lastName }` (Apple sends names only on first sign-in) | Apple JWKS signature, issuer (`https://appleid.apple.com`) and audience (`APPLE_CLIENT_ID` / `APPLE_BUNDLE_ID`). In non-production with `APPLE_DEMO_MODE=true`, tokens of the form `demo_apple_token_<name>` are accepted for testing; they are always rejected in production. |
+
+Common optional fields: `referralCode`, `preferredLanguage` (`EN` | `PT`, default `EN`), `rememberMe` (default `true`), `includeRefreshToken`.
+
+Behaviour:
+
+- A provider account that is already linked signs in directly (blocked if suspended, deactivated or pending).
+- **Email matches an existing account** (only when the provider verified the email): linking is allowed for `CUSTOMER` accounts only (`403 "Social login is not allowed for this account."` for other roles or accounts pending verification). If that existing account had **not** verified its email, the email is marked verified **and its password credentials are disabled** (pre-account-takeover protection); the user can then sign in with the provider.
+- Otherwise a new active `CUSTOMER` is created (with `CustomerProfile` and `Wallet`). Names come from the provider, with fallbacks.
+- Facebook sign-ins are always recorded as email-**unverified**.
+
+Errors: `401` invalid/unverifiable provider token, `400` invalid referral code, `403` as above.
 
 ---
 
-### 6. Rotate Refresh Token
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/refresh-token`
-- **Auth**: Public (Requires refresh token in cookie or body)
-- **Request Body** (optional if cookie is sent):
+## 8. Admin invitation & password setup
+
+### 8.1 `POST /auth/admin/create` (Bearer, `ADMIN` or `SUPER_ADMIN`)
+
 ```json
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsIn..."
-}
+{ "firstName": "Sub", "lastName": "Admin", "email": "subadmin@example.com", "role": "ADMIN" }
 ```
 
-- **Response (200 OK)**:
+`role` is `ADMIN` (default) or `SUPER_ADMIN`. Only a `SUPER_ADMIN` can invite a `SUPER_ADMIN` (`403 "Only a SUPER_ADMIN can create another SUPER_ADMIN"`). The new account is created `PENDING_VERIFICATION` (cannot log in yet) and a one-time invite link, valid **24 hours**, is emailed to `<ADMIN_FRONTEND_URL>/set-password?token=…`. Response `201`:
+
 ```json
 {
   "success": true,
+  "statusCode": 201,
+  "message": "Admin invitation sent successfully",
   "data": {
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "expiresIn": 900
-    }
-  }
-}
-```
-
----
-
-### 7. Logout
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/logout`
-- **Headers**: `Authorization: Bearer <accessToken>`
-- **Request Body** (optional): `{ "refreshToken": "..." }`
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Successfully logged out"
-  }
-}
-```
-
----
-
-### 8. Admin Login
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/admin/login`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "identifier": "admin@deligo.com",
-  "password": "AdminPassword123!",
-  "rememberMe": true
-}
-```
-*Note: Only accounts with `role: "ADMIN"` (including `SUPER_ADMIN` and `SUPPORT` access labels) are authorized to log in through this endpoint. Non-admin users attempting to log in are rejected with `403 Forbidden` (`This account is not authorized to sign in to this app.`) after password verification.*
-
-- **Response (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "e4b5c7d8-1111-4293-b15a-39649139c226",
-      "email": "admin@deligo.com",
-      "firstName": "Super",
-      "lastName": "Admin",
-      "role": "ADMIN",
-      "status": "ACTIVE",
-      "referralCode": "AD123456",
-      "isEmailVerified": true,
-      "isPhoneVerified": false,
-      "createdAt": "2026-11-21T08:00:00.000Z"
-    },
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsIn...",
-      "expiresIn": 900
-    }
-  }
-}
-```
-*(Sets `refreshToken` in `httpOnly` secure cookie).*
-
----
-
-### 9. Admin Invitation (Create Admin)
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/admin/create`
-- **Auth**: Authenticated (`ADMIN` or `SUPER_ADMIN`)
-- **Headers**: `Authorization: Bearer <adminAccessToken>`
-- **Request Body**:
-```json
-{
-  "firstName": "Claire",
-  "lastName": "Underwood",
-  "email": "claire.underwood@deligo.com",
-  "role": "ADMIN"
-}
-```
-*Security & Business Rules:*
-1. **Privilege Escalation Protection**: An `ADMIN` can only invite another `ADMIN` (`SUPPORT`). Only a `SUPER_ADMIN` can invite a `SUPER_ADMIN`. An `ADMIN` attempting to invite a `SUPER_ADMIN` is rejected with `403 Forbidden`.
-2. **Account Status**: Created with `status: "PENDING_VERIFICATION"` and `isEmailVerified: false`. Login is prevented until the setup link is completed.
-3. **Audit Trail**: The creator's user ID is saved in `referrerId`.
-4. **One-Time Token**: A cryptographically secure 32-byte hex token is generated. Its SHA-256 hash is stored in Redis (`admin:invite:${tokenHash}`) with a 24-hour TTL (`86400`s). A setup link containing the raw token is emailed to the invitee using the `admin-invite` EJS template.
-
-- **Response (201 Created)**:
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "c1f7a28e-3241-45f8-bca7-817c1825fae1",
-      "email": "claire.underwood@deligo.com",
-      "firstName": "Claire",
-      "lastName": "Underwood",
-      "role": "ADMIN",
-      "status": "PENDING_VERIFICATION",
-      "referralCode": "CL123456",
-      "referrerId": "e4b5c7d8-1111-4293-b15a-39649139c226",
-      "isEmailVerified": false,
-      "createdAt": "2026-11-21T08:00:00.000Z"
-    },
+    "user": { "id": "…", "role": "ADMIN", "status": "PENDING_VERIFICATION", "…": "…" },
     "message": "Admin created. Invitation link sent to email."
   }
 }
 ```
 
+Errors: `401`/`403` (not an admin), `409` email already exists, `422`, `500 EMAIL_DELIVERY_FAILED` when the invitation email cannot be delivered (the invite token is discarded; a failed send is only logged outside production).
+
+### 8.2 `POST /auth/admin/set-password` (public)
+
+```json
+{ "token": "<token from the invite link>", "password": "NewAdminPassword123!" }
+```
+
+Activates the account (`ACTIVE`, email verified), stores the password, deletes the token (single use) and revokes any existing sessions. Response `200` `"Password set successfully. You can now log in."`. Invalid/expired/used token: `400 "Invalid or expired invitation link"`. The admin then signs in at `/auth/admin/login`.
+
 ---
 
-### 10. Admin Set Password (One-Time Invite Link)
-- **Method**: `POST`
-- **Path**: `/api/v1/auth/admin/set-password`
-- **Auth**: Public
-- **Request Body**:
-```json
-{
-  "token": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b",
-  "password": "StrongAdminPassword123!"
-}
-```
-*Security Rules:*
-1. **Token Validation**: The raw token is hashed via SHA-256 and matched against Redis (`admin:invite:${tokenHash}`). Rejects with `400 Bad Request` if invalid or expired.
-2. **Replay Protection**: The Redis key is deleted immediately upon successful password configuration to prevent reuse.
-3. **Activation**: Atomically activates the user (`status: "ACTIVE"`, `isEmailVerified: true`) and creates/updates their `CREDENTIALS` `Account`.
+## 9. Refresh & logout
 
-- **Response (200 OK)**:
+### 9.1 `POST /auth/refresh-token`
+
+Cookie-only (web) or body (mobile). The body is optional:
+
+```json
+{ "refreshToken": "eyJhbGciOi…" }
+```
+
+Response `200` (web shown; mobile also gets `tokens.refreshToken`). The cookie is rotated in both cases:
+
 ```json
 {
   "success": true,
-  "data": {
-    "message": "Password set successfully. You can now log in."
-  }
+  "statusCode": 200,
+  "message": "Token refreshed successfully",
+  "data": { "tokens": { "accessToken": "eyJhbGciOi…", "expiresIn": 900 } }
+}
+```
+
+Every refresh **rotates** the refresh token; the old one is revoked. Presenting an already-used/revoked token is treated as theft and **revokes all of that user's sessions** (`401`). Errors: `401` missing / invalid / expired refresh token or reuse detected, `403` account no longer active.
+
+### 9.2 `POST /auth/logout`
+
+Send the Bearer token and/or the refresh token (cookie or `{ "refreshToken": "..." }` body); either is enough, and a missing/expired access token does not block logout. Revokes the session, blacklists the access token's `jti` in Redis, disconnects the session's sockets and clears the cookie. It also clears the user's FCM push token so a signed-out device stops receiving pushes. Optional body fields: `fcmToken` (clear only that device's token) and `clearFcmToken: false` (keep the token). Response `200`:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Logged out successfully",
+  "data": { "message": "Successfully logged out" }
 }
 ```
 
 ---
 
-## 5. Email Service Details (`src/utils/email.service.ts`)
+## 10. Security, limits & account lifecycle
 
-### Features
-1. **Singleton Transporter**: Built with `pool: true` to reuse connections and avoid per-message TLS handshake overhead.
-2. **Safe Fallback**: In environments where SMTP credentials are not yet configured (e.g. fresh local development), emails log rich previews to the console without crashing or throwing.
-3. **Template Engine**:
-   - `src/templates/emails/layout.ejs`: Base HTML container with Deligo branding and mobile-responsive styles.
-   - `src/templates/emails/otp-verification.ejs`: High-contrast verification code card, expiry indicator, anti-phishing warnings, and full bilingual support (`EN` / `PT`).
-   - `src/templates/emails/welcome.ejs`: Onboarding email featuring the user's unique referral code and call-to-action button.
+### Signup session & OTP (Redis)
 
-### Usage Example
-```typescript
-import { sendEmail } from '../utils/email.service';
+| Item           | Value                                                                                                                                                                                                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pending signup | `signup:session:<signupSessionId>` holds `{ email? , contactNumber? (E.164), passwordHash, referralCode, referrerId, role }` plus the OTP hash. The session **TTL is 15 min** (`SIGNUP_SESSION_TTL_SECONDS`, default 900). Nothing is written to PostgreSQL until the OTP is verified. |
+| OTP            | 6 digits, stored hashed (SHA-256), compared in constant time. Valid for **5 min** (`OTP_EXPIRES_IN_SECONDS`, default 300).                                                                                                                                                             |
+| Resend         | 60 s cooldown, max 3 resends per session; a resend invalidates the previous code and resets the attempt counter.                                                                                                                                                                       |
+| Wrong codes    | 5 wrong attempts destroy the session (`429`); restart signup.                                                                                                                                                                                                                          |
+| Password       | bcrypt (`BCRYPT_SALT_ROUNDS`); only the hash is kept in Redis/PostgreSQL.                                                                                                                                                                                                              |
+| Language       | OTP email/SMS text uses the default language (`EN`); the greeting is "Hello!" (no name is collected).                                                                                                                                                                                  |
 
-await sendEmail({
-  to: 'user@example.com',
-  subject: 'Verify Your Deligo Account',
-  template: 'otp-verification',
-  data: {
-    name: 'Alex',
-    otpCode: '482910',
-    expiryMinutes: 5,
-    preferredLanguage: 'EN', // or 'PT'
-  },
-});
-```
+### Rate limiting
+
+Every auth route except `refresh-token` and `logout` uses the strict `auth` limiter (Redis, `rl:auth:*` keys; if Redis is down it fails open). Buckets, per 15-minute window:
+
+- **20 requests per IP per route**, and
+- **10 requests per account identity**, keyed by the **canonical** value so formatting tricks do not create new buckets: lower-cased `email`, `contactNumber` reduced to digits (so `912 345 678`, `+351912345678` and `+351 912 345 678` share one bucket), `signupSessionId`, or the admin invite `token`. Identity values are hashed in the keys.
+
+Exceeding a limit returns `429 RATE_LIMIT_EXCEEDED` with `Retry-After` and `RateLimit-*` headers. All `/api/v1` traffic is additionally capped at 120 requests/min per IP.
+
+### Sessions & tokens
+
+- Each login creates a PostgreSQL `Session` row storing only the SHA-256 hash of the refresh token (plus user agent, IP, expiry); multiple devices are supported.
+- Logout, refresh rotation, password set, suspension and reuse detection revoke sessions; revoked sessions' access tokens are rejected immediately through Redis markers.
+- Login compares against a dummy hash when the user does not exist, so response time and message do not reveal whether an account exists.
+
+### Initial account status
+
+| Account                     | Initial `User.status`  | What gates real use                                                                                                   |
+| --------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Customer (signup or social) | `ACTIVE`               | Can sign in and request rides immediately                                                                             |
+| Driver                      | `ACTIVE`               | `DriverProfile.kycStatus` starts `NOT_SUBMITTED`; a driver cannot accept rides until KYC is `APPROVED` (see `/kyc/*`) |
+| Fleet manager               | `ACTIVE`               | `FleetManagerProfile.verificationStatus` starts `PENDING_VERIFICATION` until an admin approves the onboarding         |
+| Admin (invited)             | `PENDING_VERIFICATION` | Cannot log in until the invite password is set, then `ACTIVE`                                                         |
+
+Login is refused with `403` for `SUSPENDED`, `DEACTIVATED` and `PENDING_VERIFICATION` accounts, and `refresh-token` returns `403` for non-active users.
+
+### Status codes
+
+| Code          | Meaning in auth                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `200` / `201` | Success (`201` only for verify-otp and admin create)                                                                                 |
+| `400`         | Wrong/expired OTP, contact does not match the session, invalid referral code, invalid/expired admin invite                           |
+| `401`         | Invalid credentials, missing/invalid/expired/reused refresh token, invalid social token, missing/invalid Bearer on admin create      |
+| `403`         | Wrong role for the endpoint, account suspended/deactivated/pending, social login not allowed, non-super-admin inviting a super-admin |
+| `404`         | Signup session expired or unknown                                                                                                    |
+| `409`         | Email or phone already registered                                                                                                    |
+| `422`         | Validation failed (including non-Portuguese `contactNumber`, both or neither of `email`/`contactNumber`, legacy `identifier`)        |
+| `429`         | Rate limit, OTP cooldown, resend limit or too many wrong OTPs                                                                        |
 
 ---
 
-## 6. Testing Guide
+## 11. Environment variables
 
-### Automated End-to-End Test Suite
-Automated integration test scripts cover all authentication scenarios:
+| Variable                                                                                  | Purpose                                                 |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `JWT_ACCESS_SECRET`, `JWT_ACCESS_EXPIRES_IN`                                              | Access token signing key / lifetime (`15m`)             |
+| `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN_DEFAULT`, `JWT_REFRESH_EXPIRES_IN_REMEMBER` | Refresh token key / lifetimes (`1d`, `30d`)             |
+| `JWT_SECRET`, `JWT_EXPIRES_IN`                                                            | Legacy fallback while `JWT_ACCESS_SECRET` is unset      |
+| `OTP_EXPIRES_IN_SECONDS`, `SIGNUP_SESSION_TTL_SECONDS`                                    | OTP validity (300) and signup session TTL (900)         |
+| `SAMESITE_COOKIE`                                                                         | `lax` (default), `strict` or `none` (forces `Secure`)   |
+| `BCRYPT_SALT_ROUNDS`                                                                      | Password hashing cost                                   |
+| `SMTP_*`, `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS`                                         | OTP, welcome and admin-invite emails                    |
+| `BULKGATE_APPLICATION_ID`, `BULKGATE_APPLICATION_TOKEN`                                   | SMS OTP delivery                                        |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_ANDROID_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`                    | Google token audiences                                  |
+| `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`                                                  | Facebook token lookup                                   |
+| `APPLE_CLIENT_ID`, `APPLE_BUNDLE_ID`, `APPLE_DEMO_MODE`                                   | Apple audiences (demo mode is forced off in production) |
+| `ADMIN_FRONTEND_URL`                                                                      | Base URL of the admin invite link                       |
+
+See `.env.example` for the full list and production requirements.
+
+---
+
+## 12. Emails
+
+`src/utils/email.service.ts` (Nodemailer, pooled; logs a preview instead of failing when SMTP is not configured) renders EJS templates from `src/templates/emails/`:
+
+- `otp-verification.ejs`: signup OTP ("Hello!" when no name is available)
+- `welcome.ejs`: sent (non-blocking) after a customer/driver/fleet account is created
+- `admin-invite.ejs`: admin invite link
+- `layout.ejs`: shared responsive wrapper
+
+---
+
+## 13. Quick cURL examples
+
 ```bash
-# 1. Run the Registration, OTP, Login, Refresh, and Logout test suite:
-npx ts-node scripts/test-auth-e2e.ts
+# Customer signup by email, then verify
+curl -X POST http://localhost:5000/api/v1/auth/signup/initiate \
+  -H 'Content-Type: application/json' \
+  -d '{ "email": "maria@example.com", "password": "Password123!" }'
 
-# 2. Run the Driver Authentication test suite (Role Isolation, KYC status, Customer vs. Driver guard):
-npx ts-node scripts/test-driver-auth.ts
+curl -X POST http://localhost:5000/api/v1/auth/signup/verify-otp \
+  -H 'Content-Type: application/json' \
+  -d '{ "signupSessionId": "<SIGNUP_SESSION_ID>", "otp": "<6_DIGIT_OTP>" }'
 
-# 3. Run the Admin Authentication & Invite Setup test suite (Privilege escalation, 1-time token, activation):
-npx ts-node scripts/test-admin-auth.ts
+# Customer signup by Portuguese phone
+curl -X POST http://localhost:5000/api/v1/auth/signup/initiate \
+  -H 'Content-Type: application/json' \
+  -d '{ "contactNumber": "912 345 678", "password": "Password123!" }'
 
-# 4. Run the Google Sign-In test suite (Cases A, B, C & Pre-Account Takeover Protection):
-npx ts-node scripts/test-google-auth.ts
+# Web login (refresh token only in the cookie; -c saves it)
+curl -c cookies.txt -X POST http://localhost:5000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{ "email": "maria@example.com", "password": "Password123!" }'
 
-# 5. Run the Facebook & Apple Social Sign-In test suite:
-npx ts-node scripts/test-social-auth.ts
+# Mobile login (refresh token also in the JSON)
+curl -X POST http://localhost:5000/api/v1/auth/login \
+  -H 'Content-Type: application/json' -H 'x-client-platform: mobile' \
+  -d '{ "contactNumber": "+351912345678", "password": "Password123!" }'
+
+# Refresh with the cookie (web) or with the body (mobile)
+curl -b cookies.txt -c cookies.txt -X POST http://localhost:5000/api/v1/auth/refresh-token
+curl -X POST http://localhost:5000/api/v1/auth/refresh-token \
+  -H 'Content-Type: application/json' -H 'x-client-platform: mobile' \
+  -d '{ "refreshToken": "<REFRESH_TOKEN>" }'
+
+# Logout
+curl -b cookies.txt -X POST http://localhost:5000/api/v1/auth/logout \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
-### Manual cURL Commands
-
-#### 1. Initiate Signup
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/signup/initiate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "firstName": "Maria",
-    "lastName": "Santos",
-    "email": "maria.santos@example.com",
-    "phone": "+5511999998888",
-    "password": "Password123!",
-    "preferredLanguage": "PT",
-    "otpChannel": "EMAIL"
-  }'
-```
-
-#### 2. Switch Channel to SMS
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/signup/resend-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "signupSessionId": "<SIGNUP_SESSION_ID>",
-    "channel": "PHONE"
-  }'
-```
-
-#### 3. Verify OTP
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/signup/verify-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "signupSessionId": "<SIGNUP_SESSION_ID>",
-    "otp": "<6_DIGIT_OTP>"
-  }'
-```
-
-#### 4. Login with Email
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "identifier": "maria.santos@example.com",
-    "password": "Password123!",
-    "rememberMe": true
-  }'
-```
-
-#### 5. Google Sign-In
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/google \
-  -H "Content-Type: application/json" \
-  -d '{
-    "idToken": "<GOOGLE_ID_TOKEN>",
-    "preferredLanguage": "EN",
-    "rememberMe": true
-  }'
-```
-
-##### How to obtain a live Google ID Token for manual testing:
-1. Navigate to [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/).
-2. In the top right gear icon (⚙️), check **"Use your own OAuth credentials"** and enter your `OAuth Client ID` and `OAuth Client secret`.
-3. Under **Step 1 (Select & authorize APIs)**, select `Google OAuth2 API v2` and check `email`, `profile`, `openid`.
-4. Click **Authorize APIs** and sign in with your Google account.
-5. In **Step 2 (Exchange authorization code for tokens)**, click **Exchange authorization code for tokens**.
-6. Copy the returned `id_token` (JWT string) and paste it into the `idToken` field in the request body above.
-
-#### 6. Refresh Token
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/refresh-token \
-  -H "Content-Type: application/json" \
-  -d '{
-    "refreshToken": "<REFRESH_TOKEN>"
-  }'
-```
-
-#### 7. Logout
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/logout \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "refreshToken": "<REFRESH_TOKEN>"
-  }'
-```
+A ready-to-run Postman collection (`deligo-postman-collection.json`) covers every endpoint above, including the mobile (`x-client-platform: mobile`) variants.

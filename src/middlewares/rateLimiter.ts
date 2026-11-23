@@ -137,12 +137,17 @@ export function createRateLimiter(options: RateLimitOptions): RequestHandler {
 const bodyString = (req: Request, field: string): string | undefined => {
   const body = req.body as Record<string, unknown> | undefined;
   const value = body?.[field];
-  return typeof value === 'string' && value.trim() ? value : undefined;
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  // Runs before validation: canonicalize so "912 345 678", "+351 912345678" and "+351912345678" (or
+  // "A@b.com" / "a@b.com") share one throttle bucket instead of each spelling getting its own.
+  if (field === 'contactNumber') return value.replace(/\D/g, '').replace(/^(00)?351(?=\d{9}$)/, '');
+  if (field === 'email') return value.trim().toLowerCase();
+  return value;
 };
 
 /**
  * Strict tier — login, signup, OTP send/verify, social login, admin set-password.
- * 10 attempts / 15 min per account identifier (email, phone, signup session or
+ * 10 attempts / 15 min per account identifier (email, contact number, signup session or
  * invite token) and 20 / 15 min per IP. The IP cap is looser so many legitimate
  * users behind one carrier/office NAT aren't locked out, while still stopping
  * credential stuffing and OTP flooding from a single address.
@@ -153,7 +158,7 @@ export const authRateLimiter: RequestHandler = createRateLimiter({
   max: 10,
   keys: (req) => [
     `ip:${clientIp(req)}:${req.baseUrl}${req.path}`,
-    ...['email', 'phone', 'identifier', 'signupSessionId', 'token'].map((field) => {
+    ...['email', 'contactNumber', 'signupSessionId', 'token'].map((field) => {
       const value = bodyString(req, field);
       return value ? `id:${field}:${hashKey(value)}` : undefined;
     }),

@@ -1,7 +1,8 @@
-import prisma from "../../config/db";
-import { uploadToCloudinary } from "../../utils/cloudinary";
-import { CreateVehicleInput, UpdateVehicleInput, ReviewVehicleInput } from "./vehicle.validation";
+import prisma from '../../config/db';
+import { uploadToCloudinary } from '../../utils/cloudinary';
+import { CreateVehicleInput, UpdateVehicleInput, ReviewVehicleInput } from './vehicle.validation';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
+import { NotificationService, logNotificationFailure } from '../notification/notification.service';
 
 // ─── Shared vehicle select shape ───────────────────────────────────────────────
 const vehicleSelect = {
@@ -110,10 +111,10 @@ const getMyVehicle = async (userId: string) => {
 const getAllVehicles = async (statusFilter?: string) => {
   return await prisma.vehicle.findMany({
     where: statusFilter
-      ? { approvalStatus: statusFilter as "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED" }
+      ? { approvalStatus: statusFilter as 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' }
       : undefined,
     select: vehicleSelect,
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: 'desc' },
   });
 };
 
@@ -144,8 +145,8 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
     });
     if (plateExists) {
       throw new BadRequestError(
-      `License plate "${payload.licensePlate}" is already registered to another vehicle.`,
-    );
+        `License plate "${payload.licensePlate}" is already registered to another vehicle.`,
+      );
     }
   }
 
@@ -160,7 +161,7 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
         ? new Date(payload.insuranceExpiryDate)
         : undefined,
       // Changing vehicle info requires re-approval
-      approvalStatus: "PENDING_REVIEW",
+      approvalStatus: 'PENDING_REVIEW',
       adminNote: null,
       reviewedAt: null,
     },
@@ -171,10 +172,7 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
 // ─── POST /api/v1/vehicles/photos ─────────────────────────────────────────────
 // Driver uploads vehicle photos (up to 5). Appends to existing photoUrls.
 
-const uploadVehiclePhotos = async (
-  userId: string,
-  files: Express.Multer.File[]
-) => {
+const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[]) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
   if (!driverProfile) {
@@ -200,7 +198,7 @@ const uploadVehiclePhotos = async (
 
   // Upload all photos concurrently to Cloudinary
   const uploadedUrls = await Promise.all(
-    files.map((file) => uploadToCloudinary(file.buffer, "vehicle-photos", file.mimetype))
+    files.map((file) => uploadToCloudinary(file.buffer, 'vehicle-photos', file.mimetype)),
   );
 
   const newPhotoUrls = uploadedUrls.map((r) => r.secureUrl);
@@ -210,7 +208,7 @@ const uploadVehiclePhotos = async (
     data: {
       photoUrls: { push: newPhotoUrls },
       // New photos require re-approval
-      approvalStatus: "PENDING_REVIEW",
+      approvalStatus: 'PENDING_REVIEW',
       adminNote: null,
       reviewedAt: null,
     },
@@ -237,7 +235,7 @@ const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInput) => 
     throw new BadRequestError(`Vehicle is already ${payload.approvalStatus}.`);
   }
 
-  return await prisma.vehicle.update({
+  const updated = await prisma.vehicle.update({
     where: { id: vehicleId },
     data: {
       approvalStatus: payload.approvalStatus,
@@ -246,6 +244,31 @@ const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInput) => 
     },
     select: vehicleSelect,
   });
+
+  const note = payload.adminNote ? ` Note: ${payload.adminNote}` : '';
+  const notices: Partial<
+    Record<typeof payload.approvalStatus, { title: string; message: string }>
+  > = {
+    APPROVED: { title: 'Vehicle approved', message: 'Your vehicle was approved for rides.' },
+    REJECTED: { title: 'Vehicle rejected', message: `Your vehicle was rejected.${note}` },
+    SUSPENDED: { title: 'Vehicle suspended', message: `Your vehicle was suspended.${note}` },
+  };
+  const notice = notices[payload.approvalStatus];
+
+  if (notice) {
+    void NotificationService.dispatch({
+      userId: vehicle.driverProfile.userId,
+      type: 'SYSTEM',
+      ...notice,
+      data: {
+        vehicleId,
+        approvalStatus: payload.approvalStatus,
+        adminNote: payload.adminNote ?? null,
+      },
+    }).catch(logNotificationFailure('vehicle-review'));
+  }
+
+  return updated;
 };
 
 export const VehicleService = {

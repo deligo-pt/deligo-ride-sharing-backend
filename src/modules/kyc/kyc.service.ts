@@ -1,5 +1,6 @@
 import type { DocumentStatus, KycStatus, UserStatus } from '@prisma/client';
 import prisma from '../../config/db';
+import { NotificationService, logNotificationFailure } from '../notification/notification.service';
 import {
   ReviewDocumentInput,
   ReviewKycInput,
@@ -216,6 +217,33 @@ const applyKycDecision = async (params: ApplyKycDecisionParams) => {
       select: { id: true, status: true },
     }),
   ]);
+
+  const reason = params.rejectionReason ?? params.reviewNote ?? null;
+  const reasonText = reason ? ` Reason: ${reason}` : '';
+  const notice =
+    decision === 'APPROVED'
+      ? {
+          type: 'SYSTEM' as const,
+          title: 'KYC approved',
+          message: 'Your documents were approved. You can now go online and accept rides.',
+        }
+      : decision === 'REJECTED'
+        ? {
+            type: 'SYSTEM' as const,
+            title: 'KYC rejected',
+            message: `Your KYC submission was rejected.${reasonText} Please update your documents and resubmit.`,
+          }
+        : {
+            type: 'SECURITY' as const,
+            title: 'Driver account suspended',
+            message: `Your driver account was suspended after review.${reasonText}`,
+          };
+
+  void NotificationService.dispatch({
+    userId,
+    ...notice,
+    data: { kycStatus: outcome.kycStatus, decision, reason },
+  }).catch(logNotificationFailure('kyc-review'));
 
   return { document, profile, user };
 };

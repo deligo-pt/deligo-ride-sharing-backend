@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { normalizePhoneE164 } from '../../utils/phone';
+import { normalizePortuguesePhone, PORTUGUESE_PHONE_MESSAGE } from '../../utils/phone';
 
 const passwordSchema = z
   .string()
@@ -9,108 +9,118 @@ const passwordSchema = z
   .regex(/[0-9]/, 'Password must contain at least one number')
   .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
 
-const emailIdentifier = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .email()
-  .transform((email) => ({
-    email,
-    phone: null as string | null,
-    otpChannel: 'EMAIL' as const,
-  }));
+const emailSchema = z.string().trim().toLowerCase().email('Invalid email address');
 
-const phoneIdentifier = z
+const contactNumberSchema = z
   .string()
   .trim()
   .transform((val, ctx) => {
-    if (!val.replace(/[\s\-()]/g, '').startsWith('+')) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Phone number must include country code (e.g., +351... or +880...)',
-      });
-      return z.NEVER;
-    }
-
-    const phone = normalizePhoneE164(val);
+    const phone = normalizePortuguesePhone(val);
     if (!phone) {
-      ctx.addIssue({ code: 'custom', message: 'Invalid phone number' });
+      ctx.addIssue({ code: 'custom', message: PORTUGUESE_PHONE_MESSAGE });
       return z.NEVER;
     }
-
-    return {
-      email: null as string | null,
-      phone,
-      otpChannel: 'PHONE' as const,
-    };
+    return phone;
   });
 
-const identifierSchema = z.union([emailIdentifier, phoneIdentifier], {
-  error: 'Must be a valid email address or phone number with country code',
-});
+// A contact is either an email OR a Portuguese contactNumber (normalized to E.164 +351...).
+const contactFields = {
+  email: emailSchema.optional(),
+  contactNumber: contactNumberSchema.optional(),
+};
 
+type ContactFields = { email?: string; contactNumber?: string };
+
+function addContactIssue(
+  ctx: z.RefinementCtx,
+  message: string,
+  path: 'email' | 'contactNumber',
+): void {
+  ctx.addIssue({ code: 'custom', message, path: [path] });
+}
+
+/** XOR: exactly one of email / contactNumber. */
+function requireExactlyOneContact(data: ContactFields, ctx: z.RefinementCtx): void {
+  if (data.email && data.contactNumber) {
+    addContactIssue(ctx, 'Provide either email or contactNumber, not both', 'contactNumber');
+  } else if (!data.email && !data.contactNumber) {
+    addContactIssue(ctx, 'Either email or contactNumber is required', 'email');
+  }
+}
+
+/** Optional contact (OTP endpoints): at most one of email / contactNumber. */
+function allowAtMostOneContact(data: ContactFields, ctx: z.RefinementCtx): void {
+  if (data.email && data.contactNumber) {
+    addContactIssue(ctx, 'Provide either email or contactNumber, not both', 'contactNumber');
+  }
+}
+
+// ── Customer signup: email XOR Portuguese contactNumber ────────────────────────
 export const InitiateSignupSchema = z
   .object({
-    firstName: z.string().min(1, 'First name is required').trim(),
-    lastName: z.string().min(1, 'Last name is required').trim(),
-    identifier: identifierSchema,
+    ...contactFields,
     password: passwordSchema,
-    preferredLanguage: z.enum(['EN', 'PT']).default('EN'),
     referralCode: z.string().trim().optional(),
   })
-  .transform(({ identifier, ...rest }) => ({
-    ...rest,
-    email: identifier.email,
-    phone: identifier.phone,
-    otpChannel: identifier.otpChannel,
-  }));
+  .superRefine(requireExactlyOneContact);
 
 export type InitiateSignupInput = z.infer<typeof InitiateSignupSchema>;
 
-export const EmailOnlySignupSchema = z
-  .object({
-    email: z.string().trim().toLowerCase().email('Invalid email address'),
-    password: passwordSchema,
-    preferredLanguage: z.enum(['EN', 'PT']).default('EN'),
-    referralCode: z.string().trim().optional(),
-  })
-  .transform(({ email, ...rest }) => ({
-    ...rest,
-    firstName: null as string | null,
-    lastName: null as string | null,
-    email,
-    phone: null as string | null,
-    otpChannel: 'EMAIL' as const,
-  }));
+// ── Driver / fleet manager signup: email only ──────────────────────────────────
+export const EmailOnlySignupSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  referralCode: z.string().trim().optional(),
+});
 
 export type EmailOnlySignupInput = z.infer<typeof EmailOnlySignupSchema>;
 
-const ResendOtpSchema = z.object({
-  signupSessionId: z.string().uuid('Invalid signupSessionId format'),
-  channel: z.enum(['EMAIL', 'PHONE']).optional(),
-});
+// The signup session is addressed by signupSessionId (returned by initiate). email / contactNumber
+// are optional and, when sent, must match the contact the session was created for.
+const ResendOtpSchema = z
+  .object({
+    signupSessionId: z.string().uuid('Invalid signupSessionId format'),
+    ...contactFields,
+  })
+  .superRefine(allowAtMostOneContact);
 
 export type ResendOtpInput = z.infer<typeof ResendOtpSchema>;
 
-const VerifyOtpSchema = z.object({
-  includeRefreshToken: z.boolean().optional(),
-  signupSessionId: z.string().uuid('Invalid signupSessionId format'),
-  otp: z
-    .string()
-    .length(6, 'OTP must be exactly 6 digits')
-    .regex(/^\d{6}$/, 'OTP must contain only numbers'),
-});
+const VerifyOtpSchema = z
+  .object({
+    includeRefreshToken: z.boolean().optional(),
+    signupSessionId: z.string().uuid('Invalid signupSessionId format'),
+    ...contactFields,
+    otp: z
+      .string()
+      .length(6, 'OTP must be exactly 6 digits')
+      .regex(/^\d{6}$/, 'OTP must contain only numbers'),
+  })
+  .superRefine(allowAtMostOneContact);
 
 export type VerifyOtpInput = z.infer<typeof VerifyOtpSchema>;
 
-const LoginSchema = z.object({
-  includeRefreshToken: z.boolean().optional(),
-  identifier: z.string().min(1, 'Email or phone number is required').trim(),
-  password: z.string().min(1, 'Password is required'),
-  rememberMe: z.boolean().optional().default(false),
-});
+const LoginSchema = z
+  .object({
+    includeRefreshToken: z.boolean().optional(),
+    ...contactFields,
+    password: z.string().min(1, 'Password is required'),
+    rememberMe: z.boolean().optional().default(false),
+  })
+  .superRefine(requireExactlyOneContact);
 
 export type LoginInput = z.infer<typeof LoginSchema>;
+
+// POST /auth/logout: every field optional (the refresh token may come from the cookie instead).
+const LogoutSchema = z.object({
+  refreshToken: z.string().optional(),
+  /** This device's FCM token: when sent, only that token is cleared (precise device logout). */
+  fcmToken: z.string().min(1).optional(),
+  /** Default true: the user's push token is cleared on logout. Send false to keep receiving pushes. */
+  clearFcmToken: z.boolean().optional(),
+});
+
+export type LogoutInput = z.infer<typeof LogoutSchema>;
 
 const RefreshTokenSchema = z.object({
   includeRefreshToken: z.boolean().optional(),
@@ -183,4 +193,5 @@ export const AuthValidation = {
   createAdmin: { body: CreateAdminSchema },
   setAdminPassword: { body: SetAdminPasswordSchema },
   refreshToken: { body: z.preprocess((value) => value ?? {}, RefreshTokenSchema) },
+  logout: { body: z.preprocess((value) => value ?? {}, LogoutSchema) },
 };

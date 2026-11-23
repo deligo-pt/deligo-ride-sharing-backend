@@ -247,7 +247,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"identifier\": \"customer@example.com\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\"\n}"
+                  "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"Password123!\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/signup/initiate",
@@ -260,7 +260,57 @@
                     "initiate"
                   ]
                 },
-                "description": "Starts customer registration. `identifier` is EITHER an email address OR a phone number with country code in international format (e.g. `+8801712345678`, validated with libphonenumber). The OTP channel is derived from it: email -> EMAIL, phone -> PHONE. The legacy `email` / `phone` / `otpChannel` fields are no longer accepted.\n\n(Public. Path: /auth/signup/initiate)"
+                "description": "Starts customer registration with EITHER `email` OR `contactNumber` (exactly one). `contactNumber` must be a valid Portuguese (+351) phone number; `912345678`, `912 345 678` and `+351 912 345 678` are all normalized to `+351912345678`. Non-Portuguese numbers return 422. The OTP goes to the email (EMAIL channel) or by SMS (PHONE channel). No name or language is collected; the account is created with null names and the default language.\n\n(Public. Path: /auth/signup/initiate)"
+              },
+              "response": []
+            },
+            {
+              "name": "1. Initiate Customer Signup (Portuguese phone)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.signupSessionId) {",
+                      "        pm.collectionVariables.set(\"signupSessionId\", json.data.signupSessionId);",
+                      "        console.log(\"Captured Customer signupSessionId:\", json.data.signupSessionId);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contactNumber\": \"+351912345678\",\n  \"password\": \"Password123!\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/initiate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "initiate"
+                  ]
+                },
+                "description": "Same endpoint, phone variant: `contactNumber` instead of `email` (valid Portuguese +351 number, normalized to E.164). Sending both `email` and `contactNumber`, or neither, returns 422.\n\n(Public. Path: /auth/signup/initiate)"
               },
               "response": []
             },
@@ -311,7 +361,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"otp\": \"{{otp}}\"\n}"
+                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"email\": \"customer@example.com\",\n  \"otp\": \"{{otp}}\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/signup/verify-otp",
@@ -324,7 +374,7 @@
                     "verify-otp"
                   ]
                 },
-                "description": "Verifies the 6-digit OTP from signup initiation. Persists the User, CustomerProfile, and Wallet in an atomic transaction, returns JWT access token, and sets the refreshToken HTTP-only cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
+                "description": "Verifies the 6-digit OTP from signup initiation. Persists the User, CustomerProfile, and Wallet in an atomic transaction, returns JWT access token, and sets the refreshToken HTTP-only cookie.\n\n`signupSessionId` identifies the session; `email` OR `contactNumber` is optional and, if sent, must match the session's contact. The user is created with null names and the default language.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             },
@@ -341,7 +391,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"channel\": \"EMAIL\"\n}"
+                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"email\": \"customer@example.com\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/signup/resend-otp",
@@ -354,7 +404,7 @@
                     "resend-otp"
                   ]
                 },
-                "description": "Resends a fresh OTP code for an active signup session with rate-limiting protection."
+                "description": "Resends the OTP on the channel the signup session was created for. `signupSessionId` identifies the session; `email` OR `contactNumber` is optional and, if sent, must match the session's contact (otherwise 400).\n\n(Public. Path: /auth/signup/resend-otp)"
               },
               "response": []
             },
@@ -405,7 +455,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"identifier\": \"customer@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                  "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/login",
@@ -417,7 +467,70 @@
                     "login"
                   ]
                 },
-                "description": "Authenticates a Customer with email or phone number and password. Issues access token and sets refresh token cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
+                "description": "Authenticates a Customer with email or Portuguese contact number and password. Issues access token and sets refresh token cookie.\n\nSign in with EITHER `email` OR `contactNumber` (a Portuguese +351 number in any common format). `identifier` is no longer accepted.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
+              },
+              "response": []
+            },
+            {
+              "name": "4. Customer Login (Portuguese phone)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    var json = pm.response.json();",
+                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        console.log(\"Captured Customer accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
+                      "        console.log(\"Captured Customer mockUserId:\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contactNumber\": \"+351912345678\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "description": "Authenticates a Customer with email or Portuguese contact number and password. Issues access token and sets refresh token cookie.\n\nSign in with EITHER `email` OR `contactNumber` (a Portuguese +351 number in any common format). `identifier` is no longer accepted.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             }
@@ -460,7 +573,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"driver@example.com\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\"\n}"
+                  "raw": "{\n  \"email\": \"driver@example.com\",\n  \"password\": \"Password123!\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/driver/signup/initiate",
@@ -474,7 +587,7 @@
                     "initiate"
                   ]
                 },
-                "description": "Starts driver registration. Email-only: only `email`, `password`, optional `preferredLanguage` and optional `referralCode` are accepted; the OTP is always sent by EMAIL. Name and phone are collected later during onboarding (`firstName`/`lastName`/`phone`/`otpChannel` are ignored).\n\n(Public. Path: /auth/driver/signup/initiate)"
+                "description": "Starts driver registration. Email-only: only `email`, `password` and optional `referralCode` are accepted; the OTP is always sent by EMAIL. Name and phone are collected later during onboarding (`firstName`/`lastName`/`phone`/`preferredLanguage`/`otpChannel` are ignored).\n\n(Public. Path: /auth/driver/signup/initiate)"
               },
               "response": []
             },
@@ -525,7 +638,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"identifier\": \"driver@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                  "raw": "{\n  \"email\": \"driver@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/driver/login",
@@ -581,7 +694,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"fleet@example.com\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\"\n}"
+                  "raw": "{\n  \"email\": \"fleet@example.com\",\n  \"password\": \"Password123!\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/fleet/signup/initiate",
@@ -595,7 +708,7 @@
                     "initiate"
                   ]
                 },
-                "description": "Starts fleet manager registration. Email-only: only `email`, `password`, optional `preferredLanguage` and optional `referralCode` are accepted; the OTP is always sent by EMAIL. Name and phone are collected later during onboarding (`firstName`/`lastName`/`phone`/`otpChannel` are ignored).\n\n(Public. Path: /auth/fleet/signup/initiate)"
+                "description": "Starts fleet manager registration. Email-only: only `email`, `password` and optional `referralCode` are accepted; the OTP is always sent by EMAIL. Name and phone are collected later during onboarding (`firstName`/`lastName`/`phone`/`preferredLanguage`/`otpChannel` are ignored).\n\n(Public. Path: /auth/fleet/signup/initiate)"
               },
               "response": []
             },
@@ -636,7 +749,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"identifier\": \"fleet@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                  "raw": "{\n  \"email\": \"fleet@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/fleet/login",
@@ -696,7 +809,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"identifier\": \"admin@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
+                  "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Password123!\",\n  \"rememberMe\": true\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/admin/login",
@@ -1089,7 +1202,7 @@
                     "logout"
                   ]
                 },
-                "description": "Revokes the active session, blacklists the JTI in Redis, and clears the refreshToken HTTP-only cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
+                "description": "Revokes the active session, blacklists the JTI in Redis, and clears the refreshToken HTTP-only cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only.\n\nAlso clears the user's FCM push token so a signed-out device stops receiving pushes. Optional body fields: `fcmToken` (clear only this device's token) and `clearFcmToken: false` (keep the token). `refreshToken` may come from the cookie or the body."
               },
               "response": []
             }
@@ -3437,7 +3550,7 @@
                 }
               ]
             },
-            "description": "Marks a specific notification as read after ownership verification."
+            "description": "Marks one of YOUR notifications as read. Another user's (or a non-existent) id returns 404; ownership is never revealed.\n\n(Any authenticated user. Path: /notifications/:id/read)"
           }
         },
         {
@@ -3543,7 +3656,7 @@
                 "broadcast"
               ]
             },
-            "description": "Broadcasts an announcement notification to CUSTOMER, DRIVER, or ALL users.\n\n(Role: ADMIN. Path: /notifications/broadcast)"
+            "description": "Admin broadcasts a SYSTEM notification (in-app + socket + FCM push) to ACTIVE, non-deleted users of `targetRole`: `CUSTOMER`, `DRIVER`, `FLEET_MANAGER`, or `ALL` (customers + drivers + fleet managers; admins are never included). Delivery runs in the background in batches, so the response returns immediately with `recipientCount` and `status: \"PROCESSING\"`.\n\n(Role: ADMIN. Path: /notifications/broadcast)"
           }
         }
       ]
@@ -4587,7 +4700,7 @@
                 "fcm-token"
               ]
             },
-            "description": "Registers or updates device FCM token for push notifications."
+            "description": "Registers or updates device FCM token for push notifications.\n\nA device token belongs to one account: saving it clears the same token from any other user."
           }
         },
         {

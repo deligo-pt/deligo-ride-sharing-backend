@@ -8,7 +8,7 @@ import type {
   UpdateTicketInput,
 } from './support.validation';
 import { buildPaginationMeta } from '../../types/api.types';
-import { NotificationService } from '../notification/notification.service';
+import { NotificationService, logNotificationFailure } from '../notification/notification.service';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,10 +24,7 @@ const MAX_EMERGENCY_CONTACTS = 3;
  * Adds a new emergency contact for the user.
  * Throws if the user already has 3 contacts (enforced here at the service layer).
  */
-async function addEmergencyContact(
-  userId: string,
-  dto: CreateEmergencyContactDto,
-) {
+async function addEmergencyContact(userId: string, dto: CreateEmergencyContactDto) {
   const existingCount = await prisma.emergencyContact.count({ where: { userId } });
 
   if (existingCount >= MAX_EMERGENCY_CONTACTS) {
@@ -39,9 +36,9 @@ async function addEmergencyContact(
   return prisma.emergencyContact.create({
     data: {
       userId,
-      name:        dto.name,
+      name: dto.name,
       phoneNumber: dto.phoneNumber,
-      relation:    dto.relation,
+      relation: dto.relation,
     },
   });
 }
@@ -67,18 +64,17 @@ async function getEmergencyContacts(userId: string) {
  */
 async function createTicket(userId: string, dto: CreateTicketDto) {
   // Auto-escalate SAFETY tickets
-  const priority =
-    dto.type === 'SAFETY' ? 'CRITICAL' : (dto.priority ?? 'MEDIUM');
+  const priority = dto.type === 'SAFETY' ? 'CRITICAL' : (dto.priority ?? 'MEDIUM');
 
   return prisma.supportTicket.create({
     data: {
       userId,
-      subject:     dto.subject,
+      subject: dto.subject,
       description: dto.description,
-      type:        dto.type,
+      type: dto.type,
       priority,
-      status:      'OPEN',
-      rideId:      dto.rideId ?? null,
+      status: 'OPEN',
+      rideId: dto.rideId ?? null,
     },
     include: {
       messages: false,
@@ -216,7 +212,7 @@ async function addTicketMessage(
       title: `New reply on Support Ticket #${ticketId.slice(0, 8)}`,
       message: dto.message,
       data: { ticketId, messageId: savedMessage.id },
-    });
+    }).catch(logNotificationFailure('ticket-reply'));
   }
 
   return savedMessage;
@@ -238,7 +234,7 @@ async function updateTicket(ticketId: string, adminId: string, payload: UpdateTi
     ...(!ticket.adminId && { adminId }),
   };
 
-  return prisma.supportTicket.update({
+  const updated = await prisma.supportTicket.update({
     where: { id: ticketId },
     data: dataToUpdate,
     include: {
@@ -246,6 +242,20 @@ async function updateTicket(ticketId: string, adminId: string, payload: UpdateTi
       admin: { select: { id: true, firstName: true, lastName: true, email: true } },
     },
   });
+
+  // Tell the ticket owner when their ticket is resolved.
+  if (payload.status === 'RESOLVED' && ticket.status !== 'RESOLVED') {
+    void NotificationService.dispatch({
+      userId: ticket.userId,
+      type: 'SYSTEM',
+      title: `Support ticket #${ticketId.slice(0, 8)} resolved`,
+      message:
+        'Your support ticket has been marked as resolved. Reply on the ticket if you still need help.',
+      data: { ticketId, status: 'RESOLVED' },
+    }).catch(logNotificationFailure('ticket-resolved'));
+  }
+
+  return updated;
 }
 
 export const SupportService = {

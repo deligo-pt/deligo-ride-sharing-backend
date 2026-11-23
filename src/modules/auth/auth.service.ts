@@ -9,7 +9,6 @@ import { sendEmail } from '../../utils/email.service';
 import { sendBulkGateSms } from '../../utils/bulkgate';
 import { disconnectSessionSockets, disconnectUserSockets } from '../../sockets/socket.control';
 import { revokeSessionAccessTokens, revokeUserAccessTokens } from '../../utils/revocation';
-import { normalizePhoneE164 } from '../../utils/phone';
 import { OAuth2Client } from 'google-auth-library';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import {
@@ -23,7 +22,6 @@ import {
 } from '../../utils/errors';
 import {
   InitiateSignupInput,
-  EmailOnlySignupInput,
   LoginInput,
   ResendOtpInput,
   VerifyOtpInput,
@@ -34,17 +32,18 @@ import {
   SetAdminPasswordInput,
 } from './auth.validation';
 
-type SignupInput = InitiateSignupInput | EmailOnlySignupInput;
+// Customer signup passes { email | contactNumber }; driver / fleet signup is the email-only subset.
+type SignupInput = InitiateSignupInput;
+
+// OTP messages have no recipient name or language to personalise with: customers sign up with only a
+// contact + password, so the schema default language (EN) is used.
+const DEFAULT_LANGUAGE = 'EN' as const;
 
 interface SignupRedisSession {
   payload: {
-    firstName: string | null;
-    lastName: string | null;
-    email: string | null;
-    phone: string | null;
-    identifier: string | null;
+    email?: string;
+    contactNumber?: string; // normalized E.164 (+351...)
     passwordHash: string;
-    preferredLanguage: 'EN' | 'PT';
     referralCode: string | null;
     referrerId: string | null;
     role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER';
@@ -277,29 +276,25 @@ async function dispatchOtp(
   otp: string,
   targetEmail: string | null,
   targetPhone: string | null,
-  firstName: string | null,
-  language: 'EN' | 'PT',
 ): Promise<void> {
   const expiryMinutes = Math.max(1, Math.round(config.otp.expiresInSeconds / 60));
 
   if (channel === 'EMAIL' && targetEmail) {
     await sendEmail({
       to: targetEmail,
-      subject: language === 'PT' ? 'Código de Verificação Deligo' : 'Deligo Verification Code',
+      subject: 'Deligo Verification Code',
       template: 'otp-verification',
       data: {
-        name: firstName,
         otpCode: otp,
         expiryMinutes,
-        preferredLanguage: language,
+        preferredLanguage: DEFAULT_LANGUAGE,
       },
     });
   } else if (channel === 'PHONE' && targetPhone) {
-    const text =
-      language === 'PT'
-        ? `Seu codigo de verificacao Deligo e: ${otp}. Valido por ${expiryMinutes} minutos.`
-        : `Your Deligo verification code is: ${otp}. Valid for ${expiryMinutes} minutes.`;
-    await sendBulkGateSms(targetPhone, text);
+    await sendBulkGateSms(
+      targetPhone,
+      `Your Deligo verification code is: ${otp}. Valid for ${expiryMinutes} minutes.`,
+    );
   }
 }
 
@@ -371,22 +366,18 @@ async function initiateSignup(
   maskedTarget: string;
   expiresIn: number;
 }> {
-  const normalizedEmail =
-    input.email && input.email.length > 0 ? input.email.toLowerCase().trim() : null;
-  const normalizedPhone = input.phone && input.phone.length > 0 ? input.phone.trim() : null;
+  const email = input.email;
+  const contactNumber = input.contactNumber;
+  const channel: 'EMAIL' | 'PHONE' = email ? 'EMAIL' : 'PHONE';
 
-  if (normalizedEmail) {
-    const existing = await prisma.user.findFirst({
-      where: { email: normalizedEmail, isDeleted: false },
-    });
+  if (email) {
+    const existing = await prisma.user.findFirst({ where: { email, isDeleted: false } });
     if (existing) {
       throw new ConflictError('A user with this email address already exists');
     }
-  }
-
-  if (normalizedPhone) {
+  } else if (contactNumber) {
     const existing = await prisma.user.findFirst({
-      where: { phone: normalizedPhone, isDeleted: false },
+      where: { phone: contactNumber, isDeleted: false },
     });
     if (existing) {
       throw new ConflictError('A user with this phone number already exists');
@@ -412,24 +403,19 @@ async function initiateSignup(
 
   const now = Date.now();
   const expiresAt = now + config.otp.expiresInSeconds * 1000;
-  const identifier = normalizedEmail || normalizedPhone;
 
   const sessionData: SignupRedisSession = {
     payload: {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      identifier,
+      email,
+      contactNumber,
       passwordHash,
-      preferredLanguage: input.preferredLanguage,
       referralCode: input.referralCode?.trim().toUpperCase() || null,
       referrerId,
       role,
     },
     otp: {
       codeHash,
-      channel: input.otpChannel,
+      channel,
       expiresAt,
     },
     resendCount: 0,
@@ -439,21 +425,28 @@ async function initiateSignup(
   const redisKey = `signup:session:${signupSessionId}`;
   await redis.set(redisKey, JSON.stringify(sessionData), 'EX', config.otp.signupSessionTtlSeconds);
 
-  await dispatchOtp(
-    input.otpChannel,
-    rawOtp,
-    normalizedEmail,
-    normalizedPhone,
-    input.firstName,
-    input.preferredLanguage,
-  );
+  await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
 
   return {
     signupSessionId,
-    channel: input.otpChannel,
-    maskedTarget: maskTarget(input.otpChannel, normalizedEmail, normalizedPhone),
+    channel,
+    maskedTarget: maskTarget(channel, email, contactNumber),
     expiresIn: config.otp.expiresInSeconds,
   };
+}
+
+/** A client-supplied email / contactNumber (optional) must belong to the signup session. */
+function assertSessionContact(
+  session: SignupRedisSession,
+  provided: { email?: string; contactNumber?: string },
+): void {
+  if (
+    (provided.email !== undefined && provided.email !== session.payload.email) ||
+    (provided.contactNumber !== undefined &&
+      provided.contactNumber !== session.payload.contactNumber)
+  ) {
+    throw new BadRequestError('The provided contact does not match this signup session');
+  }
 }
 
 async function resendSignupOtp(input: ResendOtpInput): Promise<{
@@ -471,19 +464,9 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
   }
 
   const session = JSON.parse(rawData) as SignupRedisSession;
-  const targetChannel = input.channel || session.otp.channel;
-
-  if (targetChannel === 'EMAIL' && !session.payload.email) {
-    throw new BadRequestError(
-      'Cannot send OTP via EMAIL because no email was provided during registration',
-    );
-  }
-
-  if (targetChannel === 'PHONE' && !session.payload.phone) {
-    throw new BadRequestError(
-      'Cannot send OTP via PHONE because no phone number was provided during registration',
-    );
-  }
+  assertSessionContact(session, input);
+  // The session holds exactly one contact, so the OTP always goes to the channel it was created for.
+  const targetChannel = session.otp.channel;
 
   const now = Date.now();
   const elapsed = now - session.lastSentAt;
@@ -523,20 +506,14 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
   await dispatchOtp(
     targetChannel,
     rawOtp,
-    targetChannel === 'EMAIL' ? session.payload.email : null,
-    targetChannel === 'PHONE' ? session.payload.phone : null,
-    session.payload.firstName,
-    session.payload.preferredLanguage,
+    session.payload.email ?? null,
+    session.payload.contactNumber ?? null,
   );
 
   return {
     signupSessionId: input.signupSessionId,
     channel: targetChannel,
-    maskedTarget: maskTarget(
-      targetChannel,
-      targetChannel === 'EMAIL' ? session.payload.email : null,
-      targetChannel === 'PHONE' ? session.payload.phone : null,
-    ),
+    maskedTarget: maskTarget(targetChannel, session.payload.email, session.payload.contactNumber),
     expiresIn: config.otp.expiresInSeconds,
   };
 }
@@ -554,6 +531,7 @@ async function verifySignupOtp(
   }
 
   const session = JSON.parse(rawData) as SignupRedisSession;
+  assertSessionContact(session, input);
 
   if (Date.now() > session.otp.expiresAt) {
     throw new BadRequestError('Verification code has expired. Please request a new one.');
@@ -590,13 +568,12 @@ async function verifySignupOtp(
     createdUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: session.payload.email,
-          phone: session.payload.phone,
-          firstName: session.payload.firstName,
-          lastName: session.payload.lastName,
+          email: session.payload.email ?? null,
+          phone: session.payload.contactNumber ?? null,
+          firstName: null,
+          lastName: null,
           role: session.payload.role || 'CUSTOMER',
           status: 'ACTIVE',
-          preferredLanguage: session.payload.preferredLanguage,
           referralCode: ownReferralCode,
           referrerId: session.payload.referrerId,
           isEmailVerified: session.otp.channel === 'EMAIL',
@@ -609,8 +586,8 @@ async function verifySignupOtp(
           userId: user.id,
           provider: 'CREDENTIALS',
           providerAccountId: user.id,
-          email: session.payload.email,
-          phone: session.payload.phone,
+          email: session.payload.email ?? null,
+          phone: session.payload.contactNumber ?? null,
           passwordHash: session.payload.passwordHash,
         },
       });
@@ -665,17 +642,10 @@ async function login(
   clientInfo: ClientInfo,
   allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
-  const identifier = input.identifier.trim();
-  // Phones are stored in E.164; "+880 1712-345678" must match "+8801712345678".
-  const normalizedPhone = identifier.includes('@') ? null : normalizePhoneE164(identifier);
-
+  // email / contactNumber are normalized by the schema (lowercased email, E.164 +351 phone).
   const user = await prisma.user.findFirst({
     where: {
-      OR: [
-        { email: identifier.toLowerCase() },
-        { phone: identifier },
-        ...(normalizedPhone && normalizedPhone !== identifier ? [{ phone: normalizedPhone }] : []),
-      ],
+      ...(input.email ? { email: input.email } : { phone: input.contactNumber }),
       isDeleted: false,
     },
     include: {
@@ -1286,10 +1256,22 @@ async function logoutUser(options: {
   sessionId?: string;
   jti?: string;
   exp?: number;
+  userId?: string;
   refreshToken?: string;
+  /** This device's FCM token: clears only that token. */
+  fcmToken?: string;
+  /** Default true. false keeps the user's push token (e.g. "sign out of this browser only"). */
+  clearFcmToken?: boolean;
 }): Promise<{ message: string }> {
   let revokedSessionId = options.sessionId;
+  let ownerId = options.userId;
+
   if (options.sessionId) {
+    const session = await prisma.session.findUnique({
+      where: { id: options.sessionId },
+      select: { userId: true },
+    });
+    ownerId = ownerId ?? session?.userId;
     await prisma.session.updateMany({
       where: { id: options.sessionId },
       data: { isRevoked: true },
@@ -1298,13 +1280,26 @@ async function logoutUser(options: {
     const tokenHash = hashSha256(options.refreshToken);
     const session = await prisma.session.findUnique({
       where: { tokenHash },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
     revokedSessionId = session?.id;
+    ownerId = ownerId ?? session?.userId;
     await prisma.session.updateMany({
       where: { tokenHash },
       data: { isRevoked: true },
     });
+  }
+
+  // Stop push notifications reaching a signed-out device (best-effort, never blocks logout).
+  if (ownerId && options.clearFcmToken !== false) {
+    try {
+      await prisma.user.updateMany({
+        where: { id: ownerId, ...(options.fcmToken && { fcmToken: options.fcmToken }) },
+        data: { fcmToken: null },
+      });
+    } catch (err) {
+      console.error(`[AUTH] Failed to clear fcmToken on logout for ${ownerId}:`, err);
+    }
   }
 
   if (revokedSessionId) {
