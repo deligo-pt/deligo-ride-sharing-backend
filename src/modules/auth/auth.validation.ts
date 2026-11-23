@@ -1,68 +1,94 @@
 import { z } from 'zod';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Auth Validation Schemas
-// ─────────────────────────────────────────────────────────────────────────────
+const passwordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
 
-const InitiateSignupSchema = z
+const emailIdentifier = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email()
+  .transform((email) => ({
+    email,
+    phone: null as string | null,
+    otpChannel: 'EMAIL' as const,
+  }));
+
+const phoneIdentifier = z
+  .string()
+  .trim()
+  .transform((val, ctx) => {
+    const cleaned = val.replace(/[\s\-()]/g, '');
+
+    if (!cleaned.startsWith('+')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Phone number must include country code (e.g., +351... or +880...)',
+      });
+      return z.NEVER;
+    }
+
+    const parsed = parsePhoneNumberFromString(cleaned);
+    if (!parsed || !parsed.isValid()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid phone number',
+      });
+      return z.NEVER;
+    }
+
+    return {
+      email: null as string | null,
+      phone: parsed.number,
+      otpChannel: 'PHONE' as const,
+    };
+  });
+
+const identifierSchema = z.union([emailIdentifier, phoneIdentifier], {
+  error: 'Must be a valid email address or phone number with country code',
+});
+
+export const InitiateSignupSchema = z
   .object({
     firstName: z.string().min(1, 'First name is required').trim(),
     lastName: z.string().min(1, 'Last name is required').trim(),
-    email: z
-      .string()
-      .email('Invalid email address')
-      .toLowerCase()
-      .trim()
-      .optional()
-      .or(z.literal('')),
-    phone: z
-      .string()
-      .min(6, 'Phone number must be at least 6 digits')
-      .trim()
-      .optional()
-      .or(z.literal('')),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-      .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-      .regex(/[0-9]/, 'Password must contain at least one number')
-      .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+    identifier: identifierSchema,
+    password: passwordSchema,
     preferredLanguage: z.enum(['EN', 'PT']).default('EN'),
     referralCode: z.string().trim().optional(),
-    otpChannel: z.enum(['EMAIL', 'PHONE']).default('EMAIL'),
   })
-  .superRefine((data, ctx) => {
-    const hasEmail = Boolean(data.email && data.email.length > 0);
-    const hasPhone = Boolean(data.phone && data.phone.length > 0);
-
-    if (!hasEmail && !hasPhone) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'At least one of email or phone must be provided',
-        path: ['email'],
-      });
-      return;
-    }
-
-    if (data.otpChannel === 'EMAIL' && !hasEmail) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Email is required when otpChannel is EMAIL',
-        path: ['email'],
-      });
-    }
-
-    if (data.otpChannel === 'PHONE' && !hasPhone) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Phone number is required when otpChannel is PHONE',
-        path: ['phone'],
-      });
-    }
-  });
+  .transform(({ identifier, ...rest }) => ({
+    ...rest,
+    email: identifier.email,
+    phone: identifier.phone,
+    otpChannel: identifier.otpChannel,
+  }));
 
 export type InitiateSignupInput = z.infer<typeof InitiateSignupSchema>;
+
+export const EmailOnlySignupSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email('Invalid email address'),
+    password: passwordSchema,
+    preferredLanguage: z.enum(['EN', 'PT']).default('EN'),
+    referralCode: z.string().trim().optional(),
+  })
+  .transform(({ email, ...rest }) => ({
+    ...rest,
+    firstName: null as string | null,
+    lastName: null as string | null,
+    email,
+    phone: null as string | null,
+    otpChannel: 'EMAIL' as const,
+  }));
+
+export type EmailOnlySignupInput = z.infer<typeof EmailOnlySignupSchema>;
 
 const ResendOtpSchema = z.object({
   signupSessionId: z.string().uuid('Invalid signupSessionId format'),
@@ -128,8 +154,6 @@ const AppleLoginSchema = z.object({
 
 export type AppleLoginInput = z.infer<typeof AppleLoginSchema>;
 
-// ─── Admin invitation flow (POST /auth/admin/create, /auth/admin/set-password) ──
-
 const CreateAdminSchema = z.object({
   firstName: z.string().min(1, 'First name is required').trim(),
   lastName: z.string().min(1, 'Last name is required').trim(),
@@ -141,19 +165,14 @@ export type CreateAdminInput = z.infer<typeof CreateAdminSchema>;
 
 const SetAdminPasswordSchema = z.object({
   token: z.string().min(1, 'Invitation token is required').trim(),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number')
-    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  password: passwordSchema,
 });
 
 export type SetAdminPasswordInput = z.infer<typeof SetAdminPasswordSchema>;
 
 export const AuthValidation = {
   initiateSignup: { body: InitiateSignupSchema },
+  emailOnlySignup: { body: EmailOnlySignupSchema },
   resendOtp: { body: ResendOtpSchema },
   verifyOtp: { body: VerifyOtpSchema },
   login: { body: LoginSchema },
@@ -162,6 +181,5 @@ export const AuthValidation = {
   appleLogin: { body: AppleLoginSchema },
   createAdmin: { body: CreateAdminSchema },
   setAdminPassword: { body: SetAdminPasswordSchema },
-  // Cookie-only clients send no JSON body, so an absent body is treated as {}.
   refreshToken: { body: z.preprocess((value) => value ?? {}, RefreshTokenSchema) },
 };

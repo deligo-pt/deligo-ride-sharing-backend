@@ -174,7 +174,6 @@ model FleetManagerProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Step 3: Business Details
   businessName      String?
   legalBusinessName String?
   licenseNumber     String? @unique
@@ -182,7 +181,6 @@ model FleetManagerProfile {
   businessEmail     String?
   businessPhone     String?
 
-  // Step 4: Location Details (coordinates set via map selection)
   latitude   Float?
   longitude  Float?
   street     String?
@@ -192,20 +190,22 @@ model FleetManagerProfile {
   postalCode String?
   country    String?
 
-  // Step 5: Bank Details
   accountHolderName String?
   iban              String?
 
-  // Step 6: Verification Documents (nullable for incremental upload)
-  photoUrl            String?
-  businessLicenseUrl  String?
-  idProofFrontUrl     String?
-  idProofBackUrl      String?
-  addressProofUrl     String?
-  activityDocumentUrl String?
-  ibanProofUrl        String?
+  photoUrl                  String?
+  businessLicenseUrl        String?
+  businessLicenseExpiresAt  DateTime?
+  idProofFrontUrl           String?
+  idProofBackUrl            String?
+  idProofExpiresAt          DateTime?
+  addressProofUrl           String?
+  addressProofExpiresAt     DateTime?
+  activityDocumentUrl       String?
+  activityDocumentExpiresAt DateTime?
+  ibanProofUrl              String?
+  ibanProofExpiresAt        DateTime?
 
-  // Step 7: Declaration, Signer & Legal Acceptance
   signerType         FleetSignerType?
   representativeName String?
   representativeId   String?
@@ -213,7 +213,6 @@ model FleetManagerProfile {
   termsAcceptedAt    DateTime?
   privacyAcceptedAt  DateTime?
 
-  // Onboarding & Review Tracking
   verificationStatus FleetVerificationStatus @default(PENDING_VERIFICATION)
   submittedAt        DateTime?
   reviewedAt         DateTime?
@@ -221,7 +220,6 @@ model FleetManagerProfile {
   rejectionReason    String?
   adminNote          String?
 
-  // Soft Delete & Timestamps
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -230,7 +228,6 @@ model FleetManagerProfile {
   @@index([verificationStatus])
   @@map("fleet_manager_profiles")
 }
-
 
 // PAYMENTS & WALLET => demo 
 

@@ -5,12 +5,8 @@ import { validateRequest } from '../../middlewares/validateRequest';
 import { AuthController } from './auth.controller';
 import { AuthValidation } from './auth.validation';
 
-// Mounted at: /api/v1/auth (see src/routes/index.ts)
-// Credential endpoints are rate limited per route; session endpoints (/refresh-token, /logout)
-// are shared by every role.
 const router: Router = Router();
 
-// ── Registration (customer) ───────────────────────────────────────────────────
 router.post(
   '/signup/initiate',
   authRateLimiter,
@@ -30,7 +26,6 @@ router.post(
   AuthController.verifyOtp,
 );
 
-// ── Login, token refresh & logout (customer + social + shared session endpoints) ──
 router.post('/login', authRateLimiter, validateRequest(AuthValidation.login), AuthController.login);
 router.post(
   '/google',
@@ -55,15 +50,12 @@ router.post(
   validateRequest(AuthValidation.refreshToken),
   AuthController.refreshToken,
 );
-
-// Bearer token is optional so cookie-only clients can still log out.
 router.post('/logout', optionalAuthenticate, AuthController.logout);
 
-// ── Driver ────────────────────────────────────────────────────────────────────
 router.post(
   '/driver/signup/initiate',
   authRateLimiter,
-  validateRequest(AuthValidation.initiateSignup),
+  validateRequest(AuthValidation.emailOnlySignup),
   AuthController.driverInitiateSignup,
 );
 router.post(
@@ -73,12 +65,11 @@ router.post(
   AuthController.driverLogin,
 );
 
-// ── Fleet manager (/fleet and the /fleet-manager alias) ───────────────────────
 for (const prefix of ['/fleet', '/fleet-manager']) {
   router.post(
     `${prefix}/signup/initiate`,
     authRateLimiter,
-    validateRequest(AuthValidation.initiateSignup),
+    validateRequest(AuthValidation.emailOnlySignup),
     AuthController.fleetInitiateSignup,
   );
   router.post(
@@ -89,15 +80,12 @@ for (const prefix of ['/fleet', '/fleet-manager']) {
   );
 }
 
-// ── Admin ─────────────────────────────────────────────────────────────────────
 router.post(
   '/admin/login',
   authRateLimiter,
   validateRequest(AuthValidation.login),
   AuthController.adminLogin,
 );
-
-// ADMIN / SUPER_ADMIN invites a new administrator
 router.post(
   '/admin/create',
   authRateLimiter,
@@ -106,8 +94,6 @@ router.post(
   validateRequest(AuthValidation.createAdmin),
   AuthController.createAdmin,
 );
-
-// Public: set the password from the one-time invitation link
 router.post(
   '/admin/set-password',
   authRateLimiter,
