@@ -10,8 +10,7 @@ export interface ApiErrorResponse {
   statusCode: number;
   message: string;
   code: string;
-  errorSources?: ErrorSource[];
-  details?: unknown;
+  errorSources: ErrorSource[];
   stack?: string;
 }
 
@@ -22,7 +21,6 @@ export interface PaginationQuery {
 
 export interface ErrorResponseOptions {
   errorSources?: ErrorSource[];
-  details?: unknown;
   stack?: string;
 }
 
@@ -32,14 +30,13 @@ export function errorResponse(
   code: string,
   options: ErrorResponseOptions = {},
 ): ApiErrorResponse {
-  const { errorSources, details, stack } = options;
+  const { errorSources, stack } = options;
   return {
     success: false,
     statusCode,
     message,
     code,
-    ...(errorSources !== undefined && { errorSources }),
-    ...(details !== undefined && { details }),
+    errorSources: errorSources && errorSources.length > 0 ? errorSources : [{ path: '', message }],
     ...(stack !== undefined && { stack }),
   };
 }

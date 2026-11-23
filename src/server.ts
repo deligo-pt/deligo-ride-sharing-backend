@@ -27,11 +27,8 @@ async function bootstrap(): Promise<void> {
   // Attach Socket.io to the same HTTP server (same port as REST)
   const io = initSocketServer(server);
 
-  // Give NotificationEngine access to the io instance so it can push
-  // real-time notifications to user rooms from anywhere in the codebase.
   NotificationEngine.setIo(io);
 
-  // ── Optional: Embedded Worker (if not running dedicated worker container) ──
   let activeWorker: Worker | null = null;
   if (config.worker.embedded) {
     activeWorker = rideWorker;

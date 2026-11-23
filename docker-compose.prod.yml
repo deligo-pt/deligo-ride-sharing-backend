@@ -1,5 +1,63 @@
 version: '3.8'
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Production stack. Every variable the app validates in production is passed
+# through explicitly, so a container can never silently fall back to a dev default.
+#   ${VAR:?msg}   REQUIRED — `docker compose` aborts if it is unset/empty.
+#   ${VAR:-x}     OPTIONAL — falls back to the same default src/config/env.ts uses.
+# The API and worker both load src/config/env.ts, so both get the same block.
+# Run database migrations separately (`npx prisma migrate deploy`) — not done here.
+# ─────────────────────────────────────────────────────────────────────────────
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+
+  # JWT / sessions
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required in production}
+  JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+  JWT_REFRESH_EXPIRES_IN_DEFAULT: ${JWT_REFRESH_EXPIRES_IN_DEFAULT:-1d}
+  JWT_REFRESH_EXPIRES_IN_REMEMBER: ${JWT_REFRESH_EXPIRES_IN_REMEMBER:-30d}
+  SAMESITE_COOKIE: ${SAMESITE_COOKIE:-lax}
+
+  # Storage
+  CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?CLOUDINARY_CLOUD_NAME is required}
+  CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?CLOUDINARY_API_KEY is required}
+  CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?CLOUDINARY_API_SECRET is required}
+
+  # Email (SMTP and/or Resend)
+  SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Deligo Ride}
+  EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@deligo.com}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+
+  # Maps, SMS, push
+  MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+  BULKGATE_APPLICATION_ID: ${BULKGATE_APPLICATION_ID:-}
+  BULKGATE_APPLICATION_TOKEN: ${BULKGATE_APPLICATION_TOKEN:-}
+  FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-./firebase-service-account.json}
+
+  # Social login
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-}
+  GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
+  FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+  FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+  META_APP_ID: ${META_APP_ID:-}
+  META_APP_SECRET: ${META_APP_SECRET:-}
+  APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:?APPLE_CLIENT_ID is required in production}
+  APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:?APPLE_BUNDLE_ID is required in production}
+
+  # Frontend / CORS
+  ADMIN_FRONTEND_URL: ${ADMIN_FRONTEND_URL:?ADMIN_FRONTEND_URL is required in production}
+  CORS_ORIGIN: ${CORS_ORIGIN:-}  # empty = no browser origins allowed (fail closed)
+
 services:
   api:
     build:
@@ -10,20 +68,10 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     environment:
-      NODE_ENV: production
+      <<: *app-env
       PORT: 3000
-      ENABLE_WORKER: "false"
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-      CORS_ORIGIN: ${CORS_ORIGIN}
-      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-./firebase-service-account.json}
-      BULKGATE_APPLICATION_ID: ${BULKGATE_APPLICATION_ID:-}
-      BULKGATE_APPLICATION_TOKEN: ${BULKGATE_APPLICATION_TOKEN:-}
+      # A dedicated worker container below runs the queue; keep it out of the API process.
+      ENABLE_WORKER: ${ENABLE_WORKER:-false}
     command: ["node", "dist/server.js"]
 
   worker:
@@ -33,13 +81,5 @@ services:
     container_name: deligo-worker-prod
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      <<: *app-env
     command: ["node", "dist/worker.js"]
-

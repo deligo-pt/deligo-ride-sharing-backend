@@ -156,7 +156,6 @@ EMAIL_FROM_ADDRESS="noreply@deligo.com"
 
 # Google OAuth
 GOOGLE_CLIENT_ID="your_google_client_id.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="your_google_client_secret"
 GOOGLE_ANDROID_CLIENT_ID="your_android_client_id_optional"
 GOOGLE_IOS_CLIENT_ID="your_ios_client_id_optional"
 ```

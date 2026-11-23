@@ -11,22 +11,17 @@ import apiRouter from './routes';
 import { sendResponse } from './utils/sendResponse';
 import { generalRateLimiter } from './middlewares/rateLimiter';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Express Application Factory
-// ─────────────────────────────────────────────────────────────────────────────
-
 export function createApp(): Application {
   const app = express();
 
-  // ── Security Headers (helmet) ──────────────────────────────────────────────
+  // ── Security Headers (helmet)
   app.use(cooikieParser());
   app.use(helmet());
-  // ── CORS ──────────────────────────────────────────────────────────────────
+  // ── CORS
   const allowedOrigins = config.cors.allowedOrigins;
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, Postman)
         if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {
@@ -39,17 +34,17 @@ export function createApp(): Application {
     }),
   );
 
-  // ── Body Parsing ──────────────────────────────────────────────────────────
+  // ── Body Parsing
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // ── Response Compression ──────────────────────────────────────────────────
+  // ── Response Compression
   app.use(compression());
 
   // ── Trust Proxy (required when behind nginx / load balancer) ──────────────
   app.set('trust proxy', 1);
 
-  // ── Health Check ──────────────────────────────────────────────────────────
+  // ── Health Check
   app.get('/health', (_req: Request, res: Response) => {
     sendResponse(res, {
       statusCode: 200,
@@ -64,13 +59,12 @@ export function createApp(): Application {
     });
   });
 
-  // ── API Routes ────────────────────────────────────────────────────────────
+  // ── API Routes
   const API_PREFIX = '/api/v1';
 
   // General per-IP rate limit for the whole API (health checks live outside this prefix)
   app.use(API_PREFIX, generalRateLimiter);
 
-  // ── Domain Routers (registry: src/routes/index.ts) ────────────────────────
   app.use(API_PREFIX, apiRouter);
 
   // API root — health / welcome
@@ -83,12 +77,12 @@ export function createApp(): Application {
     });
   });
 
-  // ── 404 Handler ───────────────────────────────────────────────────────────
+  // ── 404 Handler
   app.use((_req: Request, _res: Response, next: NextFunction) => {
     next(new NotFoundError('Route'));
   });
 
-  // ── Global Error Handler ──────────────────────────────────────────────────
+  // ── Global Error Handler
   // Must be the LAST middleware registered
   app.use(errorHandler);
 

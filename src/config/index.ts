@@ -1,21 +1,7 @@
 import { env } from './env';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Unified Application Configuration
-//
-// Consolidates env variables into a structured, read-only configuration object.
-// This decouples business logic from env var naming schemes and handles
-// transformations (like parsing comma-separated origins) once at boot.
-// ─────────────────────────────────────────────────────────────────────────────
-
 const DEV_FALLBACK_ORIGINS = ['http://localhost:3000', 'http://localhost:5173'];
 
-/**
- * Origins allowed by CORS (REST and Socket.IO).
- *   1. CORS_ORIGIN (comma-separated), else legacy ALLOWED_ORIGINS
- *   2. Otherwise: local dev origins in development/test, and NO browser origins
- *      in production (fail closed — non-browser clients are unaffected).
- */
 function resolveAllowedOrigins(): string[] {
   const raw = env.CORS_ORIGIN ?? env.ALLOWED_ORIGINS ?? '';
   const configured = raw
@@ -44,7 +30,6 @@ export const config = {
   },
 
   worker: {
-    /** Run the BullMQ ride-scheduling worker inside the API process. */
     embedded: env.ENABLE_WORKER,
   },
 
@@ -54,7 +39,6 @@ export const config = {
     accessSecret: env.JWT_ACCESS_SECRET || env.JWT_SECRET,
     accessExpiresIn: env.JWT_ACCESS_EXPIRES_IN,
     refreshSecret: env.JWT_REFRESH_SECRET,
-    refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
     refreshExpiresInDefault: env.JWT_REFRESH_EXPIRES_IN_DEFAULT,
     refreshExpiresInRemember: env.JWT_REFRESH_EXPIRES_IN_REMEMBER,
   },
@@ -110,7 +94,6 @@ export const config = {
 
   google: {
     clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
     androidClientId: env.GOOGLE_ANDROID_CLIENT_ID,
     iosClientId: env.GOOGLE_IOS_CLIENT_ID,
     audiences: [

@@ -99,7 +99,7 @@ export async function createAdmin(
   await redis.set(redisKey, payload, 'EX', INVITE_TOKEN_TTL_SECONDS);
 
   // 6. Build one-time invite URL and send email
-  const adminUrl = config.frontend?.adminUrl || 'http://localhost:3000/admin';
+  const adminUrl = config.frontend.adminUrl;
   const inviteUrl = `${adminUrl.replace(/\/+$/, '')}/set-password?token=${rawToken}`;
 
   try {

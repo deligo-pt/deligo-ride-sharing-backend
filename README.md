@@ -68,7 +68,9 @@ To ensure seamless frontend and mobile integration, all API endpoints must adher
   "errorSources": [{ "path": "body.licensePlate", "message": "Invalid license plate format." }]
 }
 ```
-`details` carries extra structured info and `stack` appears only when `NODE_ENV=development`.
+`errorSources` is always an array (non-field errors get one entry with an empty `path`); `stack` appears only when `NODE_ENV=development`.
+
+Server errors (5xx) are also persisted, redacted and non-blocking, to the `error_logs` table (`ErrorLog` model). Passwords, tokens, OTPs, secrets, `authorization`/`cookie` values and sensitive query-string params are replaced with `[REDACTED]` first (`src/utils/redact.ts`). Which statuses are stored is controlled by `shouldPersistError()` in `src/utils/errorLogger.ts`.
 
 ---
 

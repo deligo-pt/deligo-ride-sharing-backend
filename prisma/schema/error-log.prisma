@@ -1,0 +1,20 @@
+model ErrorLog {
+  id           String   @id @default(uuid())
+  statusCode   Int
+  code         String?
+  message      String
+  path         String
+  method       String
+  userId       String?
+  ip           String?
+  userAgent    String?
+  requestBody  Json?
+  requestQuery Json?
+  errorSources Json?
+  stack        String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([statusCode, createdAt])
+  @@index([createdAt])
+  @@map("error_logs")
+}
