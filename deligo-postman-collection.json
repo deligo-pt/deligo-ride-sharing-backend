@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e1d2c3b4-5678-490a-bcde-deligo000001",
     "name": "DeliGo Ride-Sharing API",
-    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nAll protected endpoints (REST and Socket.IO) require a JWT: send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, `Bearer {{fleetAccessToken}}` (fleet manager) or `Bearer {{adminAccessToken}}`. For Socket.IO pass the same token as `auth.token` in the handshake (or the `Authorization` header).\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n   - The legacy `x-mock-user-id` / `x-mock-role` headers are no longer supported.\n\n### Routes & roles\nThere is no `/admin` URL prefix. Every module is mounted once (`/users`, `/rides`, `/support`, ...) and each request is labelled with its role in the request description. List/detail endpoints such as `GET /rides` and `GET /support/tickets` are role-scoped: customers and drivers only see their own data, admins see everything.\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken`, `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
+    "description": "Complete, production-grade Postman collection for DeliGo Ride-Sharing platform backend.\n\n### Authentication & Authorization\nAll protected endpoints (REST and Socket.IO) require a JWT: send `Authorization: Bearer {{accessToken}}`, `Bearer {{driverAccessToken}}`, `Bearer {{fleetAccessToken}}` (fleet manager) or `Bearer {{adminAccessToken}}`. For Socket.IO pass the same token as `auth.token` in the handshake (or the `Authorization` header).\n   - Customer/Driver/Admin login and OTP verification endpoints automatically extract and populate these collection variables.\n   - The legacy `x-mock-user-id` / `x-mock-role` headers are no longer supported.\n\n### Refresh tokens (platform-aware)\nThe refresh token is always set as an httpOnly `refreshToken` cookie (path `/api/v1/auth`).\n- **Web / portals (default, admin + fleet):** the token is delivered ONLY as the cookie; JSON has `tokens: {accessToken, expiresIn}`. Postman's cookie jar resends it automatically.\n- **Mobile apps:** send `x-client-platform: mobile` (or `x-platform: android|ios`, or `\"includeRefreshToken\": true` in the body). The JSON then also contains `tokens.refreshToken`, captured into `{{refreshToken}}`, for storage in SecureStore / Keychain.\n- `POST /auth/refresh-token` and `POST /auth/logout` accept the refresh token from the cookie OR the JSON body.\n\n### Routes & roles\nThere is no `/admin` URL prefix. Every module is mounted once (`/users`, `/rides`, `/support`, ...) and each request is labelled with its role in the request description. List/detail endpoints such as `GET /rides` and `GET /support/tickets` are role-scoped: customers and drivers only see their own data, admins see everything.\n\n### Automatic Variable Extraction\nAll authentication and creation endpoints automatically capture IDs and tokens (such as `accessToken`, `driverAccessToken`, `adminAccessToken`, `refreshToken` (mobile only), `signupSessionId`, `adminInviteToken`, `activeRideId`, `activeVehicleId`, `activeTicketId`, `activePromoId`, `activeAlertId`) and populate Collection Variables for chained testing workflows.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,6 +19,12 @@
       "description": "JWT Access Token for Customer (auto-populated on login/OTP verify)"
     },
     {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string",
+      "description": "Refresh token captured from MOBILE auth responses (x-client-platform: mobile)"
+    },
+    {
       "key": "driverAccessToken",
       "value": "",
       "type": "string",
@@ -29,12 +35,6 @@
       "value": "",
       "type": "string",
       "description": "JWT Access Token for Admin (auto-populated on admin login)"
-    },
-    {
-      "key": "refreshToken",
-      "value": "",
-      "type": "string",
-      "description": "JWT Refresh Token (auto-populated on login/OTP verify)"
     },
     {
       "key": "signupSessionId",
@@ -247,7 +247,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"email\": \"customer@example.com\",\n  \"phone\": \"+8801700000001\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\",\n  \"otpChannel\": \"EMAIL\"\n}"
+                  "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\",\n  \"identifier\": \"customer@example.com\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/signup/initiate",
@@ -260,7 +260,7 @@
                     "initiate"
                   ]
                 },
-                "description": "Initiates customer signup. Validates credentials, creates a temporary signup session, and sends a 6-digit OTP code."
+                "description": "Starts customer registration. `identifier` is EITHER an email address OR a phone number with country code in international format (e.g. `+8801712345678`, validated with libphonenumber). The OTP channel is derived from it: email -> EMAIL, phone -> PHONE. The legacy `email` / `phone` / `otpChannel` fields are no longer accepted.\n\n(Public. Path: /auth/signup/initiate)"
               },
               "response": []
             },
@@ -282,6 +282,7 @@
                       "    }",
                       "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
                       "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
@@ -300,6 +301,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -317,7 +324,7 @@
                     "verify-otp"
                   ]
                 },
-                "description": "Verifies the 6-digit OTP from signup initiation. Persists the User, CustomerProfile, and Wallet in an atomic transaction, returns JWT access token, and sets the refreshToken HTTP-only cookie."
+                "description": "Verifies the 6-digit OTP from signup initiation. Persists the User, CustomerProfile, and Wallet in an atomic transaction, returns JWT access token, and sets the refreshToken HTTP-only cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             },
@@ -369,6 +376,7 @@
                       "    }",
                       "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
                       "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
@@ -387,6 +395,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -403,7 +417,7 @@
                     "login"
                   ]
                 },
-                "description": "Authenticates a Customer with email or phone number and password. Issues access token and sets refresh token cookie."
+                "description": "Authenticates a Customer with email or phone number and password. Issues access token and sets refresh token cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             }
@@ -446,7 +460,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Driver\",\n  \"email\": \"driver@example.com\",\n  \"phone\": \"+8801800000001\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\",\n  \"otpChannel\": \"EMAIL\"\n}"
+                  "raw": "{\n  \"email\": \"driver@example.com\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/driver/signup/initiate",
@@ -460,7 +474,7 @@
                     "initiate"
                   ]
                 },
-                "description": "Initiates driver registration. Creates signup session tied specifically to DRIVER role. Use \"Verify Customer Signup OTP\" endpoint to complete OTP verification."
+                "description": "Starts driver registration. Email-only: only `email`, `password`, optional `preferredLanguage` and optional `referralCode` are accepted; the OTP is always sent by EMAIL. Name and phone are collected later during onboarding (`firstName`/`lastName`/`phone`/`otpChannel` are ignored).\n\n(Public. Path: /auth/driver/signup/initiate)"
               },
               "response": []
             },
@@ -482,6 +496,7 @@
                       "    }",
                       "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
                       "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockDriverId\", json.data.user.id);",
@@ -500,6 +515,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -517,7 +538,7 @@
                     "login"
                   ]
                 },
-                "description": "Authenticates a Driver. Enforces role verification (rejects non-drivers with 403 Forbidden). Captures driverAccessToken and mockDriverId."
+                "description": "Authenticates a Driver. Enforces role verification (rejects non-drivers with 403 Forbidden). Captures driverAccessToken and mockDriverId.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             }
@@ -560,7 +581,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"firstName\": \"Carlos\",\n  \"lastName\": \"Fleet\",\n  \"email\": \"fleet@example.com\",\n  \"phone\": \"+8801900000001\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\",\n  \"otpChannel\": \"EMAIL\"\n}"
+                  "raw": "{\n  \"email\": \"fleet@example.com\",\n  \"password\": \"Password123!\",\n  \"preferredLanguage\": \"EN\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/fleet/signup/initiate",
@@ -574,7 +595,7 @@
                     "initiate"
                   ]
                 },
-                "description": "Initiates Fleet Manager registration. Creates signup session tied specifically to FLEET_MANAGER role. Use \"Verify Customer Signup OTP\" endpoint to complete OTP verification."
+                "description": "Starts fleet manager registration. Email-only: only `email`, `password`, optional `preferredLanguage` and optional `referralCode` are accepted; the OTP is always sent by EMAIL. Name and phone are collected later during onboarding (`firstName`/`lastName`/`phone`/`otpChannel` are ignored).\n\n(Public. Path: /auth/fleet/signup/initiate)"
               },
               "response": []
             },
@@ -593,9 +614,6 @@
                       "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
                       "        pm.collectionVariables.set(\"fleetAccessToken\", json.data.tokens.accessToken);",
                       "        console.log(\"Captured Fleet Manager accessToken\");",
-                      "    }",
-                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
-                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockFleetId\", json.data.user.id);",
@@ -631,7 +649,7 @@
                     "login"
                   ]
                 },
-                "description": "Authenticates a Fleet Manager. Enforces role verification (rejects non-fleet managers with 403 Forbidden). Captures fleetAccessToken and mockFleetId."
+                "description": "Authenticates a Fleet Manager. Enforces role verification (rejects non-fleet managers with 403 Forbidden). Captures fleetAccessToken and mockFleetId.\n\nPlatform: WEB portal. No `x-client-platform` header: the refresh token is delivered ONLY as the httpOnly `refreshToken` cookie and is omitted from the JSON (`tokens: {accessToken, expiresIn}`)."
               },
               "response": []
             }
@@ -656,9 +674,6 @@
                       "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
                       "        pm.collectionVariables.set(\"adminAccessToken\", json.data.tokens.accessToken);",
                       "        console.log(\"Captured Admin accessToken\");",
-                      "    }",
-                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
-                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockAdminId\", json.data.user.id);",
@@ -694,7 +709,7 @@
                     "login"
                   ]
                 },
-                "description": "Authenticates an administrator. Rejects non-admin accounts. Stores adminAccessToken and mockAdminId in collection variables."
+                "description": "Authenticates an administrator. Rejects non-admin accounts. Stores adminAccessToken and mockAdminId in collection variables.\n\nPlatform: WEB portal. No `x-client-platform` header: the refresh token is delivered ONLY as the httpOnly `refreshToken` cookie and is omitted from the JSON (`tokens: {accessToken, expiresIn}`)."
               },
               "response": []
             },
@@ -816,6 +831,7 @@
                       "    }",
                       "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
                       "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
@@ -833,6 +849,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -849,7 +871,7 @@
                     "google"
                   ]
                 },
-                "description": "Verifies a Google ID token using google-auth-library with pre-account takeover protection and automatic profile creation."
+                "description": "Verifies a Google ID token using google-auth-library with pre-account takeover protection and automatic profile creation.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             },
@@ -867,6 +889,7 @@
                       "    }",
                       "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
                       "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
@@ -884,6 +907,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -900,7 +929,7 @@
                     "facebook"
                   ]
                 },
-                "description": "Verifies a Facebook user access token with Graph API, inspects app_id and validity, and issues session tokens."
+                "description": "Verifies a Facebook user access token with Graph API, inspects app_id and validity, and issues session tokens.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             },
@@ -918,6 +947,7 @@
                       "    }",
                       "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
                       "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
                       "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
@@ -935,6 +965,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -951,7 +987,7 @@
                     "apple"
                   ]
                 },
-                "description": "Verifies an Apple Sign-In identity token (supports demo mode in development when credentials are placeholders)."
+                "description": "Verifies an Apple Sign-In identity token (supports demo mode in development when credentials are placeholders).\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             }
@@ -970,9 +1006,13 @@
                     "exec": [
                       "if (pm.response.code === 200) {",
                       "    var json = pm.response.json();",
-                      "    if (json.data && json.data.accessToken) {",
-                      "        pm.collectionVariables.set(\"accessToken\", json.data.accessToken);",
+                      "    if (json.data && json.data.tokens.accessToken) {",
+                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
                       "        console.log(\"Refreshed Customer accessToken\");",
+                      "    }",
+                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
+                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        console.log(\"Captured mobile refreshToken\");",
                       "    }",
                       "}"
                     ],
@@ -987,6 +1027,12 @@
                     "key": "Content-Type",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
@@ -1003,7 +1049,7 @@
                     "refresh-token"
                   ]
                 },
-                "description": "Performs token rotation using the refreshToken cookie or request body. Enforces token-family reuse detection."
+                "description": "Rotates the session using the httpOnly `refreshToken` cookie that login / verify-otp / social login set (Postman's cookie jar sends it automatically). The refresh token is NO LONGER returned in the JSON body. A legacy `refreshToken` body field is still read by the server if sent. Returns `data.tokens.{accessToken, expiresIn}`; the rotated refresh token is set as a new cookie. Enforces token-family reuse detection.\n\n(Public. Path: /auth/refresh-token)\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             },
@@ -1021,11 +1067,17 @@
                     "key": "Authorization",
                     "value": "Bearer {{accessToken}}",
                     "type": "text"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "type": "text",
+                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{}"
+                  "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/logout",
@@ -1037,7 +1089,7 @@
                     "logout"
                   ]
                 },
-                "description": "Revokes the active session, blacklists the JTI in Redis, and clears the refreshToken HTTP-only cookie."
+                "description": "Revokes the active session, blacklists the JTI in Redis, and clears the refreshToken HTTP-only cookie.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only."
               },
               "response": []
             }

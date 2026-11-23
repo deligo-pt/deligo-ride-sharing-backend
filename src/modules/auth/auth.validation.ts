@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { normalizePhoneE164 } from '../../utils/phone';
 
 const passwordSchema = z
   .string()
@@ -24,28 +24,23 @@ const phoneIdentifier = z
   .string()
   .trim()
   .transform((val, ctx) => {
-    const cleaned = val.replace(/[\s\-()]/g, '');
-
-    if (!cleaned.startsWith('+')) {
+    if (!val.replace(/[\s\-()]/g, '').startsWith('+')) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         message: 'Phone number must include country code (e.g., +351... or +880...)',
       });
       return z.NEVER;
     }
 
-    const parsed = parsePhoneNumberFromString(cleaned);
-    if (!parsed || !parsed.isValid()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Invalid phone number',
-      });
+    const phone = normalizePhoneE164(val);
+    if (!phone) {
+      ctx.addIssue({ code: 'custom', message: 'Invalid phone number' });
       return z.NEVER;
     }
 
     return {
       email: null as string | null,
-      phone: parsed.number,
+      phone,
       otpChannel: 'PHONE' as const,
     };
   });
@@ -98,6 +93,7 @@ const ResendOtpSchema = z.object({
 export type ResendOtpInput = z.infer<typeof ResendOtpSchema>;
 
 const VerifyOtpSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
   signupSessionId: z.string().uuid('Invalid signupSessionId format'),
   otp: z
     .string()
@@ -108,6 +104,7 @@ const VerifyOtpSchema = z.object({
 export type VerifyOtpInput = z.infer<typeof VerifyOtpSchema>;
 
 const LoginSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
   identifier: z.string().min(1, 'Email or phone number is required').trim(),
   password: z.string().min(1, 'Password is required'),
   rememberMe: z.boolean().optional().default(false),
@@ -116,12 +113,14 @@ const LoginSchema = z.object({
 export type LoginInput = z.infer<typeof LoginSchema>;
 
 const RefreshTokenSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
   refreshToken: z.string().optional(),
 });
 
 export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
 
 const GoogleLoginSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
   idToken: z.string().min(1, 'Google ID token is required'),
   referralCode: z.string().trim().optional(),
   preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
@@ -131,6 +130,7 @@ const GoogleLoginSchema = z.object({
 export type GoogleLoginInput = z.infer<typeof GoogleLoginSchema>;
 
 const FacebookLoginSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
   accessToken: z.string().min(1, 'Facebook access token is required'),
   referralCode: z.string().trim().optional(),
   preferredLanguage: z.enum(['EN', 'PT']).optional().default('EN'),
@@ -140,6 +140,7 @@ const FacebookLoginSchema = z.object({
 export type FacebookLoginInput = z.infer<typeof FacebookLoginSchema>;
 
 const AppleLoginSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
   idToken: z.string().min(1, 'Apple ID token is required'),
   user: z
     .object({

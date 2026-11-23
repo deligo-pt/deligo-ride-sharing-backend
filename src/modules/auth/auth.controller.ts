@@ -1,4 +1,4 @@
-import { AuthService, AuthTokens } from './auth.service';
+import { AuthService } from './auth.service';
 import {
   AppleLoginInput,
   CreateAdminInput,
@@ -17,16 +17,10 @@ import {
   getClientInfo,
   REFRESH_COOKIE_NAME,
   setRefreshTokenCookie,
+  tokensForClient,
 } from './auth.util';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-
-function stripRefreshToken(tokens: AuthTokens) {
-  return {
-    accessToken: tokens.accessToken,
-    expiresIn: tokens.expiresIn,
-  };
-}
 
 const initiateSignup = catchAsync(async (req, res) => {
   const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'CUSTOMER');
@@ -61,7 +55,7 @@ const verifyOtp = catchAsync(async (req, res) => {
     message: 'Account verified and created successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -78,7 +72,7 @@ const login = catchAsync(async (req, res) => {
     message: 'Logged in successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -95,7 +89,7 @@ const googleLogin = catchAsync(async (req, res) => {
     message: 'Logged in with Google successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -112,7 +106,7 @@ const facebookLogin = catchAsync(async (req, res) => {
     message: 'Logged in with Facebook successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -129,7 +123,7 @@ const appleLogin = catchAsync(async (req, res) => {
     message: 'Logged in with Apple successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -148,7 +142,7 @@ const refreshToken = catchAsync(async (req, res) => {
     success: true,
     message: 'Token refreshed successfully',
     data: {
-      tokens: stripRefreshToken(tokens),
+      tokens: tokensForClient(req, tokens),
     },
   });
 });
@@ -196,7 +190,7 @@ const driverLogin = catchAsync(async (req, res) => {
     message: 'Logged in successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -227,7 +221,7 @@ const fleetLogin = catchAsync(async (req, res) => {
     message: 'Logged in successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });
@@ -244,7 +238,7 @@ const adminLogin = catchAsync(async (req, res) => {
     message: 'Logged in successfully',
     data: {
       user: result.user,
-      tokens: stripRefreshToken(result.tokens),
+      tokens: tokensForClient(req, result.tokens),
     },
   });
 });

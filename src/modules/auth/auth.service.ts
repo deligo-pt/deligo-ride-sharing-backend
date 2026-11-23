@@ -9,6 +9,7 @@ import { sendEmail } from '../../utils/email.service';
 import { sendBulkGateSms } from '../../utils/bulkgate';
 import { disconnectSessionSockets, disconnectUserSockets } from '../../sockets/socket.control';
 import { revokeSessionAccessTokens, revokeUserAccessTokens } from '../../utils/revocation';
+import { normalizePhoneE164 } from '../../utils/phone';
 import { OAuth2Client } from 'google-auth-library';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import {
@@ -37,8 +38,8 @@ type SignupInput = InitiateSignupInput | EmailOnlySignupInput;
 
 interface SignupRedisSession {
   payload: {
-    firstName: string;
-    lastName: string;
+    firstName: string | null;
+    lastName: string | null;
     email: string | null;
     phone: string | null;
     identifier: string | null;
@@ -276,7 +277,7 @@ async function dispatchOtp(
   otp: string,
   targetEmail: string | null,
   targetPhone: string | null,
-  firstName: string,
+  firstName: string | null,
   language: 'EN' | 'PT',
 ): Promise<void> {
   const expiryMinutes = Math.max(1, Math.round(config.otp.expiresInSeconds / 60));
@@ -415,8 +416,8 @@ async function initiateSignup(
 
   const sessionData: SignupRedisSession = {
     payload: {
-      firstName: input.firstName as string,
-      lastName: input.lastName as string,
+      firstName: input.firstName,
+      lastName: input.lastName,
       email: normalizedEmail,
       phone: normalizedPhone,
       identifier,
@@ -443,7 +444,7 @@ async function initiateSignup(
     rawOtp,
     normalizedEmail,
     normalizedPhone,
-    input.firstName as string,
+    input.firstName,
     input.preferredLanguage,
   );
 
@@ -665,10 +666,16 @@ async function login(
   allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
   const identifier = input.identifier.trim();
+  // Phones are stored in E.164; "+880 1712-345678" must match "+8801712345678".
+  const normalizedPhone = identifier.includes('@') ? null : normalizePhoneE164(identifier);
 
   const user = await prisma.user.findFirst({
     where: {
-      OR: [{ email: identifier.toLowerCase() }, { phone: identifier }],
+      OR: [
+        { email: identifier.toLowerCase() },
+        { phone: identifier },
+        ...(normalizedPhone && normalizedPhone !== identifier ? [{ phone: normalizedPhone }] : []),
+      ],
       isDeleted: false,
     },
     include: {
