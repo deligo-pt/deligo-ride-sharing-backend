@@ -17,13 +17,7 @@ router.post(
 );
 router.get('/emergency-contacts', authenticate, SupportController.getEmergencyContacts);
 
-// ── SOS ───────────────────────────────────────────────────────────────────────
-router.post(
-  '/sos',
-  authenticate,
-  validateRequest(SupportValidation.triggerSos),
-  SupportController.triggerSos,
-);
+// SOS lives in the safety module: POST /api/v1/safety/sos
 
 // ── Ticketing ─────────────────────────────────────────────────────────────────
 router.post(

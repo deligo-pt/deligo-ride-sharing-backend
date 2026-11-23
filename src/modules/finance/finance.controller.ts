@@ -1,10 +1,10 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminFinanceService } from './admin.finance.service';
+import { FinanceService } from './finance.service';
 
 /** GET /api/v1/admin/finances/ledger */
 const getLedger = catchAsync(async (req, res) => {
-  const ledger = await AdminFinanceService.getFinancialLedger(req.query);
+  const ledger = await FinanceService.getFinancialLedger(req.query);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -13,6 +13,6 @@ const getLedger = catchAsync(async (req, res) => {
   });
 });
 
-export const AdminFinanceController = {
+export const FinanceController = {
   getLedger,
 };

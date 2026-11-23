@@ -3,6 +3,7 @@ import { RecurringService } from './recurring.service';
 import {
   CancelRideDto,
   EstimateFareDto,
+  ListRidesQuery,
   RecurringProfileDto,
   RequestRideDto,
   SearchRideDto,
@@ -17,6 +18,41 @@ import { catchAsync } from '../../utils/catchAsync';
 // Role checks live in ride.route.ts (authorize); validation in ride.validation.ts;
 // domain errors are thrown by the services as AppErrors.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/rides — Role: CUSTOMER | DRIVER | ADMIN.
+ * Paginated and scoped by role (customer: own rides, driver: assigned rides,
+ * admin: all, with optional ?status= and ?userId=).
+ */
+const listRides = catchAsync(async (req, res) => {
+  const { rides, meta } = await RideService.listRides(
+    { id: req.user!.id, role: req.user!.role },
+    req.query as unknown as ListRidesQuery,
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Rides retrieved successfully',
+    meta,
+    data: { rides },
+  });
+});
+
+/** GET /api/v1/rides/:id — Role: CUSTOMER | DRIVER | ADMIN. 404 when outside the caller's scope. */
+const getRide = catchAsync(async (req, res) => {
+  const ride = await RideService.getRide(
+    { id: req.user!.id, role: req.user!.role },
+    String(req.params.id),
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Ride retrieved successfully',
+    data: { ride },
+  });
+});
 
 /** PATCH /api/v1/rides/location — Role: DRIVER. Updates live position (Redis geo + DB). */
 const updateLocation = catchAsync(async (req, res) => {
@@ -119,7 +155,7 @@ const updateRideStatus = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/rides/:id/cancel — Role: CUSTOMER. Cancels and releases the driver. */
+/** POST /api/v1/rides/:id/cancel — Role: CUSTOMER | DRIVER (the ride's own participants). Cancels and releases the driver. */
 const cancelRide = catchAsync(async (req, res) => {
   const ride = await RideService.cancelRide(
     req.user!.id,
@@ -213,6 +249,8 @@ const triggerRecurringEvaluate = catchAsync(async (_req, res) => {
 });
 
 export const RideController = {
+  listRides,
+  getRide,
   updateLocation,
   searchRide,
   estimateFare,

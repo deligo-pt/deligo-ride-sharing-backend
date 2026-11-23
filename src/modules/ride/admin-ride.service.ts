@@ -1,7 +1,7 @@
 import prisma from '../../config/db';
 import { ConflictError, NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
-import { ListRidesQuery, CancelRideInput } from './admin.ride.validation';
+import { ListRidesQuery, CancelRideInput } from './admin-ride.validation';
 import { NotificationService } from '../notification/notification.service';
 
 const listRides = async (query: ListRidesQuery) => {

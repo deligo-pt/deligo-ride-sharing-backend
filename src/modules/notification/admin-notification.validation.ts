@@ -7,7 +7,7 @@ const BroadcastNotificationSchema = z.object({
 });
 export type BroadcastNotificationInput = z.infer<typeof BroadcastNotificationSchema>;
 
-// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
 
 export const AdminNotificationValidation = {
   broadcast: { body: BroadcastNotificationSchema },

@@ -1,7 +1,7 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminService } from './admin.service';
-import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin.validation';
+import { AdminUserService } from './admin-user.service';
+import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin-user.validation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Controller  —  PRD 5.x
@@ -10,7 +10,7 @@ import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin.v
 
 /** GET /api/v1/admin/kyc/pending */
 const getPendingKyc = catchAsync(async (_req, res) => {
-  const profiles = await AdminService.getPendingKycProfiles();
+  const profiles = await AdminUserService.getPendingKycProfiles();
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -21,7 +21,7 @@ const getPendingKyc = catchAsync(async (_req, res) => {
 
 /** PATCH /api/v1/admin/kyc/:driverProfileId */
 const reviewKyc = catchAsync(async (req, res) => {
-  const result = await AdminService.reviewDriverKyc(
+  const result = await AdminUserService.reviewDriverKyc(
     req.params.driverProfileId as string,
     req.body as ReviewKycInput,
   );
@@ -35,7 +35,7 @@ const reviewKyc = catchAsync(async (req, res) => {
 
 /** GET /api/v1/admin/users */
 const listUsers = catchAsync(async (req, res) => {
-  const { users, meta } = await AdminService.listUsers(req.query as unknown as ListUsersQuery);
+  const { users, meta } = await AdminUserService.listUsers(req.query as unknown as ListUsersQuery);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -47,7 +47,8 @@ const listUsers = catchAsync(async (req, res) => {
 
 /** PATCH /api/v1/admin/users/:userId/status */
 const updateUserStatus = catchAsync(async (req, res) => {
-  const updated = await AdminService.updateUserStatus(
+  const updated = await AdminUserService.updateUserStatus(
+    { id: req.user!.id },
     req.params.userId as string,
     req.body as UpdateUserStatusInput,
   );
@@ -59,7 +60,7 @@ const updateUserStatus = catchAsync(async (req, res) => {
   });
 });
 
-export const AdminController = {
+export const AdminUserController = {
   getPendingKyc,
   reviewKyc,
   listUsers,

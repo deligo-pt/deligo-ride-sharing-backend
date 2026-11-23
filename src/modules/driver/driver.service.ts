@@ -1,5 +1,5 @@
 import prisma from '../../config/db';
-import type { SingleDocumentPayload, TripHistoryQuery } from './driver.validation';
+import type { TripHistoryQuery } from './driver.validation';
 import { NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,80 +25,7 @@ const documentSelect = {
   updatedAt: true,
 } as const;
 
-// ── Step 1: Cloudinary Document Upload Helper ──────────────────────────────────
-
-/**
- * Maps an array of SingleDocumentPayload → the flattened DriverDocument schema.
- * Mirrors the logic in the kyc service for consistency.
- */
-function buildFlattenedData(documents: SingleDocumentPayload[]) {
-  const map = new Map(documents.map((d) => [d.documentType, d]));
-
-  return {
-    drivingLicenseUrl: map.get('DRIVING_LICENSE')?.documentUrl as string,
-    nationalIdUrl: map.get('NATIONAL_ID')?.documentUrl as string,
-    vehicleRegistrationUrl: map.get('VEHICLE_REGISTRATION')?.documentUrl as string,
-    vehicleInsuranceUrl: map.get('VEHICLE_INSURANCE')?.documentUrl as string,
-    driverSelfieUrl: map.get('DRIVER_SELFIE')?.documentUrl as string,
-    proofOfAddressUrl: map.get('PROOF_OF_ADDRESS')?.documentUrl as string,
-    taxIdUrl: map.get('TAX_ID')?.documentUrl as string,
-  };
-}
-
-/**
- * POST /api/v1/drivers/documents
- *
- * Upsert all 7 KYC documents for a driver. The controller resolves the
- * Cloudinary URLs before calling this function.
- * Sets verificationStatus → PENDING and user.status → PENDING_VERIFICATION.
- */
-async function uploadDriverDocuments(userId: string, documents: SingleDocumentPayload[]) {
-  const driverProfile = await prisma.driverProfile.findUnique({
-    where: { userId },
-  });
-
-  console.log(driverProfile);
-
-  console.log('milestone 1');
-
-  if (!driverProfile) {
-    throw new NotFoundError('Driver profile');
-  }
-
-  console.log('milestone 2');
-
-  const flattenedData = buildFlattenedData(documents);
-
-  const upserted = await prisma.driverDocument.upsert({
-    where: { driverProfileId: driverProfile.id },
-    create: {
-      driverProfileId: driverProfile.id,
-      verificationStatus: 'PENDING',
-      ...flattenedData,
-    },
-    update: {
-      verificationStatus: 'PENDING',
-      reviewNote: null,
-      rejectionReason: null,
-      reviewedAt: null,
-      ...flattenedData,
-    },
-  });
-
-  console.log('milestone 3');
-
-  // Flag the user account for admin review
-  await prisma.user.update({
-    where: { id: userId },
-    data: { status: 'PENDING_VERIFICATION' },
-  });
-
-  console.log('milestone 4');
-
-  return upserted;
-}
-
-// ── Step 2: Driver Dashboard ───────────────────────────────────────────────────
+// ── Driver Dashboard ───────────────────────────────────────────────────
 
 /**
  * GET /api/v1/drivers/me
@@ -138,7 +65,7 @@ async function getDriverDashboard(userId: string) {
   return profile;
 }
 
-// ── Step 3: Trip History ───────────────────────────────────────────────────────
+// ── Trip History ───────────────────────────────────────────────────────
 
 /**
  * GET /api/v1/drivers/me/history
@@ -229,7 +156,6 @@ async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
 }
 
 export const DriverService = {
-  uploadDriverDocuments,
   getDriverDashboard,
   getDriverTripHistory,
 };

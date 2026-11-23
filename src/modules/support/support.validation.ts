@@ -25,16 +25,6 @@ const CreateEmergencyContactSchema = z.object({
 
 export type CreateEmergencyContactDto = z.infer<typeof CreateEmergencyContactSchema>;
 
-// ── POST /support/sos ─────────────────────────────────────────────────────────
-
-const SosSchema = z.object({
-  rideId: z.string().uuid('rideId must be a valid UUID').optional(),
-  lat: z.number().min(-90).max(90).optional(),
-  lng: z.number().min(-180).max(180).optional(),
-});
-
-export type SosDto = z.infer<typeof SosSchema>;
-
 // ── POST /support/tickets ─────────────────────────────────────────────────────
 
 const CreateTicketSchema = z.object({
@@ -79,7 +69,6 @@ const TicketParamsSchema = z.object({
 
 export const SupportValidation = {
   addEmergencyContact: { body: CreateEmergencyContactSchema },
-  triggerSos: { body: SosSchema },
   createTicket: { body: CreateTicketSchema },
   addTicketMessage: { params: TicketParamsSchema, body: AddTicketMessageSchema },
 };

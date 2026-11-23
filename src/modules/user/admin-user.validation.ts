@@ -73,9 +73,9 @@ const UpdateUserStatusSchema = z.object({
 
 export type UpdateUserStatusInput = z.infer<typeof UpdateUserStatusSchema>;
 
-// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
 
-export const AdminValidation = {
+export const AdminUserValidation = {
   reviewKyc: { params: DriverProfileIdParamSchema, body: ReviewKycSchema },
   listUsers: { query: ListUsersQuerySchema },
   updateUserStatus: { params: UserIdParamSchema, body: UpdateUserStatusSchema },

@@ -1,3 +1,4 @@
+import type { DocumentStatus, KycStatus, UserStatus } from '@prisma/client';
 import prisma from '../../config/db';
 import {
   ReviewDocumentInput,
@@ -57,26 +58,33 @@ const uploadAllDocuments = async (userId: string, documents: SingleDocumentPaylo
   const flattenedData = buildFlattenedData(documents);
 
   // Use upsert because driverProfileId is @unique
-  const upserted = await prisma.driverDocument.upsert({
-    where: { driverProfileId: driverProfile.id },
-    create: {
-      driverProfileId: driverProfile.id,
-      verificationStatus: 'PENDING',
-      ...flattenedData,
-    },
-    update: {
-      verificationStatus: 'PENDING',
-      reviewNote: null,
-      rejectionReason: null,
-      reviewedAt: null,
-      ...flattenedData,
-    },
-  });
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { status: 'PENDING_VERIFICATION' },
-  });
+  // Document upsert, KYC state and account status move together.
+  const [upserted] = await prisma.$transaction([
+    prisma.driverDocument.upsert({
+      where: { driverProfileId: driverProfile.id },
+      create: {
+        driverProfileId: driverProfile.id,
+        verificationStatus: 'PENDING',
+        ...flattenedData,
+      },
+      update: {
+        verificationStatus: 'PENDING',
+        reviewNote: null,
+        rejectionReason: null,
+        reviewedAt: null,
+        ...flattenedData,
+      },
+    }),
+    // UNDER_REVIEW is what puts the driver in the admin review queue (GET /admin/kyc/pending).
+    prisma.driverProfile.update({
+      where: { id: driverProfile.id },
+      data: { kycStatus: 'UNDER_REVIEW' },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { status: 'PENDING_VERIFICATION' },
+    }),
+  ]);
 
   return upserted;
 };
@@ -158,11 +166,63 @@ const getAllDocuments = async () => {
   });
 };
 
+// ─── KYC review (single source of truth) ──────────────────────────────────────
+// Both review endpoints — PATCH /kyc/documents/:id/review and
+// PATCH /admin/kyc/:driverProfileId — end up here, so a review ALWAYS updates the
+// document, DriverProfile.kycStatus and User.status together in ONE transaction.
+// (ride acceptance requires kycStatus === APPROVED *and* user.status === ACTIVE.)
+
+export type KycDecision = Exclude<DocumentStatus, 'PENDING'>;
+
+const KYC_OUTCOMES: Record<KycDecision, { kycStatus: KycStatus; userStatus: UserStatus }> = {
+  APPROVED: { kycStatus: 'APPROVED', userStatus: 'ACTIVE' },
+  REJECTED: { kycStatus: 'REJECTED', userStatus: 'PENDING_VERIFICATION' },
+  SUSPENDED: { kycStatus: 'SUSPENDED', userStatus: 'SUSPENDED' },
+  TEMPORARILY_BLOCKED: { kycStatus: 'SUSPENDED', userStatus: 'SUSPENDED' },
+};
+
+interface ApplyKycDecisionParams {
+  driverProfileId: string;
+  userId: string;
+  decision: KycDecision;
+  reviewNote?: string | null;
+  rejectionReason?: string | null;
+}
+
+const applyKycDecision = async (params: ApplyKycDecisionParams) => {
+  const { driverProfileId, userId, decision } = params;
+  const outcome = KYC_OUTCOMES[decision];
+
+  const [document, profile, user] = await prisma.$transaction([
+    prisma.driverDocument.update({
+      where: { driverProfileId },
+      data: {
+        verificationStatus: decision,
+        reviewNote: params.reviewNote ?? null,
+        rejectionReason: decision === 'APPROVED' ? null : (params.rejectionReason ?? null),
+        reviewedAt: new Date(),
+      },
+    }),
+    // isAvailable stays false after any review — an approved driver toggles it themselves.
+    prisma.driverProfile.update({
+      where: { id: driverProfileId },
+      data: { kycStatus: outcome.kycStatus, isAvailable: false },
+      select: { id: true, kycStatus: true, isAvailable: true },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { status: outcome.userStatus },
+      select: { id: true, status: true },
+    }),
+  ]);
+
+  return { document, profile, user };
+};
+
 // ─── PATCH /kyc/documents/:id/review ─────────────────────────────────────────
-// Admin approves or rejects the entire document set.
 
 const reviewDocument = async (documentId: string, payload: ReviewDocumentInput) => {
-  const document = await prisma.driverDocument.findUnique({
+  const existing = await prisma.driverDocument.findUnique({
     where: { id: documentId },
     include: {
       driverProfile: {
@@ -171,45 +231,23 @@ const reviewDocument = async (documentId: string, payload: ReviewDocumentInput) 
     },
   });
 
-  if (!document) {
+  if (!existing) {
     throw new NotFoundError('Document set');
   }
 
-  if (document.verificationStatus === payload.verificationStatus) {
-    throw new BadRequestError(`Document set is already ${document.verificationStatus}.`);
+  if (existing.verificationStatus === payload.verificationStatus) {
+    throw new BadRequestError(`Document set is already ${existing.verificationStatus}.`);
   }
 
-  const updatedDoc = await prisma.driverDocument.update({
-    where: { id: documentId },
-    data: {
-      verificationStatus: payload.verificationStatus,
-      reviewNote: payload.reviewNote,
-      rejectionReason: payload.verificationStatus !== 'APPROVED' ? payload.rejectionReason : null,
-      reviewedAt: new Date(),
-    },
+  const { document } = await applyKycDecision({
+    driverProfileId: existing.driverProfile.id,
+    userId: existing.driverProfile.userId,
+    decision: payload.verificationStatus,
+    reviewNote: payload.reviewNote,
+    rejectionReason: payload.rejectionReason,
   });
 
-  if (payload.verificationStatus === 'APPROVED') {
-    await prisma.user.update({
-      where: { id: document.driverProfile.userId },
-      data: { status: 'ACTIVE' },
-    });
-  } else if (payload.verificationStatus === 'REJECTED') {
-    await prisma.user.update({
-      where: { id: document.driverProfile.userId },
-      data: { status: 'PENDING_VERIFICATION' },
-    });
-  } else if (
-    payload.verificationStatus === 'SUSPENDED' ||
-    payload.verificationStatus === 'TEMPORARILY_BLOCKED'
-  ) {
-    await prisma.user.update({
-      where: { id: document.driverProfile.userId },
-      data: { status: 'SUSPENDED' },
-    });
-  }
-
-  return updatedDoc;
+  return document;
 };
 
 // ─── GET /kyc/documents/me ───────────────────────────────────────────────────
@@ -246,6 +284,7 @@ export const KycService = {
   getPendingDocuments,
   getAllDocuments,
   reviewDocument,
+  applyKycDecision,
   getMyDocuments,
   getKycRequirements,
 };

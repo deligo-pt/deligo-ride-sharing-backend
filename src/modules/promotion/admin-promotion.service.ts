@@ -1,6 +1,6 @@
 import prisma from '../../config/db';
 import { buildPaginationMeta } from '../../types/api.types';
-import { ListPromotionsQuery, DeactivatePromotionInput } from './admin.promotion.validation';
+import { ListPromotionsQuery, DeactivatePromotionInput } from './admin-promotion.validation';
 import { NotFoundError } from '../../utils/errors';
 
 const listPromotions = async (query: ListPromotionsQuery) => {

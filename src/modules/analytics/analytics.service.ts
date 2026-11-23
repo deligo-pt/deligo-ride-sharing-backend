@@ -1,5 +1,5 @@
 import prisma from '../../config/db';
-import { GetTrendsQuery, ExportReportQuery } from './admin.analytics.validation';
+import { GetTrendsQuery, ExportReportQuery } from './analytics.validation';
 import { format, startOfDay, startOfWeek, startOfMonth } from 'date-fns';
 
 const getDashboardSummary = async () => {
@@ -157,7 +157,7 @@ const generateCsvReport = async (query: ExportReportQuery): Promise<string> => {
   return 'No Data\\n';
 };
 
-export const AdminAnalyticsService = {
+export const AnalyticsService = {
   getDashboardSummary,
   getTrends,
   generateCsvReport,

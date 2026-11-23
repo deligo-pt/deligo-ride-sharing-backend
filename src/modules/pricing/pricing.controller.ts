@@ -1,12 +1,12 @@
 import { VehicleType } from '@prisma/client';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminPricingService } from './admin.pricing.service';
-import { UpdatePricingRuleInput } from './admin.pricing.validation';
+import { PricingRuleService } from './pricing.service';
+import { UpdatePricingRuleInput } from './pricing.validation';
 
 /** GET /api/v1/admin/pricing */
 const getPricingRules = catchAsync(async (_req, res) => {
-  const rules = await AdminPricingService.listPricingRules();
+  const rules = await PricingRuleService.listPricingRules();
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -17,7 +17,7 @@ const getPricingRules = catchAsync(async (_req, res) => {
 
 /** PATCH /api/v1/admin/pricing/:vehicleType */
 const updatePricingRule = catchAsync(async (req, res) => {
-  const updated = await AdminPricingService.updatePricingRule(
+  const updated = await PricingRuleService.updatePricingRule(
     req.params.vehicleType as VehicleType,
     req.body as UpdatePricingRuleInput,
   );
@@ -29,7 +29,7 @@ const updatePricingRule = catchAsync(async (req, res) => {
   });
 });
 
-export const AdminPricingController = {
+export const PricingController = {
   getPricingRules,
   updatePricingRule,
 };

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { VehicleType } from '@prisma/client';
+import { RideStatus, VehicleType } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rides Validation Schemas
@@ -168,9 +168,26 @@ const RecurringProfileSchema = z.object({
 
 export type RecurringProfileDto = z.infer<typeof RecurringProfileSchema>;
 
+// ── GET /api/v1/rides ────────────────────────────────────────────────────────
+// `userId` only has an effect for ADMIN callers (customer/driver scope is fixed by the token).
+const ListRidesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.nativeEnum(RideStatus).optional(),
+  userId: z.string().min(1).optional(),
+});
+export type ListRidesQuery = z.infer<typeof ListRidesQuerySchema>;
+
+// ── GET /api/v1/rides/:id ────────────────────────────────────────────────────
+const RideIdParamSchema = z.object({
+  id: z.string().uuid('id must be a valid UUID'),
+});
+
 // ── Grouped validation (consumed by validateRequest in ride.route.ts) ─────────
 
 export const RideValidation = {
+  listRides: { query: ListRidesQuerySchema },
+  getRide: { params: RideIdParamSchema },
   updateLocation: { body: UpdateLocationSchema },
   searchRide: { body: SearchRideSchema },
   estimateFare: { body: EstimateFareSchema },

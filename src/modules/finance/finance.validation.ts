@@ -6,8 +6,8 @@ const GetLedgerQuerySchema = z.object({
 });
 export type GetLedgerQuery = z.infer<typeof GetLedgerQuerySchema>;
 
-// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
 
-export const AdminFinanceValidation = {
+export const FinanceValidation = {
   ledger: { query: GetLedgerQuerySchema },
 };

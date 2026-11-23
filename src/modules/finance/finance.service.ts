@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
-import { GetLedgerQuery } from './admin.finance.validation';
+import { GetLedgerQuery } from './finance.validation';
 
 const getFinancialLedger = async (query: GetLedgerQuery) => {
   const { startDate, endDate } = query;
@@ -74,6 +74,6 @@ const getFinancialLedger = async (query: GetLedgerQuery) => {
   };
 };
 
-export const AdminFinanceService = {
+export const FinanceService = {
   getFinancialLedger,
 };

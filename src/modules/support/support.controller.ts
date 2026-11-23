@@ -3,7 +3,6 @@ import {
   AddTicketMessageDto,
   CreateEmergencyContactDto,
   CreateTicketDto,
-  SosDto,
 } from './support.validation';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
@@ -34,21 +33,6 @@ const getEmergencyContacts = catchAsync(async (req, res) => {
     success: true,
     message: 'Emergency contacts retrieved successfully',
     data: { contacts, total: contacts.length },
-  });
-});
-
-/**
- * POST /api/v1/support/sos — any authenticated user.
- * Notifies all admins (SECURITY, IN_APP + WEBSOCKET), [MOCK] SMSes emergency
- * contacts, and escalates the linked ride to EMERGENCY (if rideId provided).
- */
-const triggerSos = catchAsync(async (req, res) => {
-  const result = await SupportService.triggerSos(req.user!.id, req.user!.role, req.body as SosDto);
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'SOS alert triggered successfully',
-    data: result,
   });
 });
 
@@ -98,7 +82,6 @@ const addTicketMessage = catchAsync(async (req, res) => {
 export const SupportController = {
   addEmergencyContact,
   getEmergencyContacts,
-  triggerSos,
   createTicket,
   getMyTickets,
   addTicketMessage,

@@ -1,7 +1,7 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminRideService } from './admin.ride.service';
-import { CancelRideInput, ListRidesQuery } from './admin.ride.validation';
+import { AdminRideService } from './admin-ride.service';
+import { CancelRideInput, ListRidesQuery } from './admin-ride.validation';
 
 /** GET /api/v1/admin/rides */
 const getRides = catchAsync(async (req, res) => {

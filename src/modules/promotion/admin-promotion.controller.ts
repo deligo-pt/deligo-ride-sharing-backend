@@ -1,7 +1,7 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminPromotionService } from './admin.promotion.service';
-import { DeactivatePromotionInput, ListPromotionsQuery } from './admin.promotion.validation';
+import { AdminPromotionService } from './admin-promotion.service';
+import { DeactivatePromotionInput, ListPromotionsQuery } from './admin-promotion.validation';
 
 /** GET /api/v1/admin/promotions */
 const getPromotions = catchAsync(async (req, res) => {

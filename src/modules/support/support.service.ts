@@ -1,12 +1,9 @@
 import prisma from '../../config/db';
-import { NotificationService } from '../notification/notification.service';
 import type {
   AddTicketMessageDto,
   CreateEmergencyContactDto,
   CreateTicketDto,
-  SosDto,
 } from './support.validation';
-import { RideService } from '../ride/ride.service';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,91 +50,6 @@ async function getEmergencyContacts(userId: string) {
     where: { userId },
     orderBy: { createdAt: 'asc' },
   });
-}
-
-// ── SOS Trigger ───────────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/sos
- *
- * Safety dispatch flow:
- *  1. Fetch the user's emergency contacts.
- *  2. Notify ALL admins via NotificationService (SECURITY type, IN_APP + WEBSOCKET).
- *  3. Simulate SMS dispatch to each emergency contact (MOCK).
- *  4. If a rideId is provided, flip the Ride.status → EMERGENCY.
- *
- * In production, step 3 integrates with Twilio SMS.
- */
-async function triggerSos(userId: string, role: string, dto: SosDto) {
-  // 1. Fetch the user's basic info + emergency contacts
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      phone: true,
-      emergencyContacts: true,
-    },
-  });
-
-  if (!user) throw new NotFoundError('User');
-
-  // Ownership: only the ride's customer / assigned driver (or an admin) may flag it.
-  // Checked before admins are notified, so a bogus rideId has no side effects.
-  const emergencyRide = dto.rideId
-    ? await RideService.assertCanRaiseEmergency({ id: userId, role }, dto.rideId)
-    : null;
-
-  const userName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || 'A user';
-  const locationText =
-    dto.lat && dto.lng
-      ? `Location: ${dto.lat.toFixed(5)}, ${dto.lng.toFixed(5)}`
-      : 'Location not provided';
-
-  // 2. Notify all ADMIN users via NotificationService (IN_APP + WEBSOCKET)
-  const admins = await prisma.user.findMany({
-    where: { role: 'ADMIN' },
-    select: { id: true },
-  });
-
-  await Promise.all(
-    admins.map((admin) =>
-      NotificationService.dispatch(
-        {
-          userId:  admin.id,
-          title:   '🚨 SOS ALERT',
-          message: `${userName} has triggered an SOS. ${locationText}. Ride: ${dto.rideId ?? 'N/A'}`,
-          type:    'SECURITY',
-          data: {
-            triggeredByUserId: userId,
-            rideId:            dto.rideId ?? null,
-            lat:               dto.lat ?? null,
-            lng:               dto.lng ?? null,
-          },
-        },
-        ['IN_APP', 'WEBSOCKET'],
-      ),
-    ),
-  );
-
-  // 3. [MOCK] SMS dispatch to each emergency contact
-  user.emergencyContacts.forEach((contact) => {
-    console.log(
-      `[MOCK SMS] → ${contact.name} (${contact.phoneNumber}): ` +
-        `URGENT — ${userName} has triggered an SOS alert on Deligo. ${locationText}.`,
-    );
-  });
-
-  // 4. Flip the Ride status to EMERGENCY if a rideId was provided
-  const rideStatusUpdated = emergencyRide ? await RideService.escalateRideToEmergency(emergencyRide) : false;
-
-  return {
-    notifiedAdmins:     admins.length,
-    emergencyContacts:  user.emergencyContacts.length,
-    rideStatusUpdated,
-    rideId:             dto.rideId ?? null,
-  };
 }
 
 // ── Ticketing System ──────────────────────────────────────────────────────────
@@ -268,7 +180,6 @@ async function addTicketMessage(
 export const SupportService = {
   addEmergencyContact,
   getEmergencyContacts,
-  triggerSos,
   createTicket,
   getMyTickets,
   addTicketMessage,

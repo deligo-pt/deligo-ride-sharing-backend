@@ -1,11 +1,11 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminSupportService } from './admin.support.service';
+import { AdminSupportService } from './admin-support.service';
 import {
   AddTicketMessageInput,
   ListTicketsQuery,
   UpdateTicketInput,
-} from './admin.support.validation';
+} from './admin-support.validation';
 
 /** GET /api/v1/admin/support/tickets */
 const getTickets = catchAsync(async (req, res) => {

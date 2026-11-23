@@ -1,6 +1,6 @@
 import prisma from '../../config/db';
 import { VehicleType } from '@prisma/client';
-import { UpdatePricingRuleInput } from './admin.pricing.validation';
+import { UpdatePricingRuleInput } from './pricing.validation';
 import { NotFoundError } from '../../utils/errors';
 
 const listPricingRules = async () => {
@@ -24,7 +24,7 @@ const updatePricingRule = async (vehicleType: VehicleType, payload: UpdatePricin
   });
 };
 
-export const AdminPricingService = {
+export const PricingRuleService = {
   listPricingRules,
   updatePricingRule,
 };

@@ -1,11 +1,11 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminAnalyticsService } from './admin.analytics.service';
-import { ExportReportQuery, GetTrendsQuery } from './admin.analytics.validation';
+import { AnalyticsService } from './analytics.service';
+import { ExportReportQuery, GetTrendsQuery } from './analytics.validation';
 
 /** GET /api/v1/admin/analytics/dashboard */
 const getDashboard = catchAsync(async (_req, res) => {
-  const summary = await AdminAnalyticsService.getDashboardSummary();
+  const summary = await AnalyticsService.getDashboardSummary();
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -16,7 +16,7 @@ const getDashboard = catchAsync(async (_req, res) => {
 
 /** GET /api/v1/admin/analytics/trends */
 const getTrends = catchAsync(async (req, res) => {
-  const trends = await AdminAnalyticsService.getTrends(req.query as unknown as GetTrendsQuery);
+  const trends = await AnalyticsService.getTrends(req.query as unknown as GetTrendsQuery);
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -29,7 +29,7 @@ const getTrends = catchAsync(async (req, res) => {
 const exportReport = catchAsync(async (req, res) => {
   const reportType = (req.query.reportType as string) || 'REVENUE';
 
-  const csvString = await AdminAnalyticsService.generateCsvReport(
+  const csvString = await AnalyticsService.generateCsvReport(
     req.query as unknown as ExportReportQuery,
   );
 
@@ -45,7 +45,7 @@ const exportReport = catchAsync(async (req, res) => {
   res.status(200).send(rawCsv);
 });
 
-export const AdminAnalyticsController = {
+export const AnalyticsController = {
   getDashboard,
   getTrends,
   exportReport,

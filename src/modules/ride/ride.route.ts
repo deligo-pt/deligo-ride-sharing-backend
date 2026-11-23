@@ -13,6 +13,20 @@ import { rideRateLimiter } from '../../middlewares/rateLimiter';
 const router: Router = Router();
 
 /**
+ * GET /api/v1/rides
+ * Role-scoped, paginated list: CUSTOMER → own rides, DRIVER → assigned rides,
+ * ADMIN → all rides (optional ?status=, ?userId=).
+ * Query: ?page=1&limit=20&status=COMPLETED
+ */
+router.get(
+  '/',
+  authenticate,
+  authorize('CUSTOMER', 'DRIVER', 'ADMIN'),
+  validateRequest(RideValidation.listRides),
+  RideController.listRides,
+);
+
+/**
  * PATCH /api/v1/rides/location
  * Driver → broadcast live GPS to Redis + Postgres
  * Auth: Bearer JWT (role: DRIVER)
@@ -154,16 +168,29 @@ router.patch(
 router.post(
   '/:id/cancel',
   authenticate,
-  authorize('CUSTOMER'),
+  authorize('CUSTOMER', 'DRIVER'),
   validateRequest(RideValidation.cancelRide),
   RideController.cancelRide,
 );
 
 /**
  * POST /api/v1/rides/:id/share
- * Customer → generate 24-hour tracking token + public URL
- * Auth: Bearer JWT (role: CUSTOMER)
+ * Customer or Driver (ride participants only) → generate 24-hour tracking token + public URL
+ * Auth: Bearer JWT (role: CUSTOMER or DRIVER)
  */
 router.post('/:id/share', authenticate, authorize('CUSTOMER', 'DRIVER'), RideController.shareRide);
+
+/**
+ * GET /api/v1/rides/:id
+ * One ride, scoped by role (404 when it is not the caller's ride; ADMIN sees all).
+ * Declared LAST so it never shadows the static GET routes above (e.g. /recurring).
+ */
+router.get(
+  '/:id',
+  authenticate,
+  authorize('CUSTOMER', 'DRIVER', 'ADMIN'),
+  validateRequest(RideValidation.getRide),
+  RideController.getRide,
+);
 
 export default router;

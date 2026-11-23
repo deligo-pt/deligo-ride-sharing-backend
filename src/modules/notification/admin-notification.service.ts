@@ -1,5 +1,5 @@
 import prisma from '../../config/db';
-import { BroadcastNotificationInput } from './admin.notification.validation';
+import { BroadcastNotificationInput } from './admin-notification.validation';
 import { NotificationService } from '../notification/notification.service';
 
 const broadcastNotification = async (payload: BroadcastNotificationInput) => {

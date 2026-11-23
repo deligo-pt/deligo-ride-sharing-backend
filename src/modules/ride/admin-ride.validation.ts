@@ -16,7 +16,7 @@ const RideIdParamSchema = z.object({
   id: z.string().uuid('id must be a valid UUID'),
 });
 
-// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
 
 export const AdminRideValidation = {
   list: { query: ListRidesQuerySchema },

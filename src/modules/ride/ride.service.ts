@@ -12,9 +12,11 @@ import type {
   RequestRideDto,
   UpdateRideStatusDto,
   CancelRideDto,
+  ListRidesQuery,
 } from './ride.validation';
 import { ReceiptService } from './receipt.service';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { buildPaginationMeta } from '../../types/api.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service Functions
@@ -465,6 +467,22 @@ async function updateRideStatus(
 }
 
 /**
+ * Passes only the ride's customer or its assigned driver (compared by USER id).
+ * Anyone else — including a different customer or an unassigned driver — gets 403.
+ */
+function assertRideParticipant(
+  ride: { customerProfile: { userId: string }; driverProfile: { userId: string } | null },
+  userId: string,
+): void {
+  const isCustomer = ride.customerProfile.userId === userId;
+  const isAssignedDriver = ride.driverProfile?.userId === userId;
+
+  if (!isCustomer && !isAssignedDriver) {
+    throw new ForbiddenError('You are not a participant in this ride.');
+  }
+}
+
+/**
  * Cancel a ride (by either the customer or an assigned driver).
  *
  * Only the ride's own customer or its assigned driver may cancel. The status
@@ -491,9 +509,7 @@ async function cancelRide(userId: string, rideId: string, dto: CancelRideDto) {
   }
 
   // Actor ownership: only this ride's customer or assigned driver
-  if (ride.customerProfile.userId !== userId && ride.driverProfile?.userId !== userId) {
-    throw new ForbiddenError('You are not the assigned driver for this ride.');
-  }
+  assertRideParticipant(ride, userId);
 
   // Prevent cancelling an already-terminal ride
   if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
@@ -593,10 +609,10 @@ const TRACKING_BASE_URL = 'https://deligo.com/track';
  * Generate a one-time tracking token for a ride and persist it in Redis.
  *
  * Flow:
- *  1. Resolve the customer’s CustomerProfile to verify ride ownership.
+ *  1. Confirm the caller is the ride's customer or its assigned driver.
  *  2. Confirm the ride is in an active (non-terminal) state.
  *  3. Generate a UUID token, write it to Redis with a 24-hour TTL.
- *  4. Return the public tracking URL the customer can share.
+ *  4. Return the public tracking URL that can be shared.
  *
  * A read-only guest may later present this token to join the Socket.io room
  * without a driver or customer account.
@@ -605,47 +621,180 @@ async function shareRide(
   userId: string,
   rideId: string,
 ): Promise<{ trackingToken: string; trackingUrl: string }> {
-  // 1. Resolve the customer profile
-  const customerProfile = await prisma.customerProfile.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-
-  if (!customerProfile) {
-    throw new NotFoundError('CustomerProfile for this user. Create a customer profile first.');
-  }
-
-  // 2. Verify ride ownership and active status
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
-    select: { id: true, customerProfile: { select: { userId: true } }, status: true },
+    select: {
+      id: true,
+      status: true,
+      isDeleted: true,
+      customerProfile: { select: { userId: true } },
+      driverProfile: { select: { userId: true } },
+    },
   });
 
-  if (!ride) {
+  if (!ride || ride.isDeleted) {
     throw new NotFoundError('Ride');
   }
 
-  if (ride.customerProfile.userId !== userId) {
-    throw new ForbiddenError('You are not the assigned driver for this ride.');
-  }
+  assertRideParticipant(ride, userId);
 
   if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
     throw new BadRequestError('Ride is already completed or cancelled.');
   }
 
-  // 3. Generate token and persist in Redis
   const trackingToken = randomUUID();
   const redisKey = `tracking_token:${trackingToken}`;
   await redis.setex(redisKey, TRACKING_TOKEN_TTL_SECONDS, rideId);
 
-  // 4. Return the public share URL
   return {
     trackingToken,
     trackingUrl: `${TRACKING_BASE_URL}/${trackingToken}`,
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Role-scoped ride views  —  GET /rides, GET /rides/:id
+//
+//   CUSTOMER → only rides whose customerProfile.userId === caller
+//   DRIVER   → only rides whose driverProfile.userId   === caller
+//   ADMIN    → every ride (optional ?userId= filter)
+//
+// Scoping is applied inside the WHERE clause, so a record outside the caller's
+// scope is indistinguishable from one that does not exist (404, no ID probing).
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RideViewer {
+  id: string;
+  role: string;
+}
+
+const rideBaseSelect = {
+  id: true,
+  status: true,
+  vehicleClass: true,
+  vehicleType: true,
+  pickupAddress: true,
+  pickupLatitude: true,
+  pickupLongitude: true,
+  dropoffAddress: true,
+  dropoffLatitude: true,
+  dropoffLongitude: true,
+  estimatedFare: true,
+  finalFare: true,
+  estimatedDistance: true,
+  estimatedDuration: true,
+  distanceKm: true,
+  durationMinutes: true,
+  scheduledAt: true,
+  requestedAt: true,
+  acceptedAt: true,
+  arrivedAt: true,
+  startedAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  cancellationReason: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.RideSelect;
+
+const participantUserSelect = { select: { firstName: true, lastName: true } } as const;
+const adminUserSelect = {
+  select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+} as const;
+
+/** What each role is allowed to see about the OTHER party on a ride. */
+function rideSelectFor(role: string) {
+  if (role === 'ADMIN') {
+    return {
+      ...rideBaseSelect,
+      customerProfile: { select: { id: true, user: adminUserSelect } },
+      driverProfile: { select: { id: true, user: adminUserSelect } },
+    } satisfies Prisma.RideSelect;
+  }
+  if (role === 'DRIVER') {
+    return {
+      ...rideBaseSelect,
+      customerProfile: { select: { averageRating: true, user: participantUserSelect } },
+    } satisfies Prisma.RideSelect;
+  }
+  return {
+    ...rideBaseSelect,
+    driverProfile: {
+      select: {
+        averageRating: true,
+        user: participantUserSelect,
+        vehicle: {
+          select: { vehicleType: true, brand: true, model: true, color: true, licensePlate: true },
+        },
+      },
+    },
+  } satisfies Prisma.RideSelect;
+}
+
+function rideScopeFor(viewer: RideViewer): Prisma.RideWhereInput {
+  switch (viewer.role) {
+    case 'CUSTOMER':
+      return { customerProfile: { userId: viewer.id } };
+    case 'DRIVER':
+      return { driverProfile: { userId: viewer.id } };
+    case 'ADMIN':
+      return {};
+    default:
+      // Defence in depth: an unexpected role can never match any ride.
+      throw new ForbiddenError('Your role cannot view rides.');
+  }
+}
+
+async function listRides(viewer: RideViewer, query: ListRidesQuery) {
+  const { page, limit, status, userId } = query;
+
+  const where: Prisma.RideWhereInput = {
+    isDeleted: false,
+    ...rideScopeFor(viewer),
+    ...(status && { status }),
+    // ?userId= is an ADMIN-only filter; for everyone else it is ignored, never widening scope.
+    ...(viewer.role === 'ADMIN' &&
+      userId && {
+        OR: [{ customerProfile: { userId } }, { driverProfile: { userId } }],
+      }),
+  };
+
+  const [rides, total] = await prisma.$transaction([
+    prisma.ride.findMany({
+      where,
+      select: rideSelectFor(viewer.role),
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.ride.count({ where }),
+  ]);
+
+  return { rides, meta: buildPaginationMeta(total, page, limit) };
+}
+
+async function getRide(viewer: RideViewer, rideId: string) {
+  const ride = await prisma.ride.findFirst({
+    where: { id: rideId, isDeleted: false, ...rideScopeFor(viewer) },
+    select: {
+      ...rideSelectFor(viewer.role),
+      stops: {
+        orderBy: { sequence: 'asc' },
+        select: { id: true, address: true, lat: true, lng: true, sequence: true, status: true },
+      },
+    },
+  });
+
+  if (!ride) {
+    throw new NotFoundError('Ride');
+  }
+
+  return ride;
+}
+
 export const RideService = {
+  listRides,
+  getRide,
   updateDriverLocation,
   findNearbyDrivers,
   estimateFare,

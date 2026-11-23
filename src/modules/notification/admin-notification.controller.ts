@@ -1,7 +1,7 @@
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { AdminNotificationService } from './admin.notification.service';
-import { BroadcastNotificationInput } from './admin.notification.validation';
+import { AdminNotificationService } from './admin-notification.service';
+import { BroadcastNotificationInput } from './admin-notification.validation';
 
 /** POST /api/v1/admin/notifications/broadcast */
 const broadcast = catchAsync(async (req, res) => {

@@ -12,9 +12,9 @@ const ExportReportQuerySchema = z.object({
 });
 export type ExportReportQuery = z.infer<typeof ExportReportQuerySchema>;
 
-// ── Grouped validation (consumed by validateRequest in admin.route.ts) ─────────
+// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
 
-export const AdminAnalyticsValidation = {
+export const AnalyticsValidation = {
   trends: { query: GetTrendsQuerySchema },
   exportReport: { query: ExportReportQuerySchema },
 };

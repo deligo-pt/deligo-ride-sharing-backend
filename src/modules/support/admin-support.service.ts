@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import { NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
-import { ListTicketsQuery, UpdateTicketInput, AddTicketMessageInput } from './admin.support.validation';
+import { ListTicketsQuery, UpdateTicketInput, AddTicketMessageInput } from './admin-support.validation';
 import { NotificationService } from '../notification/notification.service';
 
 const listSupportTickets = async (query: ListTicketsQuery) => {

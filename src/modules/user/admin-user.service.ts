@@ -1,8 +1,9 @@
 import prisma from '../../config/db';
-import { BadRequestError, NotFoundError } from '../../utils/errors';
-import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin.validation';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { ListUsersQuery, ReviewKycInput, UpdateUserStatusInput } from './admin-user.validation';
 import { buildPaginationMeta } from '../../types/api.types';
 import { AuthService } from '../auth/auth.service';
+import { KycService } from '../kyc/kyc.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Service  —  PRD 5.x
@@ -76,7 +77,6 @@ const getPendingKycProfiles = async () => {
 // Admin approves or rejects the full KYC submission for a driver.
 
 const reviewDriverKyc = async (driverProfileId: string, payload: ReviewKycInput) => {
-  // 1. Verify driver profile exists and has a document set
   const profile = await prisma.driverProfile.findUnique({
     where: { id: driverProfileId },
     include: { document: true, user: { select: { id: true } } },
@@ -90,41 +90,22 @@ const reviewDriverKyc = async (driverProfileId: string, payload: ReviewKycInput)
     throw new BadRequestError('This driver has not submitted any KYC documents yet.');
   }
 
-  const isApproved = payload.kycStatus === 'APPROVED';
+  // Shared with PATCH /kyc/documents/:id/review — document, kycStatus and user.status
+  // are updated atomically in KycService.applyKycDecision.
+  const { document } = await KycService.applyKycDecision({
+    driverProfileId,
+    userId: profile.user.id,
+    decision: payload.kycStatus,
+    reviewNote: payload.reviewNote,
+    rejectionReason: payload.rejectionReason,
+  });
 
-  // 2. Atomic transaction: update document + profile + user in one shot
-  const [updatedDoc, updatedProfile] = await prisma.$transaction([
-    // Update the DriverDocument verification status to mirror the KYC decision
-    prisma.driverDocument.update({
-      where: { driverProfileId },
-      data: {
-        verificationStatus: isApproved ? 'APPROVED' : 'REJECTED',
-        reviewNote: payload.reviewNote ?? null,
-        rejectionReason: isApproved ? null : (payload.rejectionReason ?? null),
-        reviewedAt: new Date(),
-      },
-    }),
+  const updatedProfile = await prisma.driverProfile.findUniqueOrThrow({
+    where: { id: driverProfileId },
+    select: driverProfileKycSelect,
+  });
 
-    // Update DriverProfile: set kycStatus and activate the driver if approved
-    prisma.driverProfile.update({
-      where: { id: driverProfileId },
-      data: {
-        kycStatus: payload.kycStatus,
-        // If approved, leave isAvailable as false — driver can toggle it themselves.
-        // If rejected, explicitly lock them out.
-        isAvailable: isApproved ? false : false,
-      },
-      select: driverProfileKycSelect,
-    }),
-
-    // Update User.status so the account reflects the review outcome
-    prisma.user.update({
-      where: { id: profile.user.id },
-      data: { status: isApproved ? 'ACTIVE' : 'PENDING_VERIFICATION' },
-    }),
-  ]);
-
-  return { document: updatedDoc, profile: updatedProfile };
+  return { document, profile: updatedProfile };
 };
 
 // ─── GET /admin/users ─────────────────────────────────────────────────────────
@@ -201,11 +182,32 @@ const listUsers = async (query: ListUsersQuery) => {
 // ─── PATCH /admin/users/:userId/status ───────────────────────────────────────
 // Admin manually suspends, re-activates, or deactivates any user account.
 
-const updateUserStatus = async (userId: string, payload: UpdateUserStatusInput) => {
+const updateUserStatus = async (
+  actor: { id: string },
+  userId: string,
+  payload: UpdateUserStatusInput,
+) => {
+  // Guard 1: an admin can never change their own account status (no self-lockout / self-reactivation).
+  if (actor.id === userId) {
+    throw new ForbiddenError('You cannot change your own account status.');
+  }
+
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   if (!user) {
     throw new NotFoundError('User');
+  }
+
+  // Guard 2: only a SUPER_ADMIN may change another administrator's status.
+  if (user.role === 'ADMIN') {
+    const actorProfile = await prisma.adminProfile.findUnique({
+      where: { userId: actor.id },
+      select: { accessLabel: true },
+    });
+
+    if (actorProfile?.accessLabel !== 'SUPER_ADMIN') {
+      throw new ForbiddenError("Only a SUPER_ADMIN can change another administrator's account status.");
+    }
   }
 
   if (user.status === payload.status) {
@@ -231,7 +233,7 @@ const updateUserStatus = async (userId: string, payload: UpdateUserStatusInput) 
   return updated;
 };
 
-export const AdminService = {
+export const AdminUserService = {
   getPendingKycProfiles,
   reviewDriverKyc,
   listUsers,

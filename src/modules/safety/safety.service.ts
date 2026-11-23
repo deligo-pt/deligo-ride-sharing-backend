@@ -116,7 +116,7 @@ async function triggerSos(userId: string, role: string, dto: TriggerSosDto) {
  * The ride status is intentionally NOT auto-reset — the admin handles it manually.
  */
 async function resolveAlert(
-  alertId: string = '942255e5-a904-4cfe-9510-8417ce179645',
+  alertId: string,
   adminId: string,
   dto: ResolveAlertDto,
 ) {
