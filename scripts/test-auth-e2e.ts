@@ -21,11 +21,12 @@ async function runTests() {
   const port = typeof address === 'object' && address ? address.port : 3000;
   const baseUrl = `http://127.0.0.1:${port}/api/v1/auth`;
 
-  let signupSessionId = '';
-  let testEmail = `test.user.${Date.now()}@deligo-test.com`;
-  let testPhone = `+1555${Date.now().toString().slice(-7)}`;
-  let testPassword = 'StrongPassword123!';
+  let signupSessionId: string;
+  const testEmail = `test.user.${Date.now()}@deligo-test.com`;
+  const testPhone = `+35191${Math.floor(1000000 + Math.random() * 9000000)}`;
+  const testPassword = 'StrongPassword123!';
   let createdUserId = '';
+  let exitCode = 0;
 
   try {
     // ── Test 1: POST /signup/initiate ──────────────────────────────────────────
@@ -34,13 +35,8 @@ async function runTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        firstName: 'Alex',
-        lastName: 'Rider',
         email: testEmail,
-        phone: testPhone,
         password: testPassword,
-        preferredLanguage: 'EN',
-        otpChannel: 'EMAIL',
       }),
     });
 
@@ -148,7 +144,7 @@ async function runTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: testEmail,
+        email: testEmail,
         password: testPassword,
         rememberMe: true,
       }),
@@ -159,15 +155,26 @@ async function runTests() {
     }
     console.log(`  ✅ Login with email succeeded. User: ${loginEmailJson.data.user.email}`);
 
+    // Update created test user with a valid Portuguese phone number for phone login test
+    await prisma.user.update({
+      where: { id: createdUserId },
+      data: { phone: testPhone, isPhoneVerified: true },
+    });
+    await prisma.account.updateMany({
+      where: { userId: createdUserId },
+      data: { phone: testPhone },
+    });
+
     // ── Test 6: POST /login with phone ─────────────────────────────────────────
-    console.log('\n▶ Test 6: POST /login with phone identifier');
+    console.log('\n▶ Test 6: POST /login with phone (contactNumber)');
     const loginPhoneRes = await fetch(`${baseUrl}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: testPhone,
+        contactNumber: testPhone,
         password: testPassword,
         rememberMe: false,
+        includeRefreshToken: true,
       }),
     });
     const loginPhoneJson = (await loginPhoneRes.json()) as any;
@@ -183,7 +190,7 @@ async function runTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: testEmail,
+        email: testEmail,
         password: 'WrongPassword!',
       }),
     });
@@ -199,6 +206,7 @@ async function runTests() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         refreshToken: currentRefreshToken,
+        includeRefreshToken: true,
       }),
     });
     const refreshJson = (await refreshRes.json()) as any;
@@ -243,11 +251,10 @@ async function runTests() {
 
     // ── Test 11: Blacklisted Access Token rejected by auth middleware ─────────
     console.log('\n▶ Test 11: Authenticate with blacklisted Access Token');
-    // Call a route with authenticate middleware, e.g. /logout again or /rides/location
-    const testBlacklistRes = await fetch(`${baseUrl}/logout`, {
-      method: 'POST',
+    // Call a route with authenticate middleware (/api/v1/profile/me)
+    const testBlacklistRes = await fetch(`http://127.0.0.1:${port}/api/v1/profile/me`, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: `Bearer ${rotatedAccessToken}`,
       },
     });
@@ -258,6 +265,9 @@ async function runTests() {
     console.log('  ✅ Blacklisted Access Token rejected by auth middleware (Token has been revoked)');
 
     console.log('\n🎉 ALL 11 TESTS PASSED SUCCESSFULLY! 🎉\n');
+  } catch (err) {
+    console.error('\n❌ E2E TEST FAILED:', err);
+    exitCode = 1;
   } finally {
     // Cleanup created test records
     if (createdUserId) {
@@ -280,11 +290,8 @@ async function runTests() {
     server.close();
     await prisma.$disconnect();
     redis.disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 
-runTests().catch((err) => {
-  console.error('\n❌ E2E TEST FAILED:', err);
-  process.exit(1);
-});
+void runTests();

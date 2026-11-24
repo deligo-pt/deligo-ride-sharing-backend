@@ -14,16 +14,16 @@ export default [
   // + @typescript-eslint/recommended + recommended-requiring-type-checking.
   ...tsPlugin.configs['flat/recommended-type-checked'].map((config) => ({
     ...config,
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'scripts/**/*.ts', 'prisma/**/*.ts'],
   })),
 
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'scripts/**/*.ts', 'prisma/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 2022,
       sourceType: 'module',
-      parserOptions: { project: './tsconfig.json', tsconfigRootDir: import.meta.dirname },
+      parserOptions: { project: './tsconfig.scripts.json', tsconfigRootDir: import.meta.dirname },
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
@@ -46,10 +46,27 @@ export default [
     },
   },
 
-  // The config layer itself (and scripts/, which is outside this lint scope) may read process.env.
+  // The config layer itself, and scripts/prisma files may read process.env.
   {
-    files: ['src/config/**/*.ts'],
+    files: ['src/config/**/*.ts', 'scripts/**/*.ts', 'prisma/**/*.ts'],
     rules: { 'no-restricted-properties': 'off' },
+  },
+
+  // Relax function return types, console statements, and unsafe rules for test scripts and prisma files.
+  {
+    files: ['scripts/**/*.ts', 'prisma/**/*.ts'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+    },
   },
 
   // Must stay last: turns off stylistic rules that conflict with Prettier.

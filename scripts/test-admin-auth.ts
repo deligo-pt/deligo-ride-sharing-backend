@@ -4,7 +4,9 @@ import bcrypt from 'bcrypt';
 import { createApp } from '../src/app';
 import prisma from '../src/config/db';
 import { redis } from '../src/utils/redis';
-import { hashSha256 } from '../src/modules/auth/auth.service';
+
+const hashSha256 = (value: string): string =>
+  crypto.createHash('sha256').update(value).digest('hex');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Authentication & One-Time Set-Password Invite Flow E2E Tests
@@ -145,7 +147,7 @@ async function runAdminAuthTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: regularAdminEmail,
+        email: regularAdminEmail,
         password: regularAdminPassword,
         rememberMe: true,
       }),
@@ -162,7 +164,7 @@ async function runAdminAuthTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: superAdminEmail,
+        email: superAdminEmail,
         password: superAdminPassword,
       }),
     });
@@ -178,7 +180,7 @@ async function runAdminAuthTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: customerEmail,
+        email: customerEmail,
         password: customerPassword,
       }),
     });
@@ -214,7 +216,7 @@ async function runAdminAuthTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: customerEmail,
+        email: customerEmail,
         password: customerPassword,
       }),
     });
@@ -449,7 +451,7 @@ async function runAdminAuthTests() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        identifier: newAdminEmail,
+        email: newAdminEmail,
         password: newAdminPassword,
       }),
     });
@@ -480,7 +482,9 @@ async function runAdminAuthTests() {
       if (keys.length > 0) {
         await redis.del(...keys);
       }
-    } catch {}
+    } catch (redisErr) {
+      console.warn('Failed to cleanup admin invite redis keys:', redisErr);
+    }
 
     server.close();
     await prisma.$disconnect();
@@ -489,7 +493,11 @@ async function runAdminAuthTests() {
   }
 }
 
-runAdminAuthTests().catch((err) => {
-  console.error('❌ Test failed with error:', err);
-  process.exit(1);
-});
+runAdminAuthTests()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('❌ Test failed with error:', err);
+    process.exit(1);
+  });
