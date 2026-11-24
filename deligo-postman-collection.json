@@ -3178,6 +3178,280 @@
             },
             "description": "Approves or rejects driver KYC. Activates user and driver profile on approval.\n\n(Role: ADMIN. Path: /kyc/profiles/:driverProfileId/review)"
           }
+        },
+        {
+          "name": "Admin — Unified KYC & User Block/Unblock",
+          "description": "Unified Admin KYC review and user status lifecycle management for DRIVER and FLEET_MANAGER accounts by userId.",
+          "item": [
+            {
+              "name": "Admin - Get Pending KYC Requests (Driver & Fleet)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Pending KYC requests retrieved successfully\", function () {",
+                      "    pm.expect(pm.response.code).to.equal(200);",
+                      "    const json = pm.response.json();",
+                      "    pm.expect(json.success).to.be.true;",
+                      "    pm.expect(json.data).to.be.an(\"object\");",
+                      "",
+                      "    const items = json.data.items || (Array.isArray(json.data) ? json.data : []);",
+                      "    if (items.length > 0) {",
+                      "        const firstUser = items[0];",
+                      "        const targetId = firstUser.id || firstUser.userId;",
+                      "        if (targetId) {",
+                      "            pm.collectionVariables.set(\"targetUserId\", targetId);",
+                      "            console.log(\"Saved targetUserId to collection variables:\", targetId);",
+                      "        }",
+                      "    }",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/kyc/pending?page=1&limit=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "kyc",
+                    "pending"
+                  ],
+                  "query": [
+                    {
+                      "key": "role",
+                      "value": "DRIVER",
+                      "description": "Optional filter by role: DRIVER or FLEET_MANAGER (toggle to test role-specific queue)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 100, default 20)"
+                    }
+                  ]
+                },
+                "description": "Lists pending KYC requests for DRIVER (UNDER_REVIEW, PENDING_DOCS) and FLEET_MANAGER (UNDER_REVIEW).\n\n(Role: ADMIN. Path: GET /api/v1/kyc/pending)"
+              }
+            },
+            {
+              "name": "Admin - Accept User KYC (Driver / Fleet)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"User KYC accepted successfully\", function () {",
+                      "    pm.expect(pm.response.code).to.equal(200);",
+                      "    const json = pm.response.json();",
+                      "    pm.expect(json.success).to.be.true;",
+                      "    const status = json.data?.status || json.data?.user?.status;",
+                      "    pm.expect(status).to.equal(\"ACTIVE\");",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/kyc/{{targetUserId}}/accept-user",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "kyc",
+                    "{{targetUserId}}",
+                    "accept-user"
+                  ]
+                },
+                "description": "Admin approves a DRIVER or FLEET_MANAGER user KYC application, activating the account.\n\n(Role: ADMIN. Path: PATCH /api/v1/kyc/:id/accept-user)"
+              }
+            },
+            {
+              "name": "Admin - Reject User KYC (Driver / Fleet)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"User KYC rejected successfully\", function () {",
+                      "    pm.expect(pm.response.code).to.equal(200);",
+                      "    const json = pm.response.json();",
+                      "    pm.expect(json.success).to.be.true;",
+                      "    const status = json.data?.status || json.data?.user?.status;",
+                      "    pm.expect(status).to.equal(\"PENDING_VERIFICATION\");",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"rejectionReason\": \"Uploaded driving license image is blurry and expiry date is not legible.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/kyc/{{targetUserId}}/reject-user",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "kyc",
+                    "{{targetUserId}}",
+                    "reject-user"
+                  ]
+                },
+                "description": "Admin rejects a DRIVER or FLEET_MANAGER user KYC application with a required reason.\n\n(Role: ADMIN. Path: PATCH /api/v1/kyc/:id/reject-user)"
+              }
+            },
+            {
+              "name": "Admin - Block User (Driver / Fleet)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"User blocked successfully\", function () {",
+                      "    pm.expect(pm.response.code).to.equal(200);",
+                      "    const json = pm.response.json();",
+                      "    pm.expect(json.success).to.be.true;",
+                      "    const status = json.data?.status || json.data?.user?.status;",
+                      "    pm.expect(status).to.equal(\"SUSPENDED\");",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/kyc/{{targetUserId}}/block-user",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "kyc",
+                    "{{targetUserId}}",
+                    "block-user"
+                  ]
+                },
+                "description": "Admin blocks/suspends a DRIVER or FLEET_MANAGER user, revoking all active sessions.\n\n(Role: ADMIN. Path: PATCH /api/v1/kyc/:id/block-user)"
+              }
+            },
+            {
+              "name": "Admin - Unblock User (Driver / Fleet)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"User unblocked successfully\", function () {",
+                      "    pm.expect(pm.response.code).to.equal(200);",
+                      "    const json = pm.response.json();",
+                      "    pm.expect(json.success).to.be.true;",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/kyc/{{targetUserId}}/unblock-user",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "kyc",
+                    "{{targetUserId}}",
+                    "unblock-user"
+                  ]
+                },
+                "description": "Admin unblocks a previously blocked DRIVER or FLEET_MANAGER user, restoring previous non-suspended status.\n\n(Role: ADMIN. Path: PATCH /api/v1/kyc/:id/unblock-user)"
+              }
+            }
+          ]
         }
       ]
     },

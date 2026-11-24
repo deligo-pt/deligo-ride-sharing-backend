@@ -28,8 +28,6 @@ enum RideStopStatus {
   COMPLETED
 }
 
-// RIDES
-
 model Ride {
   id              String          @id @default(uuid())
   customerId      String
@@ -40,28 +38,24 @@ model Ride {
   vehicleType     VehicleType     @default(Hatchback)
   status          RideStatus      @default(REQUESTED)
 
-  // Pickup
   pickupAddress   String
   pickupLatitude  Float
   pickupLongitude Float
 
-  // Dropoff
   dropoffAddress   String
   dropoffLatitude  Float
   dropoffLongitude Float
 
-  // Fare
-  estimatedFare     Decimal  @db.Decimal(10, 2)
-  finalFare         Decimal? @db.Decimal(10, 2)
-  // Estimated at ride-request time (from routing engine)
-  estimatedDistance Float? // kilometres
-  estimatedDuration Int? // minutes
-  // Actual values recorded at trip completion
-  distanceKm        Float?
-  durationMinutes   Int?
+  estimatedFare Decimal  @db.Decimal(10, 2)
+  finalFare     Decimal? @db.Decimal(10, 2)
 
-  // Timestamps
-  scheduledAt        DateTime? // set when status = SCHEDULED
+  estimatedDistance Float?
+  estimatedDuration Int?
+
+  distanceKm      Float?
+  durationMinutes Int?
+
+  scheduledAt        DateTime?
   requestedAt        DateTime  @default(now())
   acceptedAt         DateTime?
   arrivedAt          DateTime?
@@ -70,20 +64,18 @@ model Ride {
   cancelledAt        DateTime?
   cancellationReason String?
 
-  // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   promoCodeId String?
   promoCode   PromoCode?      @relation(fields: [promoCodeId], references: [id])
   payment     Payment?
-  reviews     Review[] // one per direction: customer→driver AND driver→customer
+  reviews     Review[]
   tickets     SupportTicket[]
-  stops       RideStop[] // intermediate waypoints for multi-stop rides
+  stops       RideStop[]
 
   @@index([customerId, status])
   @@index([driverProfileId, status])
@@ -109,10 +101,6 @@ model Payment {
   @@map("payments")
 }
 
-// ── Multi-Stop Routing  —  PRD 3.4 ────────────────────────────────────────────
-
-/// An intermediate waypoint within a multi-stop ride.
-/// sequence starts at 1; pickup is 0, dropoff is implied last.
 model RideStop {
   id     String @id @default(uuid())
   rideId String
@@ -122,7 +110,6 @@ model RideStop {
   lat     Float
   lng     Float
 
-  /// 1-based ordering of stops between pickup and final dropoff.
   sequence Int
 
   status RideStopStatus @default(PENDING)
@@ -134,14 +121,9 @@ model RideStop {
   @@map("ride_stops")
 }
 
-// ── Recurring Rides  —  PRD 3.9 ───────────────────────────────────────────────
-
-/// A customer's repeating ride template.
-/// The factory engine (recurring.service.ts) reads all active profiles every
-/// day and mints SCHEDULED Ride records for the next execution window.
 model RecurringRideProfile {
   id     String @id @default(uuid())
-  userId String /// References User.id (not customerProfile, for simplicity)
+  userId String
 
   vehicleType VehicleType
 
@@ -153,11 +135,8 @@ model RecurringRideProfile {
   dropoffLat     Float
   dropoffLng     Float
 
-  /// ISO weekday numbers: 1 = Monday … 7 = Sunday.
-  /// Stored as Int[] (PostgreSQL integer array).
   daysOfWeek Int[]
 
-  /// Local time of day in 'HH:MM' format, e.g. "08:30".
   timeOfDay String
 
   startDate DateTime

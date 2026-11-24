@@ -5,10 +5,6 @@ import { redis } from '../src/utils/redis';
 import { googleAuthClient } from '../src/modules/auth/auth.service';
 import { LoginTicket, TokenPayload } from 'google-auth-library';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Deligo Google Sign-In E2E Test Suite
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function runGoogleAuthTests() {
   console.log('🚀 Starting Google Auth E2E Test Suite...\n');
 
@@ -23,13 +19,12 @@ async function runGoogleAuthTests() {
   const port = typeof address === 'object' && address ? address.port : 3000;
   const baseUrl = `http://127.0.0.1:${port}/api/v1/auth`;
 
-  // Test data IDs to clean up at the end
   const createdUserIds: string[] = [];
+  let exitCode = 0;
 
   try {
-    // ── Test 1: Invalid Google ID Token rejected ─────────────────────────────
     console.log('▶ Test 1: POST /api/v1/auth/google with invalid ID token');
-    // Original verifyIdToken will fail against real Google API for fake token
+
     const invalidRes = await fetch(`${baseUrl}/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -45,7 +40,6 @@ async function runGoogleAuthTests() {
     }
     console.log('  ✅ Invalid Google ID token correctly rejected with 401 Unauthorized');
 
-    // ── Setup Mock Ticket Generator for Cases A, B, C ─────────────────────────
     let mockPayload: TokenPayload | null = null;
     googleAuthClient.verifyIdToken = async (): Promise<LoginTicket> => {
       if (!mockPayload) {
@@ -54,12 +48,11 @@ async function runGoogleAuthTests() {
       return {
         getPayload: () => mockPayload,
         getUserId: () => mockPayload?.sub || null,
-        getEnvelope: () => ({} as any),
-        getAttributes: () => ({} as any),
+        getEnvelope: () => ({}) as any,
+        getAttributes: () => ({}) as any,
       } as unknown as LoginTicket;
     };
 
-    // ── Test 2: Case C — Brand New User Signup via Google ──────────────────────
     console.log('\n▶ Test 2: Case C — Brand New User Registration via Google');
     const brandNewSub = `google-sub-${Date.now()}`;
     const brandNewEmail = `google.new.${Date.now()}@example.com`;
@@ -97,10 +90,13 @@ async function runGoogleAuthTests() {
     createdUserIds.push(createdUser.id);
 
     console.log(`  ✅ User created successfully! ID: ${createdUser.id}`);
-    console.log(`  ✅ Verified fields: email=${createdUser.email}, isEmailVerified=${createdUser.isEmailVerified}, referralCode=${createdUser.referralCode}`);
-    console.log(`  ✅ Tokens issued: Access Token (length ${newGoogleJson.data.tokens.accessToken.length}), Refresh Token (expiresIn=${newGoogleJson.data.tokens.expiresIn})`);
+    console.log(
+      `  ✅ Verified fields: email=${createdUser.email}, isEmailVerified=${createdUser.isEmailVerified}, referralCode=${createdUser.referralCode}`,
+    );
+    console.log(
+      `  ✅ Tokens issued: Access Token (length ${newGoogleJson.data.tokens.accessToken.length}), Refresh Token (expiresIn=${newGoogleJson.data.tokens.expiresIn})`,
+    );
 
-    // Verify DB relations created
     const dbUser = await prisma.user.findUnique({
       where: { id: createdUser.id },
       include: { account: true, customerProfile: true, wallet: true, sessions: true },
@@ -113,9 +109,10 @@ async function runGoogleAuthTests() {
     if (!googleAccount || googleAccount.providerAccountId !== brandNewSub) {
       throw new Error('Google Account record was not properly linked in DB');
     }
-    console.log('  ✅ DB verification: User, Google Account, CustomerProfile, Wallet, and Session verified');
+    console.log(
+      '  ✅ DB verification: User, Google Account, CustomerProfile, Wallet, and Session verified',
+    );
 
-    // ── Test 3: Case A — Existing Google Account Login (Fast Path) ────────────
     console.log('\n▶ Test 3: Case A — Subsequent Login for Existing Google Account');
     const existingGoogleRes = await fetch(`${baseUrl}/google`, {
       method: 'POST',
@@ -132,12 +129,10 @@ async function runGoogleAuthTests() {
     }
     console.log('  ✅ Existing Google Account recognized and logged in smoothly');
 
-    // ── Test 4: Case B — Existing User with Unverified Credentials Account ────
     console.log('\n▶ Test 4: Case B — Pre-Account Takeover Protection');
     const preExistingEmail = `victim.user.${Date.now()}@example.com`;
     const preExistingSub = `google-sub-takeover-${Date.now()}`;
 
-    // Create a squatted unverified user with credentials
     const squattedUser = await prisma.user.create({
       data: {
         email: preExistingEmail,
@@ -145,13 +140,12 @@ async function runGoogleAuthTests() {
         lastName: 'Squatter',
         role: 'CUSTOMER',
         status: 'ACTIVE',
-        isEmailVerified: false, // NOT verified!
+        isEmailVerified: false,
         referralCode: `DL${Date.now().toString(36).slice(-6).toUpperCase()}`,
       },
     });
     createdUserIds.push(squattedUser.id);
 
-    // Create an unverified CREDENTIALS account
     await prisma.account.create({
       data: {
         userId: squattedUser.id,
@@ -167,11 +161,10 @@ async function runGoogleAuthTests() {
 
     console.log('  ✅ Squatted unverified user created in DB');
 
-    // Now the legitimate owner logs in with verified Google account
     mockPayload = {
       sub: preExistingSub,
       email: preExistingEmail,
-      email_verified: true, // Google proves ownership!
+      email_verified: true,
       name: 'Real Owner',
       given_name: 'Real',
       family_name: 'Owner',
@@ -196,10 +189,6 @@ async function runGoogleAuthTests() {
       throw new Error(`Takeover protection flow failed: ${JSON.stringify(takeoverJson)}`);
     }
 
-    // Verify DB state after linking:
-    // 1. isEmailVerified should be true
-    // 2. squatted CREDENTIALS account should be deleted/soft-deleted
-    // 3. new GOOGLE account should be active
     const postTakeoverUser = await prisma.user.findUnique({
       where: { id: squattedUser.id },
       include: {
@@ -213,7 +202,9 @@ async function runGoogleAuthTests() {
 
     const credentialsAccount = postTakeoverUser.account.find((a) => a.provider === 'CREDENTIALS');
     if (!credentialsAccount || !credentialsAccount.isDeleted) {
-      throw new Error('Pre-Account Takeover Protection failed: Unverified credentials account was not invalidated!');
+      throw new Error(
+        'Pre-Account Takeover Protection failed: Unverified credentials account was not invalidated!',
+      );
     }
 
     const linkedGoogleAccount = postTakeoverUser.account.find((a) => a.provider === 'GOOGLE');
@@ -227,7 +218,6 @@ async function runGoogleAuthTests() {
     console.log('     - Verified GOOGLE account linked');
     console.log('     - Profile picture backfilled:', postTakeoverUser.profilePicture);
 
-    // ── Test 5: Suspended User Blocked ─────────────────────────────────────────
     console.log('\n▶ Test 5: Suspended user rejected');
     await prisma.user.update({
       where: { id: squattedUser.id },
@@ -248,8 +238,10 @@ async function runGoogleAuthTests() {
     console.log('  ✅ Suspended account rejected with 403 Forbidden');
 
     console.log('\n🎉 ALL 5 GOOGLE AUTH TESTS PASSED SUCCESSFULLY! 🎉\n');
+  } catch (err) {
+    console.error('\n❌ GOOGLE AUTH TEST FAILED:', err);
+    exitCode = 1;
   } finally {
-    // Cleanup created test records
     console.log('🧹 Cleaning up test users from DB...');
     for (const userId of createdUserIds) {
       try {
@@ -267,11 +259,8 @@ async function runGoogleAuthTests() {
     server.close();
     await prisma.$disconnect();
     redis.disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 
-runGoogleAuthTests().catch((err) => {
-  console.error('\n❌ GOOGLE AUTH TEST FAILED:', err);
-  process.exit(1);
-});
+void runGoogleAuthTests();

@@ -21,7 +21,6 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log('🌱 Starting database seeding...');
 
-  // Clear existing data to avoid conflicts
   await prisma.review.deleteMany({});
   await prisma.ticketMessage.deleteMany({});
   await prisma.supportTicket.deleteMany({});
@@ -38,7 +37,6 @@ async function main() {
 
   console.log('🗑️  Existing data cleared.');
 
-  // Seed Pricing Rules
   await prisma.pricingRule.createMany({
     data: [
       {
@@ -93,7 +91,6 @@ async function main() {
   });
   console.log('💰 Pricing Rules seeded successfully.');
 
-  // Seed Zones (Geofencing)
   await prisma.zone.createMany({
     data: [
       {
@@ -136,7 +133,6 @@ async function main() {
   });
   console.log('🌍 Geofencing Zones seeded successfully.');
 
-  // 1. Create CUSTOMER
   const customerUser = await prisma.user.create({
     data: {
       email: 'customer@example.com',
@@ -177,7 +173,6 @@ async function main() {
 
   console.log('👤 Customer seeded successfully.');
 
-  // 2. Create DRIVER
   const driverUser = await prisma.user.create({
     data: {
       email: 'driver@example.com',
@@ -227,7 +222,6 @@ async function main() {
 
   console.log('🚖 Driver and Vehicle seeded successfully.');
 
-  // Create an active Ride for testing safety features with rideId
   const activeRide = await prisma.ride.create({
     data: {
       customerId: customerUser.customerProfile!.id,
@@ -246,7 +240,6 @@ async function main() {
   });
   console.log('🚗 Active Ride seeded successfully.');
 
-  // 3. Create ADMIN
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@example.com',

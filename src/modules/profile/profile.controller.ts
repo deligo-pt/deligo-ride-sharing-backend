@@ -3,7 +3,6 @@ import { UpdateCustomerProfileInput, UpdateDriverProfileInput } from './profile.
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
-/** GET /api/v1/profile/me — own profile (role-aware). */
 const getMyProfile = catchAsync(async (req, res) => {
   const { id, role } = req.user!;
   const profile = await ProfileService.getMyProfile(id, role);
@@ -16,7 +15,6 @@ const getMyProfile = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/profile/me — update own profile (role-aware). */
 const updateMyProfile = catchAsync(async (req, res) => {
   const { id, role } = req.user!;
 
@@ -26,7 +24,6 @@ const updateMyProfile = catchAsync(async (req, res) => {
     req.body as UpdateCustomerProfileInput | UpdateDriverProfileInput,
   );
 
-  // Re-fetch so the response carries fresh data
   const updatedProfile = await ProfileService.getMyProfile(id, role);
 
   sendResponse(res, {

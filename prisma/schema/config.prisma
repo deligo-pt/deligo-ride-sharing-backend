@@ -19,8 +19,6 @@ model PricingRule {
   @@map("pricing_rules")
 }
 
-// ── Geofencing ───────────────────────────────────────────────────────────────
-
 enum ZoneType {
   RESTRICTED
   SURCHARGE
@@ -28,10 +26,10 @@ enum ZoneType {
 
 model Zone {
   id              String   @id @default(uuid())
-  name            String // e.g. "JFK Airport", "Downtown Core"
-  polygon         Json // Array of [lat, lng] coordinate pairs
+  name            String
+  polygon         Json
   type            ZoneType
-  surchargeAmount Float    @default(0) // Flat fee added to the fare (SURCHARGE zones only)
+  surchargeAmount Float    @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

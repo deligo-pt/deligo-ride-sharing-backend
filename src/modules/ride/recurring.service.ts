@@ -6,25 +6,6 @@ import type { RecurringProfileDto } from './ride.validation';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { NEXT_OCCURRENCE_SCAN_DAYS } from './recurring.constant';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Recurring Ride Factory Engine  —  PRD 3.9
-//
-// Two public functions:
-//   createRecurringProfile()      — Customer submits a repeating ride template.
-//   evaluateRecurringProfiles()   — Called by a daily cron / startup sweep.
-//                                   Mints SCHEDULED Ride records for the next
-//                                   execution window and queues BullMQ jobs.
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── Service functions ─────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/rides/recurring
- *
- * Persists a new RecurringRideProfile for the authenticated customer.
- * Validates that startDate < endDate and that the schedule covers at least
- * one future occurrence.
- */
 const createRecurringProfile = async (userId: string, dto: RecurringProfileDto) => {
   if (dto.endDate <= dto.startDate) {
     throw new BadRequestError('endDate must be after startDate.');
@@ -53,11 +34,6 @@ const createRecurringProfile = async (userId: string, dto: RecurringProfileDto) 
   });
 };
 
-/**
- * GET /api/v1/rides/recurring
- *
- * Returns all recurring profiles for the authenticated customer.
- */
 const getMyRecurringProfiles = async (userId: string) => {
   return prisma.recurringRideProfile.findMany({
     where: { userId },
@@ -65,12 +41,6 @@ const getMyRecurringProfiles = async (userId: string) => {
   });
 };
 
-/**
- * DELETE /api/v1/rides/recurring/:id
- *
- * Soft-deactivates a profile (sets isActive = false).
- * Only the owner may deactivate their own profile.
- */
 const deactivateRecurringProfile = async (userId: string, profileId: string) => {
   const profile = await prisma.recurringRideProfile.findUnique({
     where: { id: profileId },
@@ -87,19 +57,6 @@ const deactivateRecurringProfile = async (userId: string, profileId: string) => 
   });
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Factory Engine
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Build the exact UTC Date for the next occurrence of a profile.
- *
- * We treat timeOfDay as UTC (simple & portable). For production you would
- * store a timezone on the profile and use a library like luxon.
- *
- * @returns  A Date in the future, or null if none falls within the profile's
- *           active window.
- */
 const computeNextOccurrence = (
   daysOfWeek: number[],
   timeOfDay: string,
@@ -109,19 +66,17 @@ const computeNextOccurrence = (
   const [hours, minutes] = timeOfDay.split(':').map(Number);
   const now = new Date();
 
-  // Scan up to 8 days ahead (today + NEXT_OCCURRENCE_SCAN_DAYS) to find the next matching weekday
   for (let dayOffset = 0; dayOffset <= NEXT_OCCURRENCE_SCAN_DAYS; dayOffset++) {
     const candidate = new Date(now);
     candidate.setUTCDate(now.getUTCDate() + dayOffset);
     candidate.setUTCHours(hours, minutes, 0, 0);
 
-    // getUTCDay() returns 0=Sun,1=Mon…6=Sat — convert to ISO 1=Mon…7=Sun
     const isoDay = candidate.getUTCDay() === 0 ? 7 : candidate.getUTCDay();
 
     if (!daysOfWeek.includes(isoDay)) continue;
-    if (candidate <= now) continue; // already passed today
+    if (candidate <= now) continue;
     if (candidate < startDate) continue;
-    if (candidate > endDate) return null; // beyond profile window
+    if (candidate > endDate) return null;
 
     return candidate;
   }
@@ -181,7 +136,6 @@ const evaluateRecurringProfiles = async (): Promise<{
 
   for (const profile of profiles) {
     try {
-      // 1. Next occurrence
       const nextAt = computeNextOccurrence(
         profile.daysOfWeek,
         profile.timeOfDay,
@@ -194,7 +148,6 @@ const evaluateRecurringProfiles = async (): Promise<{
         continue;
       }
 
-      // 2. Resolve CustomerProfile.id
       const customerProfile = await prisma.customerProfile.findUnique({
         where: { userId: profile.userId },
         select: { id: true },
@@ -206,14 +159,12 @@ const evaluateRecurringProfiles = async (): Promise<{
         continue;
       }
 
-      // 3. Duplicate guard
       const duplicate = await rideAlreadyExists(customerProfile.id, nextAt);
       if (duplicate) {
         skipped++;
         continue;
       }
 
-      // 4. Route data
       const routeData = await getMultiStopRouteData([
         { lat: profile.pickupLat, lng: profile.pickupLng },
         { lat: profile.dropoffLat, lng: profile.dropoffLng },
@@ -221,7 +172,6 @@ const evaluateRecurringProfiles = async (): Promise<{
       const estimatedDistance = Math.round((routeData.distanceMeters / 1_000) * 100) / 100;
       const estimatedDuration = Math.ceil(routeData.durationSeconds / 60);
 
-      // 5. Create SCHEDULED ride — use a rough fare (pickup → dropoff, no promo)
       const fareBreakdowns = await PricingService.calculateEstimate(
         profile.pickupLat,
         profile.pickupLng,
@@ -249,7 +199,6 @@ const evaluateRecurringProfiles = async (): Promise<{
         },
       });
 
-      // 6. BullMQ delayed job
       await addScheduledRideJob(ride.id, nextAt);
 
       console.info(

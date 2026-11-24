@@ -8,26 +8,11 @@ import {
 import { NEARBY_DRIVER_RADIUS_KM } from '../modules/ride/ride.constant';
 import { RIDE_QUEUE_NAME, ScheduledRideJobData, bullmqConnection } from './ride.queue';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Ride Scheduling Worker
-//
-// Processes jobs from the ride-scheduling queue.  When a delayed job fires
-// (30 minutes before scheduledAt), the worker:
-//   1. Fetches the Ride from Postgres.
-//   2. Skips it if it was cancelled while waiting.
-//   3. Transitions status → REQUESTED (making it visible to drivers).
-//   4. Runs the same Redis geospatial + Postgres filter pipeline used by
-//      the on-demand requestRide flow to find eligible nearby drivers.
-//   5. Logs the dispatched driver IDs (the socket layer picks these up in
-//      a future integration step).
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<void> {
   const { rideId } = job.data;
 
   console.info(`[RideWorker] Processing job ${job.id} for ride ${rideId}`);
 
-  // ── 1. Fetch the ride ──────────────────────────────────────────────────────
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     select: {
@@ -41,29 +26,25 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
   });
 
   if (!ride) {
-    // The ride was hard-deleted — nothing to do.
     console.warn(`[RideWorker] Ride ${rideId} not found. Skipping.`);
     return;
   }
 
-  // ── 2. Guard: skip terminal states ────────────────────────────────────────
   if (ride.status === 'CANCELLED' || ride.status === 'COMPLETED') {
     console.info(`[RideWorker] Ride ${rideId} is already ${ride.status}. Skipping dispatch.`);
     return;
   }
 
-  // ── 3. Transition status → REQUESTED ─────────────────────────────────────
   await prisma.ride.update({
     where: { id: rideId },
     data: {
       status: 'REQUESTED',
-      requestedAt: new Date(), // mark when we actually opened it up to drivers
+      requestedAt: new Date(),
     },
   });
 
   console.info(`[RideWorker] Ride ${rideId} status → REQUESTED`);
 
-  // ── 4. Geospatial candidate lookup from Redis (same as on-demand flow) ────
   const candidateUserIds = await LocationService.findNearbyDrivers(
     ride.pickupLongitude,
     ride.pickupLatitude,
@@ -77,7 +58,6 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
     return;
   }
 
-  // ── 5. Postgres filter: available + matching vehicle type ─────────────────
   const eligibleDrivers = await prisma.driverProfile.findMany({
     where: {
       userId: { in: candidateUserIds },
@@ -98,7 +78,6 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
   );
 
   if (dispatchedDriverIds.length > 0) {
-    // In-app + socket (when this process owns the Socket.IO server) + FCM push, batched.
     await NotificationService.sendToUsers(dispatchedDriverIds, {
       type: 'RIDE_REQUEST',
       title: 'New ride request',
@@ -108,13 +87,9 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Worker singleton — exported so server.ts can close it on graceful shutdown.
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const rideWorker = new Worker<ScheduledRideJobData>(RIDE_QUEUE_NAME, processScheduledRide, {
   connection: bullmqConnection,
-  concurrency: 5, // process up to 5 jobs in parallel
+  concurrency: 5,
 });
 
 rideWorker.on('completed', (job) => {

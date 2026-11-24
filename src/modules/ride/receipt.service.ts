@@ -2,13 +2,6 @@ import prisma from '../../config/db';
 import { NotificationService } from '../notification/notification.service';
 import type { ReceiptRideData } from './receipt.interface';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Receipt Service — PRD 3.12 (Email Receipt after ride completion)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Build a clean HTML receipt string for a completed ride.
- */
 const buildReceiptHtml = (ride: ReceiptRideData): string => {
   const fare = ride.finalFare ? `$${Number(ride.finalFare).toFixed(2)}` : 'N/A';
   const distance = ride.distanceKm ? `${Number(ride.distanceKm).toFixed(2)} km` : 'N/A';
@@ -161,7 +154,6 @@ const generateAndSendReceipt = async (rideId: string): Promise<void> => {
     const user = ride.customerProfile.user;
     const fare = ride.finalFare ? `$${Number(ride.finalFare).toFixed(2)}` : 'N/A';
 
-    // 1. Send rich HTML email receipt
     const html = buildReceiptHtml({
       ...ride,
       user,
@@ -180,7 +172,6 @@ const generateAndSendReceipt = async (rideId: string): Promise<void> => {
 
     console.info(`[RECEIPT] ✅ Receipt dispatched | rideId=${rideId} userId=${user.id}`);
   } catch (err) {
-    // Receipt failure must never crash the ride completion flow
     console.error('[RECEIPT] ❌ Failed to generate/send receipt:', err);
   }
 };

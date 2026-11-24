@@ -9,12 +9,6 @@ import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 import { BadRequestError } from '../../utils/errors';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Vehicle Controller
-// Role checks live in vehicle.route.ts (authorize); validation in vehicle.validation.ts.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** POST /api/v1/vehicles — driver registers a vehicle. */
 const createVehicle = catchAsync(async (req, res) => {
   const vehicle = await VehicleService.createVehicle(req.user!.id, req.body as CreateVehicleInput);
   sendResponse(res, {
@@ -25,7 +19,6 @@ const createVehicle = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/vehicles/me — driver's own vehicle with approval status. */
 const getMyVehicle = catchAsync(async (req, res) => {
   const vehicle = await VehicleService.getMyVehicle(req.user!.id);
   sendResponse(res, {
@@ -36,7 +29,6 @@ const getMyVehicle = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/vehicles — admin lists all vehicles (?status=PENDING_REVIEW). */
 const getAllVehicles = catchAsync(async (req, res) => {
   const { status } = req.query as ListVehiclesQuery;
   const vehicles = await VehicleService.getAllVehicles(status);
@@ -48,7 +40,6 @@ const getAllVehicles = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/vehicles — driver updates vehicle info (resets to PENDING_REVIEW). */
 const updateMyVehicle = catchAsync(async (req, res) => {
   const vehicle = await VehicleService.updateMyVehicle(
     req.user!.id,
@@ -62,7 +53,6 @@ const updateMyVehicle = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/vehicles/photos — driver uploads up to 5 photos. */
 const uploadVehiclePhotos = catchAsync(async (req, res) => {
   const files = req.files as Express.Multer.File[] | undefined;
 
@@ -79,7 +69,6 @@ const uploadVehiclePhotos = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/vehicles/:id/review — admin approves / rejects / suspends. */
 const reviewVehicle = catchAsync(async (req, res) => {
   const vehicle = await VehicleService.reviewVehicle(
     req.params.id as string,

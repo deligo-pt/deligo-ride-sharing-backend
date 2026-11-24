@@ -9,7 +9,6 @@ import type { NOTIFICATION_CHANNELS } from './notification.constant';
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 
-/** Payload shared by every recipient of NotificationService.sendToUsers(). */
 export interface BulkNotificationPayload {
   title: string;
   message: string;
@@ -23,13 +22,10 @@ export interface DispatchOptions {
   message: string;
   type: NotificationType;
   channels?: NotificationChannel[];
-  /** Optional structured metadata stored in the Notification.data JSON column */
   data?: Record<string, unknown>;
-  /** Optional rich HTML body used when the EMAIL channel is requested */
   emailHtml?: string;
 }
 
-/** The typed Socket.IO server NotificationService emits through. */
 export type IoServer = SocketIoServer<
   ClientToServerEvents,
   ServerToClientEvents,

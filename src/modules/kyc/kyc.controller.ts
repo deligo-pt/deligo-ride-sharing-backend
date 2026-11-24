@@ -1,5 +1,11 @@
 import { KycService } from './kyc.service';
-import { BulkExpiryDates, ReviewDocumentInput, ReviewKycInput } from './kyc.validation';
+import {
+  BulkExpiryDates,
+  PendingKycQueryInput,
+  RejectUserInput,
+  ReviewDocumentInput,
+  ReviewKycInput,
+} from './kyc.validation';
 import { REQUIRED_DOCUMENT_TYPES, REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { sendResponse } from '../../utils/sendResponse';
@@ -28,16 +34,7 @@ const getKycStatus = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /kyc/documents (BULK)
- * Driver uploads ALL required KYC documents in one multipart/form-data call.
- *
- * Each document is a file field named after its DocumentType. Optional text
- * fields `<TYPE>_expiryDate` carry ISO 8601 dates (validated in the route).
- * If ANY required file is missing, a 400 lists every absent document.
- */
 const uploadDocuments = catchAsync(async (req, res) => {
-  // req.files is a dictionary when using multer.fields()
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
 
   if (!files || Object.keys(files).length === 0) {
@@ -54,7 +51,6 @@ const uploadDocuments = catchAsync(async (req, res) => {
     );
   }
 
-  // Step 1: every required document type must have a file
   const missingDocuments = REQUIRED_KYC_DOCUMENTS.filter(
     (doc) => !files[doc.type] || files[doc.type].length === 0,
   );
@@ -80,10 +76,8 @@ const uploadDocuments = catchAsync(async (req, res) => {
     );
   }
 
-  // Step 2: optional expiry dates (already validated by validateRequest)
   const expiryDates = req.body as BulkExpiryDates;
 
-  // Step 3: upload all files to Cloudinary concurrently
   const uploadResults = await Promise.all(
     REQUIRED_KYC_DOCUMENTS.map(async (doc) => {
       const file = files[doc.type][0];
@@ -102,7 +96,6 @@ const uploadDocuments = catchAsync(async (req, res) => {
     }),
   );
 
-  // Step 4: upsert all documents + set driver status to PENDING_VERIFICATION
   const savedDocuments = await KycService.uploadAllDocuments(req.user!.id, uploadResults);
 
   sendResponse(res, {
@@ -188,6 +181,68 @@ const reviewProfile = catchAsync(async (req, res) => {
   });
 });
 
+/** GET /kyc/pending — admin: paginated list of pending DRIVER and FLEET_MANAGER KYC requests. */
+const getPendingKyc = catchAsync(async (req, res) => {
+  const result = await KycService.getPendingKyc(req.query as unknown as PendingKycQueryInput);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pending KYC requests retrieved successfully',
+    meta: result.meta,
+    data: {
+      items: result.items,
+    },
+  });
+});
+
+/** PATCH /kyc/:id/accept-user — admin approves a DRIVER or FLEET_MANAGER user KYC. */
+const acceptUser = catchAsync(async (req, res) => {
+  const result = await KycService.acceptUser(req.user!.id, req.params.id as string);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/** PATCH /kyc/:id/reject-user — admin rejects a DRIVER or FLEET_MANAGER user KYC. */
+const rejectUser = catchAsync(async (req, res) => {
+  const result = await KycService.rejectUser(
+    req.user!.id,
+    req.params.id as string,
+    req.body as RejectUserInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/** PATCH /kyc/:id/block-user — admin blocks/suspends a DRIVER or FLEET_MANAGER user. */
+const blockUser = catchAsync(async (req, res) => {
+  const result = await KycService.blockUser(req.user!.id, req.params.id as string);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/** PATCH /kyc/:id/unblock-user — admin restores a previously blocked DRIVER or FLEET_MANAGER user. */
+const unblockUser = catchAsync(async (req, res) => {
+  const result = await KycService.unblockUser(req.user!.id, req.params.id as string);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
 export const KycController = {
   getPendingProfiles,
   reviewProfile,
@@ -198,4 +253,9 @@ export const KycController = {
   getPendingDocuments,
   getAllDocuments,
   reviewDocument,
+  getPendingKyc,
+  acceptUser,
+  rejectUser,
+  blockUser,
+  unblockUser,
 };

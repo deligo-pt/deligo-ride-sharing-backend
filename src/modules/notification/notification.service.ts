@@ -28,22 +28,15 @@ const getIo = (): IoServer | null => {
 };
 
 const userRoom = (userId: string): string => `user_${userId}`;
-// Must match rideRoom() in sockets/socket.handlers.ts (not imported: socket.control imports this module).
+
 const rideRoom = (rideId: string): string => `ride_${rideId}`;
 
-/**
- * `.catch()` handler for fire-and-forget calls:
- *   void NotificationService.dispatch(...).catch(logNotificationFailure('ride-accepted'))
- * dispatch() never rejects by design; this is the second line of defence so a notification problem
- * can never become an `unhandledRejection` (server.ts shuts the process down on those).
- */
 export const logNotificationFailure =
   (context: string) =>
   (err: unknown): void => {
     console.error(`[NOTIFICATION] ${context} failed:`, err);
   };
 
-/** FCM `data` values must be strings: objects are JSON-encoded, null/undefined are dropped. */
 const serializePushData = (data?: Record<string, unknown>): Record<string, string> | undefined => {
   if (!data) return undefined;
   const entries = Object.entries(data)
@@ -113,7 +106,6 @@ const pushOverWebSocket = (opts: DispatchOptions, record: { id: string } | null)
   console.info(`[NOTIFICATION] WebSocket → user room "${userRoom(opts.userId)}" | ${opts.title}`);
 };
 
-/** Tokens FCM reports as dead. `invalid-argument` only counts when it blames the registration token. */
 const isInvalidTokenError = (err: unknown): boolean => {
   const { code = '', message = '' } = (err ?? {}) as { code?: string; message?: string };
   return (
@@ -147,7 +139,7 @@ const sendPush = async (opts: DispatchOptions): Promise<void> => {
   } catch (err: unknown) {
     if (isInvalidTokenError(err)) {
       console.warn(`[PUSH] Token expired/invalid for userId=${opts.userId} — clearing from DB.`);
-      // Match id AND token so a token the app refreshed in the meantime is never wiped.
+
       await prisma.user.updateMany({
         where: { id: opts.userId, fcmToken: token },
         data: { fcmToken: null },
@@ -181,7 +173,6 @@ const sendEmail = async (to: string, subject: string, html: string): Promise<voi
   }
 };
 
-/** Multicast push to the given users in batches of 500; dead tokens are cleared afterwards. */
 const pushToUsers = async (
   userIds: string[],
   payload: BulkNotificationPayload,
@@ -225,11 +216,6 @@ const pushToUsers = async (
   }
 };
 
-/**
- * Deliver one notification to many users without N unbounded promises: rows are written with
- * createManyAndReturn in chunks of 1000, socket emits are in-memory, and push goes out through FCM
- * multicast in batches of 500. Never throws.
- */
 const sendToUsers = async (
   userIds: string[],
   payload: BulkNotificationPayload,
@@ -295,30 +281,11 @@ const sendToUsers = async (
   return result;
 };
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
 const setIo = (io: IoServer): void => {
   _io = io;
   console.info('✅ NotificationService: Socket.io server registered');
 };
 
-/**
- * Dispatch a notification across the requested channels. FAIL-SAFE: every channel runs in its
- * own try/catch and this method never rejects, so a delivery problem can't crash the caller or
- * raise an `unhandledRejection`.
- *
- * Channels: 2nd argument, else `opts.channels`, else IN_APP + WEBSOCKET + PUSH.
- *
- * @example
- * await NotificationService.dispatch({
- *   userId:   customerUserId,
- *   title:    'Driver Assigned',
- *   message:  'Your driver is on the way!',
- *   type:     NotificationType.RIDE_ACCEPTED,
- *   channels: ['IN_APP', 'WEBSOCKET', 'PUSH'],
- *   data:     { rideId, driverName },
- * });
- */
 const dispatch = async (
   opts: DispatchOptions,
   channelsArg?: NotificationChannel[],
@@ -330,7 +297,6 @@ const dispatch = async (
       err,
     );
 
-  // 1. Persist first so the record id can be included in the WebSocket payload
   let record: { id: string } | null = null;
 
   if (channels.includes('IN_APP')) {
@@ -344,7 +310,6 @@ const dispatch = async (
     }
   }
 
-  // 2. WebSocket — the user's personal room
   if (channels.includes('WEBSOCKET')) {
     try {
       pushOverWebSocket(opts, record);
@@ -353,7 +318,6 @@ const dispatch = async (
     }
   }
 
-  // 3. FCM push
   if (channels.includes('PUSH')) {
     try {
       await sendPush(opts);
@@ -362,7 +326,6 @@ const dispatch = async (
     }
   }
 
-  // 4. SMS (BulkGate)
   if (channels.includes('SMS')) {
     try {
       const userForSms = await prisma.user.findUnique({
@@ -379,7 +342,6 @@ const dispatch = async (
     }
   }
 
-  // 5. Email (Resend)
   if (channels.includes('EMAIL')) {
     try {
       const userForEmail = await prisma.user.findUnique({
@@ -398,10 +360,6 @@ const dispatch = async (
   }
 };
 
-/**
- * Tell everyone in a ride's room (customer + driver apps that called `join_ride`) that the ride
- * changed. Complements the per-user `notification` event. Never throws.
- */
 const emitRideStatus = (payload: Omit<RideStatusUpdatedPayload, 'timestamp'>): void => {
   try {
     _io?.to(rideRoom(payload.rideId)).emit('ride_status_updated', {
@@ -416,15 +374,13 @@ const emitRideStatus = (payload: Omit<RideStatusUpdatedPayload, 'timestamp'>): v
   }
 };
 
-// ── Inbox ─────────────────────────────────────────────────────────────────────
-
 const getInbox = async (userId: string, query: ListNotificationsQuery) => {
   const { page, limit, unread } = query;
   const skip = (page - 1) * limit;
 
   const where = {
     userId,
-    // Only `unread=true` filters; omitted or `unread=false` returns read AND unread.
+
     ...(unread === 'true' && { isRead: false }),
   };
 
@@ -451,11 +407,6 @@ const getInbox = async (userId: string, query: ListNotificationsQuery) => {
   };
 };
 
-/**
- * Mark a single notification as read. The lookup is scoped to the caller ({ id, userId }), so
- * another user's notification is indistinguishable from a missing one: both return 404
- * (no ID enumeration).
- */
 const markAsRead = async (userId: string, notificationId: string) => {
   const notification = await prisma.notification.findFirst({
     where: { id: notificationId, userId },
@@ -466,7 +417,6 @@ const markAsRead = async (userId: string, notificationId: string) => {
   }
 
   if (notification.isRead) {
-    // Idempotent — already read, return as-is
     return notification;
   }
 
@@ -476,9 +426,6 @@ const markAsRead = async (userId: string, notificationId: string) => {
   });
 };
 
-/**
- * Mark ALL unread notifications as read for the logged-in user.
- */
 const markAllAsRead = async (userId: string) => {
   const result = await prisma.notification.updateMany({
     where: { userId, isRead: false },
@@ -487,17 +434,6 @@ const markAllAsRead = async (userId: string) => {
   return { updatedCount: result.count };
 };
 
-// ── Admin broadcast ───────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/notifications/broadcast  (ADMIN)
- * Sends a SYSTEM notification (in-app + socket + push) to every ACTIVE, non-deleted user of the
- * target role. `ALL` means customers, drivers and fleet managers (never admins).
- *
- * Delivery runs in the background in pages of 1000 users (createManyAndReturn + FCM multicast of
- * 500), so the request returns immediately with the recipient count instead of holding the
- * connection open, and no promise is ever created per user.
- */
 const broadcastNotification = async (payload: BroadcastNotificationInput) => {
   const where: Prisma.UserWhereInput = {
     isDeleted: false,
@@ -550,21 +486,16 @@ const deliverBroadcast = async (
   );
 };
 
-// ── Public API (grouped export) ────────────────────────────────────────────────
-
 export const NotificationService = {
   setIo,
   dispatch,
 
-  /** Notify many users efficiently (chunked inserts + multicast push). Never throws. */
   sendToUsers,
   emitRideStatus,
 
-  // Direct-dispatch helpers (callers that already hold the phone/email)
   sendSMS,
   sendEmail,
 
-  // Inbox queries (used by the controller)
   getIo,
   getInbox,
   markAsRead,
@@ -572,5 +503,4 @@ export const NotificationService = {
   broadcastNotification,
 };
 
-// Re-export the type so callers don't need two imports
 export { NotificationType };

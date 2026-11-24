@@ -16,8 +16,6 @@ const VehicleTypeParamSchema = z.object({
   }),
 });
 
-// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
-
 export const PricingValidation = {
   updateRule: { params: VehicleTypeParamSchema, body: UpdatePricingRuleSchema },
 };

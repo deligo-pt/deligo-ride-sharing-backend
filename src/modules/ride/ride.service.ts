@@ -29,18 +29,6 @@ import {
   TRACKING_TOKEN_TTL_SECONDS,
 } from './ride.constant';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Service Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ride notifications (fail-safe: never throws, never blocks the API response)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Pushes the change to the ride room (`ride_status_updated`, for apps that joined via join_ride) and
- * sends the counterparty an in-app + socket + FCM notification.
- */
 const announceRideChange = async (change: RideChange): Promise<void> => {
   NotificationService.emitRideStatus({
     rideId: change.rideId,
@@ -85,14 +73,9 @@ const notifyRideStatus = (rideId: string, status: RideStatus): void => {
   }).catch(logNotificationFailure(`ride-${status.toLowerCase()}`));
 };
 
-/**
- * Persist the driver's live coordinates in Redis AND Postgres.
- */
 const updateDriverLocation = async (driverId: string, dto: UpdateLocationDto): Promise<void> => {
-  // 1. Update fast, ephemeral geospatial index in Redis
   await LocationService.updateDriverLocation(driverId, dto.lng, dto.lat);
 
-  // 2. Persist to Postgres so it's visible in Prisma Studio / Admin DB
   await prisma.driverProfile.update({
     where: { userId: driverId },
     data: {
@@ -102,9 +85,6 @@ const updateDriverLocation = async (driverId: string, dto: UpdateLocationDto): P
   });
 };
 
-/**
- * Find available, KYC-approved drivers near a pickup point.
- */
 const findNearbyDrivers = async (dto: SearchRideDto) => {
   const candidateIds = await LocationService.findNearbyDrivers(
     dto.pickupLng,
@@ -130,15 +110,6 @@ const findNearbyDrivers = async (dto: SearchRideDto) => {
   });
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fare Estimation — PRD 3.7
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Returns one itemised FareBreakdown per vehicle tier (or a single one
- * if vehicleType is specified). Promo code is validated and applied inside
- * PricingService.
- */
 const estimateFare = async (userId: string, dto: EstimateFareDto) => {
   const estimates = await PricingService.calculateEstimate(
     dto.pickupLat,
@@ -148,32 +119,15 @@ const estimateFare = async (userId: string, dto: EstimateFareDto) => {
     dto.vehicleType,
     dto.promoCode,
     1.0,
-    dto.stops, // pass intermediate stops for multi-stop pricing
+    dto.stops,
   );
 
-  await redis.set(`fare_estimate:${userId}`, JSON.stringify(estimates), 'EX', 300); // 5 min TTL
+  await redis.set(`fare_estimate:${userId}`, JSON.stringify(estimates), 'EX', 300);
 
   return estimates;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Ride Request & Dispatch
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Create a Ride record and dispatch it to nearby, eligible drivers.
- *
- * Flow:
- *  1. Resolve the CustomerProfile.id from the authenticated user's userId.
- *  2. Persist the Ride row in Postgres with status = REQUESTED.
- *  3. Ask Redis for driver IDs within 5 km of the pickup point.
- *  4. Filter those IDs in Postgres: isAvailable = true AND vehicle.vehicleType
- *     matches what the customer requested.
- *  5. Return the Ride + the list of dispatched driver IDs (the caller /
- *     future socket layer uses these to push notifications).
- */
 const requestRide = async (userId: string, dto: RequestRideDto): Promise<RequestRideResult> => {
-  // 1. Resolve CustomerProfile
   const customerProfile = await prisma.customerProfile.findUnique({
     where: { userId },
     select: { id: true },
@@ -207,7 +161,6 @@ const requestRide = async (userId: string, dto: RequestRideDto): Promise<Request
     );
   }
 
-  // 2. Build full coordinate chain and fetch cumulative route data
   const intermediateStops = dto.stops ?? [];
   const coordinates = [
     { lat: dto.pickupLat, lng: dto.pickupLng },
@@ -221,7 +174,6 @@ const requestRide = async (userId: string, dto: RequestRideDto): Promise<Request
 
   const isScheduled = dto.scheduledAt !== undefined;
 
-  // 3. Persist Ride + RideStops atomically in a transaction
   const ride = await prisma.ride.create({
     data: {
       customerId: customerProfile.id,
@@ -255,13 +207,11 @@ const requestRide = async (userId: string, dto: RequestRideDto): Promise<Request
     },
   });
 
-  // ── SCHEDULED path ──────────────────────────────────────────────────────────
   if (dto.scheduledAt) {
     await addScheduledRideJob(ride.id, dto.scheduledAt);
     return { ride, dispatchedDriverIds: [], scheduled: true };
   }
 
-  // ── ON-DEMAND path ────────────────────────────────────────────────────────
   const candidateUserIds = await LocationService.findNearbyDrivers(
     dto.pickupLng,
     dto.pickupLat,
@@ -298,10 +248,6 @@ const requestRide = async (userId: string, dto: RequestRideDto): Promise<Request
   return { ride, dispatchedDriverIds, scheduled: false };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Phase 3: Driver Acceptance
-// ─────────────────────────────────────────────────────────────────────────────
-
 const canTransitionRide = (from: RideStatus, to: RideStatus): boolean => {
   return RIDE_TRANSITIONS[from].includes(to);
 };
@@ -312,28 +258,11 @@ const assertRideTransition = (from: RideStatus, to: RideStatus): void => {
   }
 };
 
-/** Thrown when a conditional write loses a race with another request. */
 const rideStateConflict = () =>
   new ConflictError('The ride was modified by another request. Please refresh and try again.');
 
-/**
- * Atomically accept a ride and mark the driver as unavailable.
- *
- * Eligibility: the driver must have an APPROVED KYC status, a non-deleted
- * profile and an ACTIVE (not suspended / deactivated) user account — otherwise a
- * ForbiddenError is thrown. The same conditions are repeated inside the
- * driver-lock UPDATE, so a suspension that lands mid-request is still honoured.
- *
- * Concurrency: the ride is claimed with a single conditional UPDATE
- * (`WHERE id = ? AND status = 'REQUESTED' AND driverProfileId IS NULL`). Postgres
- * row-locks the target, so when two drivers race only one UPDATE matches a row —
- * the loser sees count = 0 and the whole transaction (including the driver lock)
- * rolls back. The driver is claimed the same way (`isAvailable = true` in the
- * WHERE), so one driver cannot accept two rides at once either.
- */
 const acceptRide = async (driverUserId: string, rideId: string) => {
   const acceptedRide = await prisma.$transaction(async (tx) => {
-    // 1. Resolve the driver profile + eligibility (404 vs 403 vs "busy" decided here)
     const driverProfile = await tx.driverProfile.findUnique({
       where: { userId: driverUserId },
       select: {
@@ -358,7 +287,6 @@ const acceptRide = async (driverUserId: string, rideId: string) => {
       );
     }
 
-    // 2. Lock the driver (eligibility re-checked atomically)
     const driverLock = await tx.driverProfile.updateMany({
       where: {
         id: driverProfile.id,
@@ -374,7 +302,6 @@ const acceptRide = async (driverUserId: string, rideId: string) => {
       throw new BadRequestError('You are not available to accept rides.');
     }
 
-    // 3. Claim the ride
     const claim = await tx.ride.updateMany({
       where: { id: rideId, status: 'REQUESTED', driverProfileId: null, isDeleted: false },
       data: {
@@ -385,7 +312,6 @@ const acceptRide = async (driverUserId: string, rideId: string) => {
     });
 
     if (claim.count === 0) {
-      // Throwing rolls back the driver lock above.
       const exists = await tx.ride.findUnique({ where: { id: rideId }, select: { id: true } });
       throw exists
         ? new BadRequestError('Ride is no longer available for acceptance.')
@@ -408,22 +334,7 @@ const acceptRide = async (driverUserId: string, rideId: string) => {
   return acceptedRide;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Phase 4: Trip Lifecycle
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Advance the ride through its lifecycle.
- *
- * - Verifies the requesting driver is the one assigned to the ride.
- * - Validates the transition against the state machine.
- * - Writes with a conditional UPDATE pinned to the status that was validated, so
- *   a concurrent cancel / duplicate request cannot slip through (→ 409).
- * - On COMPLETED: puts the driver back on the map and increments totalRides
- *   for both the driver and the customer — in the same transaction, exactly once.
- */
 const updateRideStatus = async (driverUserId: string, rideId: string, dto: UpdateRideStatusDto) => {
-  // 1. Fetch full ride to validate ownership and current status
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     include: { customerProfile: { select: { id: true } } },
@@ -433,7 +344,6 @@ const updateRideStatus = async (driverUserId: string, rideId: string, dto: Updat
     throw new NotFoundError('Ride');
   }
 
-  // 2. Resolve driver profile and verify ownership (before revealing any state)
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId: driverUserId },
     select: { id: true },
@@ -443,13 +353,10 @@ const updateRideStatus = async (driverUserId: string, rideId: string, dto: Updat
     throw new ForbiddenError('You are not the assigned driver for this ride.');
   }
 
-  // 3. State machine check
   assertRideTransition(ride.status, dto.status);
 
-  // 4. Build the timestamp field to set
   const timestampField = STATUS_TIMESTAMP_MAP[dto.status];
 
-  // 5. Base ride update payload
   const rideUpdateData: Prisma.RideUpdateManyMutationInput = {
     status: dto.status,
     [timestampField]: new Date(),
@@ -457,12 +364,9 @@ const updateRideStatus = async (driverUserId: string, rideId: string, dto: Updat
     ...(dto.finalDurationMinutes !== undefined && { durationMinutes: dto.finalDurationMinutes }),
   };
 
-  // Optimistic lock: only apply if the ride is still in the state we validated
-  // and still belongs to this driver.
   const guard = { id: rideId, status: ride.status, driverProfileId: driverProfile.id };
 
   if (dto.status !== 'COMPLETED') {
-    // Simple status advance — single conditional update
     const updatedRide = await prisma.$transaction(async (tx) => {
       const result = await tx.ride.updateMany({ where: guard, data: rideUpdateData });
       if (result.count === 0) throw rideStateConflict();
@@ -472,7 +376,6 @@ const updateRideStatus = async (driverUserId: string, rideId: string, dto: Updat
     return { ride: updatedRide, fareBreakdown: null };
   }
 
-  // 6. COMPLETED: calculate final fare via PricingService
   const actualDistKm = dto.actualDistanceKm ?? dto.finalDistanceKm ?? 1;
   const actualDurMin = dto.actualDurationMinutes ?? dto.finalDurationMinutes ?? 10;
 
@@ -486,13 +389,10 @@ const updateRideStatus = async (driverUserId: string, rideId: string, dto: Updat
     },
   );
 
-  // 7. Persist final fare into rideUpdateData
   rideUpdateData.finalFare = fareBreakdown.grandTotal;
   rideUpdateData.distanceKm = fareBreakdown.distanceKm;
   rideUpdateData.durationMinutes = fareBreakdown.estimatedDurationMinutes;
 
-  // 8. Transaction: finalise ride + release driver + increment totalRides.
-  //    The conditional update guarantees the counters are bumped at most once.
   const updatedRide = await prisma.$transaction(async (tx) => {
     const result = await tx.ride.updateMany({ where: guard, data: rideUpdateData });
     if (result.count === 0) throw rideStateConflict();
@@ -509,20 +409,12 @@ const updateRideStatus = async (driverUserId: string, rideId: string, dto: Updat
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
 
-  // Fire-and-forget: send receipt email + SMS — does NOT block the API response
   void ReceiptService.generateAndSendReceipt(rideId);
   notifyRideStatus(rideId, 'COMPLETED');
 
   return { ride: updatedRide, fareBreakdown };
-
-  // Note: receipt generation is done OUTSIDE the transaction above
-  // to ensure the API response is never delayed.
 };
 
-/**
- * Passes only the ride's customer or its assigned driver (compared by USER id).
- * Anyone else — including a different customer or an unassigned driver — gets 403.
- */
 const assertRideParticipant = (
   ride: { customerProfile: { userId: string }; driverProfile: { userId: string } | null },
   userId: string,
@@ -535,16 +427,7 @@ const assertRideParticipant = (
   }
 };
 
-/**
- * Cancel a ride (by either the customer or an assigned driver).
- *
- * Only the ride's own customer or its assigned driver may cancel. The status
- * change and the driver release happen in one transaction, guarded by a
- * conditional UPDATE so a ride that was completed/cancelled/re-assigned in the
- * meantime is never overwritten (→ 409).
- */
 const cancelRide = async (userId: string, rideId: string, dto: CancelRideDto) => {
-  // 1. Fetch the ride with just enough data for the teardown
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     select: {
@@ -561,10 +444,8 @@ const cancelRide = async (userId: string, rideId: string, dto: CancelRideDto) =>
     throw new NotFoundError('Ride');
   }
 
-  // Actor ownership: only this ride's customer or assigned driver
   assertRideParticipant(ride, userId);
 
-  // Prevent cancelling an already-terminal ride
   if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
     throw new BadRequestError('Ride is already completed or cancelled.');
   }
@@ -572,7 +453,6 @@ const cancelRide = async (userId: string, rideId: string, dto: CancelRideDto) =>
   assertRideTransition(ride.status, 'CANCELLED');
 
   const cancelledRide = await prisma.$transaction(async (tx) => {
-    // Pin both the status and the assigned driver we validated above.
     const result = await tx.ride.updateMany({
       where: { id: rideId, status: ride.status, driverProfileId: ride.driverProfileId },
       data: {
@@ -584,7 +464,6 @@ const cancelRide = async (userId: string, rideId: string, dto: CancelRideDto) =>
 
     if (result.count === 0) throw rideStateConflict();
 
-    // Release the driver back to the pool only if one was assigned
     if (ride.driverProfileId) {
       await tx.driverProfile.update({
         where: { id: ride.driverProfileId },
@@ -595,7 +474,6 @@ const cancelRide = async (userId: string, rideId: string, dto: CancelRideDto) =>
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
 
-  // Tell the other side of the ride (customer cancels -> driver is told, and vice versa).
   const cancelledByCustomer = ride.customerProfile.userId === userId;
   void announceRideChange({
     rideId,
@@ -611,15 +489,6 @@ const cancelRide = async (userId: string, rideId: string, dto: CancelRideDto) =>
   return cancelledRide;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Emergency escalation (shared by the SOS flows in support + safety)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Confirms the requester may raise an emergency on this ride: they must be its
- * customer, its assigned driver, or an ADMIN. Call this BEFORE creating alerts
- * or notifying anyone, so a request for someone else's ride has no side effects.
- */
 const assertCanRaiseEmergency = async (
   requester: { id: string; role: string },
   rideId: string,
@@ -648,11 +517,6 @@ const assertCanRaiseEmergency = async (
   return { id: ride.id, status: ride.status };
 };
 
-/**
- * Flips a ride to EMERGENCY if the state machine allows it from the status that
- * was read. Conditional write — a ride that changed state in the meantime is
- * left alone. Returns whether the ride was actually updated.
- */
 const escalateRideToEmergency = async (ride: {
   id: string;
   status: RideStatus;
@@ -666,22 +530,6 @@ const escalateRideToEmergency = async (ride: {
   return result.count > 0;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PRD 3.5: Trip Sharing
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Generate a one-time tracking token for a ride and persist it in Redis.
- *
- * Flow:
- *  1. Confirm the caller is the ride's customer or its assigned driver.
- *  2. Confirm the ride is in an active (non-terminal) state.
- *  3. Generate a UUID token, write it to Redis with a 24-hour TTL.
- *  4. Return the public tracking URL that can be shared.
- *
- * A read-only guest may later present this token to join the Socket.io room
- * without a driver or customer account.
- */
 const shareRide = async (
   userId: string,
   rideId: string,
@@ -717,16 +565,9 @@ const shareRide = async (
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Role-scoped ride views  —  GET /rides, GET /rides/:id
 //
-//   CUSTOMER → only rides whose customerProfile.userId === caller
-//   DRIVER   → only rides whose driverProfile.userId   === caller
-//   ADMIN    → every ride (optional ?userId= filter)
+
 //
-// Scoping is applied inside the WHERE clause, so a record outside the caller's
-// scope is indistinguishable from one that does not exist (404, no ID probing).
-// ─────────────────────────────────────────────────────────────────────────────
 
 const rideBaseSelect = {
   id: true,
@@ -762,7 +603,6 @@ const adminUserSelect = {
   select: { id: true, firstName: true, lastName: true, email: true, phone: true },
 } as const;
 
-/** What each role is allowed to see about the OTHER party on a ride. */
 const rideSelectFor = (role: string) => {
   if (role === 'ADMIN') {
     return {
@@ -800,7 +640,6 @@ const rideScopeFor = (viewer: RideViewer): Prisma.RideWhereInput => {
     case 'ADMIN':
       return {};
     default:
-      // Defence in depth: an unexpected role can never match any ride.
       throw new ForbiddenError('Your role cannot view rides.');
   }
 };
@@ -812,7 +651,7 @@ const listRides = async (viewer: RideViewer, query: ListRidesQuery) => {
     isDeleted: false,
     ...rideScopeFor(viewer),
     ...(status && { status }),
-    // ?userId= is an ADMIN-only filter; for everyone else it is ignored, never widening scope.
+
     ...(viewer.role === 'ADMIN' &&
       userId && {
         OR: [{ customerProfile: { userId } }, { driverProfile: { userId } }],
@@ -852,10 +691,6 @@ const getRide = async (viewer: RideViewer, rideId: string) => {
   return ride;
 };
 
-/**
- * PATCH /api/v1/rides/:id/admin-cancel  (ADMIN)
- * Force-cancels any non-terminal ride, frees the driver and notifies both parties.
- */
 const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) => {
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
@@ -866,13 +701,10 @@ const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) 
     throw new NotFoundError('Ride');
   }
 
-  // Terminal rides cannot be cancelled (completed fares / receipts must not be rewritten)
   if (ride.status === 'COMPLETED' || ride.status === 'CANCELLED') {
     throw new ConflictError(`Ride is already ${ride.status} and cannot be cancelled.`);
   }
 
-  // Update Ride status to CANCELLED, save the reason and release the driver — atomically.
-  // The status read above is pinned in the WHERE so a concurrent completion/cancel wins.
   const updatedRide = await prisma.$transaction(async (tx) => {
     const result = await tx.ride.updateMany({
       where: { id: rideId, status: ride.status },
@@ -889,7 +721,6 @@ const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) 
       );
     }
 
-    // If a driver was assigned, update their DriverProfile.isAvailable to true
     if (ride.driverProfileId) {
       await tx.driverProfile.update({
         where: { id: ride.driverProfileId },
@@ -900,7 +731,6 @@ const cancelRideByAdmin = async (rideId: string, payload: AdminCancelRideInput) 
     return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
   });
 
-  // Alert the ride room, the customer and (if assigned) the driver.
   NotificationService.emitRideStatus({
     rideId,
     status: 'CANCELLED',

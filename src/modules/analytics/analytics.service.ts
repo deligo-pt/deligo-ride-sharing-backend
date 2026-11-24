@@ -3,13 +3,12 @@ import { GetTrendsQuery, ExportReportQuery } from './analytics.validation';
 import { format, startOfDay, startOfWeek, startOfMonth } from 'date-fns';
 
 const getDashboardSummary = async () => {
-  // 1. Ride Volumes
   const rideCounts = await prisma.ride.groupBy({
     by: ['status'],
     _count: { id: true },
     where: {
-      status: { in: ['COMPLETED', 'CANCELLED', 'EMERGENCY'] }
-    }
+      status: { in: ['COMPLETED', 'CANCELLED', 'EMERGENCY'] },
+    },
   });
 
   const volumes = {
@@ -17,31 +16,28 @@ const getDashboardSummary = async () => {
     CANCELLED: 0,
     EMERGENCY: 0,
   };
-  rideCounts.forEach(r => {
+  rideCounts.forEach((r) => {
     volumes[r.status as keyof typeof volumes] = r._count.id;
   });
 
-  // 2. Financial Aggregates
   const financialAgg = await prisma.ride.aggregate({
     where: { status: 'COMPLETED' },
     _sum: { finalFare: true },
-    _count: { id: true }
+    _count: { id: true },
   });
 
   const totalRevenue = financialAgg._sum.finalFare ? Number(financialAgg._sum.finalFare) : 0;
   const completedRides = financialAgg._count.id;
-  const platformCommission = totalRevenue * 0.20; // Default 20%
-  const averageRideValue = completedRides > 0 ? (totalRevenue / completedRides) : 0;
+  const platformCommission = totalRevenue * 0.2;
+  const averageRideValue = completedRides > 0 ? totalRevenue / completedRides : 0;
 
-  // 3. Active Ecosystem
   const totalCustomers = await prisma.user.count({ where: { role: 'CUSTOMER' } });
-  
-  // verified driver profiles that are active
+
   const totalActiveDrivers = await prisma.driverProfile.count({
-    where: { 
+    where: {
       kycStatus: 'APPROVED',
-      isAvailable: true 
-    }
+      isAvailable: true,
+    },
   });
 
   return {
@@ -53,8 +49,8 @@ const getDashboardSummary = async () => {
     },
     ecosystem: {
       totalCustomers,
-      totalActiveDrivers
-    }
+      totalActiveDrivers,
+    },
   };
 };
 
@@ -66,18 +62,18 @@ const getTrends = async (query: GetTrendsQuery) => {
       status: 'COMPLETED',
       createdAt: {
         gte: new Date(startDate),
-        lte: new Date(endDate)
-      }
+        lte: new Date(endDate),
+      },
     },
-    select: { createdAt: true, finalFare: true }
+    select: { createdAt: true, finalFare: true },
   });
 
-  const trendMap = new Map<string, { revenue: number, count: number }>();
+  const trendMap = new Map<string, { revenue: number; count: number }>();
 
-  rides.forEach(ride => {
+  rides.forEach((ride) => {
     let dateKey = '';
     const date = ride.createdAt;
-    
+
     if (interval === 'DAILY') {
       dateKey = format(startOfDay(date), 'yyyy-MM-dd');
     } else if (interval === 'WEEKLY') {
@@ -96,10 +92,9 @@ const getTrends = async (query: GetTrendsQuery) => {
   const trends = Array.from(trendMap.entries()).map(([period, data]) => ({
     period,
     revenue: Number(data.revenue.toFixed(2)),
-    rides: data.count
+    rides: data.count,
   }));
 
-  // Sort chronologically
   trends.sort((a, b) => a.period.localeCompare(b.period));
 
   return trends;
@@ -112,22 +107,19 @@ const generateCsvReport = async (query: ExportReportQuery): Promise<string> => {
     const rides = await prisma.ride.findMany({
       where: { status: 'COMPLETED' },
       select: { id: true, createdAt: true, finalFare: true, distanceKm: true, status: true },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     const headers = ['Ride ID', 'Date', 'Status', 'Distance (km)', 'Final Fare (USD)'];
-    const rows = rides.map(r => [
+    const rows = rides.map((r) => [
       r.id,
       r.createdAt.toISOString(),
       r.status,
       r.distanceKm ? Number(r.distanceKm).toFixed(2) : '0',
-      r.finalFare ? Number(r.finalFare).toFixed(2) : '0'
+      r.finalFare ? Number(r.finalFare).toFixed(2) : '0',
     ]);
 
-    return [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\\n');
+    return [headers.join(','), ...rows.map((row) => row.join(','))].join('\\n');
   }
 
   if (reportType === 'DRIVERS') {
@@ -135,23 +127,20 @@ const generateCsvReport = async (query: ExportReportQuery): Promise<string> => {
       include: {
         user: { select: { email: true, firstName: true, lastName: true } },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     const headers = ['Driver ID', 'Name', 'Email', 'KYC Status', 'Total Rides', 'Avg Rating'];
-    const rows = drivers.map(d => [
+    const rows = drivers.map((d) => [
       d.id,
       `${d.user?.firstName || ''} ${d.user?.lastName || ''}`.trim() || 'Unknown',
       d.user?.email || 'N/A',
       d.kycStatus,
       d.totalRides.toString(),
-      d.averageRating.toString()
+      d.averageRating.toString(),
     ]);
 
-    return [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\\n');
+    return [headers.join(','), ...rows.map((row) => row.join(','))].join('\\n');
   }
 
   return 'No Data\\n';

@@ -22,8 +22,6 @@ interface ModuleRoute {
   middlewares?: RequestHandler[];
 }
 
-// Every module is mounted ONCE at its resource prefix. Access control lives on the
-// routes themselves (authenticate + authorize(...)) inside each <module>.route.ts.
 const moduleRoutes: ModuleRoute[] = [
   { path: '/auth', route: authRouter },
   { path: '/users', route: userRouter },

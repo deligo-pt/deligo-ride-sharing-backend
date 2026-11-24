@@ -1,31 +1,16 @@
 import { z } from 'zod';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fleet Manager Onboarding Validation Schemas (Steps 3–7)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Step 3: Business Details
- */
 const businessDetailsSchema = z.object({
   businessName: z.string().trim().min(1, 'Business name is required'),
   legalBusinessName: z.string().trim().optional(),
   licenseNumber: z.string().trim().min(1, 'License number is required'),
   nifNumber: z.string().trim().min(1, 'NIF number is required'),
-  businessEmail: z
-    .string()
-    .trim()
-    .email('Invalid business email')
-    .optional()
-    .or(z.literal('')),
+  businessEmail: z.string().trim().email('Invalid business email').optional().or(z.literal('')),
   businessPhone: z.string().trim().optional(),
 });
 
 export type BusinessDetailsInput = z.infer<typeof businessDetailsSchema>;
 
-/**
- * Step 4: Location Details
- */
 const locationDetailsSchema = z.object({
   latitude: z
     .number()
@@ -45,9 +30,6 @@ const locationDetailsSchema = z.object({
 
 export type LocationDetailsInput = z.infer<typeof locationDetailsSchema>;
 
-/**
- * Step 5: Bank Details
- */
 const bankDetailsSchema = z.object({
   accountHolderName: z.string().trim().min(1, 'Account holder name is required'),
   iban: z
@@ -61,9 +43,6 @@ const bankDetailsSchema = z.object({
 
 export type BankDetailsInput = z.infer<typeof bankDetailsSchema>;
 
-/**
- * Step 6: Verification Documents
- */
 const documentsSchema = z
   .object({
     photoUrl: z.string().url('Invalid photo URL').optional(),
@@ -74,16 +53,12 @@ const documentsSchema = z
     activityDocumentUrl: z.string().url('Invalid activity document URL').optional(),
     ibanProofUrl: z.string().url('Invalid IBAN proof URL').optional(),
   })
-  .refine(
-    (data) => Object.values(data).some((val) => val !== undefined && val !== ''),
-    { message: 'At least one document URL must be provided' },
-  );
+  .refine((data) => Object.values(data).some((val) => val !== undefined && val !== ''), {
+    message: 'At least one document URL must be provided',
+  });
 
 export type DocumentsInput = z.infer<typeof documentsSchema>;
 
-/**
- * Step 7: Declaration, Signer & Legal Acceptance (Submit)
- */
 const submitOnboardingSchema = z
   .object({
     signerType: z.enum(['MYSELF', 'AUTHORIZED_REPRESENTATIVE']),
@@ -104,16 +79,13 @@ const submitOnboardingSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          'Representative name is required when signerType is AUTHORIZED_REPRESENTATIVE',
+        message: 'Representative name is required when signerType is AUTHORIZED_REPRESENTATIVE',
         path: ['representativeName'],
       });
     }
   });
 
 export type SubmitOnboardingInput = z.infer<typeof submitOnboardingSchema>;
-
-// ── Grouped validation (consumed by validateRequest in fleet.route.ts)
 
 export const FleetValidation = {
   businessDetails: { body: businessDetailsSchema },
