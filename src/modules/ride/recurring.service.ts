@@ -4,6 +4,7 @@ import { getMultiStopRouteData } from '../../utils/map.service';
 import { PricingService } from './pricing.service';
 import type { RecurringProfileDto } from './ride.validation';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { NEXT_OCCURRENCE_SCAN_DAYS } from './recurring.constant';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Recurring Ride Factory Engine  —  PRD 3.9
@@ -24,10 +25,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/erro
  * Validates that startDate < endDate and that the schedule covers at least
  * one future occurrence.
  */
-async function createRecurringProfile(
-  userId: string,
-  dto: RecurringProfileDto,
-) {
+const createRecurringProfile = async (userId: string, dto: RecurringProfileDto) => {
   if (dto.endDate <= dto.startDate) {
     throw new BadRequestError('endDate must be after startDate.');
   }
@@ -39,33 +37,33 @@ async function createRecurringProfile(
   return prisma.recurringRideProfile.create({
     data: {
       userId,
-      vehicleType:   dto.vehicleType,
+      vehicleType: dto.vehicleType,
       pickupAddress: dto.pickupAddress,
-      pickupLat:     dto.pickupLat,
-      pickupLng:     dto.pickupLng,
+      pickupLat: dto.pickupLat,
+      pickupLng: dto.pickupLng,
       dropoffAddress: dto.dropoffAddress,
-      dropoffLat:    dto.dropoffLat,
-      dropoffLng:    dto.dropoffLng,
-      daysOfWeek:    dto.daysOfWeek,
-      timeOfDay:     dto.timeOfDay,
-      startDate:     dto.startDate,
-      endDate:       dto.endDate,
-      isActive:      true,
+      dropoffLat: dto.dropoffLat,
+      dropoffLng: dto.dropoffLng,
+      daysOfWeek: dto.daysOfWeek,
+      timeOfDay: dto.timeOfDay,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      isActive: true,
     },
   });
-}
+};
 
 /**
  * GET /api/v1/rides/recurring
  *
  * Returns all recurring profiles for the authenticated customer.
  */
-async function getMyRecurringProfiles(userId: string) {
+const getMyRecurringProfiles = async (userId: string) => {
   return prisma.recurringRideProfile.findMany({
-    where:   { userId },
+    where: { userId },
     orderBy: { createdAt: 'desc' },
   });
-}
+};
 
 /**
  * DELETE /api/v1/rides/recurring/:id
@@ -73,7 +71,7 @@ async function getMyRecurringProfiles(userId: string) {
  * Soft-deactivates a profile (sets isActive = false).
  * Only the owner may deactivate their own profile.
  */
-async function deactivateRecurringProfile(userId: string, profileId: string) {
+const deactivateRecurringProfile = async (userId: string, profileId: string) => {
   const profile = await prisma.recurringRideProfile.findUnique({
     where: { id: profileId },
     select: { id: true, userId: true, isActive: true },
@@ -85,9 +83,9 @@ async function deactivateRecurringProfile(userId: string, profileId: string) {
 
   return prisma.recurringRideProfile.update({
     where: { id: profileId },
-    data:  { isActive: false },
+    data: { isActive: false },
   });
-}
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Factory Engine
@@ -102,17 +100,17 @@ async function deactivateRecurringProfile(userId: string, profileId: string) {
  * @returns  A Date in the future, or null if none falls within the profile's
  *           active window.
  */
-function computeNextOccurrence(
+const computeNextOccurrence = (
   daysOfWeek: number[],
   timeOfDay: string,
   startDate: Date,
   endDate: Date,
-): Date | null {
+): Date | null => {
   const [hours, minutes] = timeOfDay.split(':').map(Number);
   const now = new Date();
 
-  // Scan up to 8 days ahead to find the next matching weekday
-  for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
+  // Scan up to 8 days ahead (today + NEXT_OCCURRENCE_SCAN_DAYS) to find the next matching weekday
+  for (let dayOffset = 0; dayOffset <= NEXT_OCCURRENCE_SCAN_DAYS; dayOffset++) {
     const candidate = new Date(now);
     candidate.setUTCDate(now.getUTCDate() + dayOffset);
     candidate.setUTCHours(hours, minutes, 0, 0);
@@ -121,24 +119,24 @@ function computeNextOccurrence(
     const isoDay = candidate.getUTCDay() === 0 ? 7 : candidate.getUTCDay();
 
     if (!daysOfWeek.includes(isoDay)) continue;
-    if (candidate <= now) continue;           // already passed today
+    if (candidate <= now) continue; // already passed today
     if (candidate < startDate) continue;
-    if (candidate > endDate) return null;     // beyond profile window
+    if (candidate > endDate) return null; // beyond profile window
 
     return candidate;
   }
 
   return null;
-}
+};
 
 /**
  * Check whether a SCHEDULED Ride already exists for this profile and exact
  * scheduled timestamp (prevents double-minting on repeated sweeps).
  */
-async function rideAlreadyExists(
+const rideAlreadyExists = async (
   customerProfileId: string,
   scheduledAt: Date,
-): Promise<boolean> {
+): Promise<boolean> => {
   const existing = await prisma.ride.findFirst({
     where: {
       customerId: customerProfileId,
@@ -148,7 +146,7 @@ async function rideAlreadyExists(
     select: { id: true },
   });
   return existing !== null;
-}
+};
 
 /**
  * evaluateRecurringProfiles()
@@ -167,19 +165,19 @@ async function rideAlreadyExists(
  *
  * Returns a summary object for observability.
  */
-async function evaluateRecurringProfiles(): Promise<{
+const evaluateRecurringProfiles = async (): Promise<{
   evaluated: number;
   scheduled: number;
   skipped: number;
   errors: number;
-}> {
+}> => {
   const profiles = await prisma.recurringRideProfile.findMany({
     where: { isActive: true, endDate: { gte: new Date() } },
   });
 
   let scheduled = 0;
-  let skipped   = 0;
-  let errors    = 0;
+  let skipped = 0;
+  let errors = 0;
 
   for (const profile of profiles) {
     try {
@@ -198,7 +196,7 @@ async function evaluateRecurringProfiles(): Promise<{
 
       // 2. Resolve CustomerProfile.id
       const customerProfile = await prisma.customerProfile.findUnique({
-        where:  { userId: profile.userId },
+        where: { userId: profile.userId },
         select: { id: true },
       });
 
@@ -217,7 +215,7 @@ async function evaluateRecurringProfiles(): Promise<{
 
       // 4. Route data
       const routeData = await getMultiStopRouteData([
-        { lat: profile.pickupLat,  lng: profile.pickupLng  },
+        { lat: profile.pickupLat, lng: profile.pickupLng },
         { lat: profile.dropoffLat, lng: profile.dropoffLng },
       ]);
       const estimatedDistance = Math.round((routeData.distanceMeters / 1_000) * 100) / 100;
@@ -235,18 +233,18 @@ async function evaluateRecurringProfiles(): Promise<{
 
       const ride = await prisma.ride.create({
         data: {
-          customerId:       customerProfile.id,
-          vehicleType:      profile.vehicleType,
-          pickupAddress:    profile.pickupAddress,
-          pickupLatitude:   profile.pickupLat,
-          pickupLongitude:  profile.pickupLng,
-          dropoffAddress:   profile.dropoffAddress,
-          dropoffLatitude:  profile.dropoffLat,
+          customerId: customerProfile.id,
+          vehicleType: profile.vehicleType,
+          pickupAddress: profile.pickupAddress,
+          pickupLatitude: profile.pickupLat,
+          pickupLongitude: profile.pickupLng,
+          dropoffAddress: profile.dropoffAddress,
+          dropoffLatitude: profile.dropoffLat,
           dropoffLongitude: profile.dropoffLng,
           estimatedFare,
           estimatedDistance,
           estimatedDuration,
-          status:      'SCHEDULED',
+          status: 'SCHEDULED',
           scheduledAt: nextAt,
         },
       });
@@ -256,7 +254,7 @@ async function evaluateRecurringProfiles(): Promise<{
 
       console.info(
         `[RecurringEngine] ✅ Minted ride ${ride.id} for profile ${profile.id} ` +
-        `→ scheduledAt=${nextAt.toISOString()}`,
+          `→ scheduledAt=${nextAt.toISOString()}`,
       );
 
       scheduled++;
@@ -267,7 +265,7 @@ async function evaluateRecurringProfiles(): Promise<{
   }
 
   return { evaluated: profiles.length, scheduled, skipped, errors };
-}
+};
 
 export const RecurringService = {
   createRecurringProfile,

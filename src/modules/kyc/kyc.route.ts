@@ -3,7 +3,8 @@ import { authenticate, authorize } from '../../middlewares/auth';
 import { kycUpload } from '../../middlewares/uploadMiddleware';
 import { validateRequest } from '../../middlewares/validateRequest';
 import { KycController } from './kyc.controller';
-import { KycValidation, REQUIRED_KYC_DOCUMENTS } from './kyc.validation';
+import { KycValidation } from './kyc.validation';
+import { REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 
 // Mounted at: /api/v1/kyc (see src/routes/index.ts)
 const router: Router = Router();

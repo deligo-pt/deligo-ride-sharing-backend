@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import { config } from '../../config';
-import { AuthTokens, ClientInfo } from './auth.service';
-
-export const REFRESH_COOKIE_NAME = 'refreshToken';
-export const REFRESH_COOKIE_PATH = '/api/v1/auth';
+import type { AuthTokens, ClientInfo } from './auth.interface';
+import {
+  MOBILE_PLATFORMS,
+  NATIVE_APP_USER_AGENT,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+} from './auth.constant';
 
 export function getClientInfo(req: Request): ClientInfo {
   const forwardedFor = req.headers['x-forwarded-for'];
@@ -39,9 +42,6 @@ export function clearRefreshTokenCookie(res: Response): void {
     path: REFRESH_COOKIE_PATH,
   });
 }
-
-const MOBILE_PLATFORMS = new Set(['mobile', 'android', 'ios']);
-const NATIVE_APP_USER_AGENT = /\b(okhttp|dart|cfnetwork|expo|reactnative)\b/i;
 
 export function isMobileClient(req: Request): boolean {
   const header = req.headers['x-client-platform'] ?? req.headers['x-platform'];

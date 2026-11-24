@@ -1,20 +1,10 @@
 import { KycService } from './kyc.service';
-import {
-  BulkExpiryDates,
-  REQUIRED_DOCUMENT_TYPES,
-  REQUIRED_KYC_DOCUMENTS,
-  ReviewDocumentInput,
-  ReviewKycInput,
-} from './kyc.validation';
+import { BulkExpiryDates, ReviewDocumentInput, ReviewKycInput } from './kyc.validation';
+import { REQUIRED_DOCUMENT_TYPES, REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 import { BadRequestError } from '../../utils/errors';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// KYC Controller
-// Role checks live in kyc.route.ts (authorize); request validation in kyc.validation.ts.
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** GET /kyc/requirements — public: the full list of required KYC documents. */
 const getKycRequirements = catchAsync((_req, res) => {

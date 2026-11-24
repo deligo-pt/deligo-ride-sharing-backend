@@ -19,7 +19,7 @@ import { BadRequestError, NotFoundError } from '../../utils/errors';
  *  3. Emit `sos_alert` over Socket.io to the `admin_security_desk` room.
  *  4. Fetch the initiator's EmergencyContact records and SMS each one.
  */
-async function triggerSos(userId: string, role: string, dto: TriggerSosDto) {
+const triggerSos = async (userId: string, role: string, dto: TriggerSosDto) => {
   // 1. Fetch initiator profile
   const initiator = await prisma.user.findUnique({
     where: { id: userId },
@@ -64,7 +64,9 @@ async function triggerSos(userId: string, role: string, dto: TriggerSosDto) {
   });
 
   // 3. If rideId supplied → flip Ride to EMERGENCY (state-machine + conditional write)
-  const rideStatusUpdated = emergencyRide ? await RideService.escalateRideToEmergency(emergencyRide) : false;
+  const rideStatusUpdated = emergencyRide
+    ? await RideService.escalateRideToEmergency(emergencyRide)
+    : false;
 
   // 4. WebSocket → broadcast to admin security desk room
   const io = NotificationService.getIo();
@@ -105,7 +107,7 @@ async function triggerSos(userId: string, role: string, dto: TriggerSosDto) {
     smsSentTo: initiator.emergencyContacts.length,
     rideStatusUpdated,
   };
-}
+};
 
 // ── Resolve / Dismiss Alert ───────────────────────────────────────────────────
 
@@ -115,11 +117,7 @@ async function triggerSos(userId: string, role: string, dto: TriggerSosDto) {
  * Admin-only. Sets status to RESOLVED or FALSE_ALARM and records the admin's ID.
  * The ride status is intentionally NOT auto-reset — the admin handles it manually.
  */
-async function resolveAlert(
-  alertId: string,
-  adminId: string,
-  dto: ResolveAlertDto,
-) {
+const resolveAlert = async (alertId: string, adminId: string, dto: ResolveAlertDto) => {
   const existing = await prisma.emergencyAlert.findUnique({
     where: { id: alertId },
     select: { id: true, status: true },
@@ -127,7 +125,8 @@ async function resolveAlert(
 
   if (!existing) throw new NotFoundError('Emergency alert');
 
-  if (existing.status !== 'ACTIVE') throw new BadRequestError('This alert has already been resolved or dismissed.');
+  if (existing.status !== 'ACTIVE')
+    throw new BadRequestError('This alert has already been resolved or dismissed.');
 
   return prisma.emergencyAlert.update({
     where: { id: alertId },
@@ -145,7 +144,7 @@ async function resolveAlert(
       },
     },
   });
-}
+};
 
 // ── Active Alerts Query ───────────────────────────────────────────────────────
 
@@ -154,7 +153,7 @@ async function resolveAlert(
  *
  * Admin-only. Returns all ACTIVE EmergencyAlerts ordered newest first.
  */
-async function getActiveAlerts() {
+const getActiveAlerts = async () => {
   return prisma.emergencyAlert.findMany({
     where: { status: 'ACTIVE' },
     orderBy: { createdAt: 'desc' },
@@ -170,7 +169,7 @@ async function getActiveAlerts() {
       },
     },
   });
-}
+};
 
 export const SafetyService = {
   triggerSos,

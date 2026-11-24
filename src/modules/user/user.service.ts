@@ -13,7 +13,7 @@ import type { ListUsersQuery, UpdateUserStatusInput } from './user.validation';
  * Save (or replace) the FCM push token for a user.
  * Called by the mobile app on login or when the OS issues a new token.
  */
-async function saveFcmToken(userId: string, fcmToken: string): Promise<{ message: string }> {
+const saveFcmToken = async (userId: string, fcmToken: string): Promise<{ message: string }> => {
   // A device token belongs to ONE account. Clear it from every other user first, so two accounts that
   // sign in on the same phone never receive each other's push notifications.
   await prisma.$transaction([
@@ -29,7 +29,7 @@ async function saveFcmToken(userId: string, fcmToken: string): Promise<{ message
 
   console.info(`[FCM] Token saved for userId=${userId}`);
   return { message: 'FCM token saved successfully.' };
-}
+};
 
 // ─── GET /users ─────────────────────────────────────────────────────────
 // Returns a paginated list of users, optionally filtered by role.

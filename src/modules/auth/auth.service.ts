@@ -21,7 +21,6 @@ import {
   AppError,
 } from '../../utils/errors';
 import {
-  InitiateSignupInput,
   LoginInput,
   ResendOtpInput,
   VerifyOtpInput,
@@ -31,111 +30,48 @@ import {
   CreateAdminInput,
   SetAdminPasswordInput,
 } from './auth.validation';
-
-// Customer signup passes { email | contactNumber }; driver / fleet signup is the email-only subset.
-type SignupInput = InitiateSignupInput;
-
-// OTP messages have no recipient name or language to personalise with: customers sign up with only a
-// contact + password, so the schema default language (EN) is used.
-const DEFAULT_LANGUAGE = 'EN' as const;
-
-interface SignupRedisSession {
-  payload: {
-    email?: string;
-    contactNumber?: string; // normalized E.164 (+351...)
-    passwordHash: string;
-    referralCode: string | null;
-    referrerId: string | null;
-    role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER';
-  };
-  otp: {
-    codeHash: string;
-    channel: 'EMAIL' | 'PHONE';
-    expiresAt: number;
-  };
-  resendCount: number;
-  lastSentAt: number;
-}
-
-export interface ClientInfo {
-  userAgent?: string;
-  ipAddress?: string;
-}
-
-export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-}
-
-export interface SanitizedUser {
-  id: string;
-  email: string | null;
-  phone: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  role: string;
-  status: string;
-  profilePicture: string | null;
-  preferredLanguage: string | null;
-  referralCode: string;
-  isEmailVerified: boolean;
-  isPhoneVerified: boolean;
-  createdAt: Date;
-}
-
-export interface SocialUserProfile {
-  provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE';
-  providerAccountId: string;
-  email: string | null;
-  isEmailVerified: boolean;
-  firstName: string | null;
-  lastName: string | null;
-  profilePicture: string | null;
-}
-
-export interface SocialAuthOptions {
-  referralCode?: string | null;
-  preferredLanguage?: 'EN' | 'PT';
-  rememberMe?: boolean;
-}
-
-export interface GooglePayload {
-  sub: string;
-  email: string;
-  email_verified: boolean;
-  name?: string;
-  given_name?: string;
-  family_name?: string;
-  picture?: string;
-}
-
-const DUMMY_HASH = '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/HS.iK8.';
-const EXTERNAL_API_TIMEOUT_MS = 5000;
-const MAX_OTP_ATTEMPTS = 5;
-const MAX_OTP_RESENDS = 3;
-const OTP_RESEND_COOLDOWN_MS = 60_000;
-const INVITE_TOKEN_TTL_SECONDS = 86400;
+import type {
+  SignupInput,
+  SignupRedisSession,
+  ClientInfo,
+  AuthTokens,
+  SanitizedUser,
+  SocialUserProfile,
+  SocialAuthOptions,
+  GooglePayload,
+} from './auth.interface';
+import {
+  DEFAULT_LANGUAGE,
+  DUMMY_HASH,
+  EXTERNAL_API_TIMEOUT_MS,
+  MAX_OTP_ATTEMPTS,
+  MAX_OTP_RESENDS,
+  OTP_RESEND_COOLDOWN_MS,
+  INVITE_TOKEN_TTL_SECONDS,
+  DEFAULT_SESSION_DAYS,
+  REMEMBER_ME_SESSION_DAYS,
+  ACCESS_TOKEN_TTL_SECONDS,
+} from './auth.constant';
 
 export const googleAuthClient = new OAuth2Client();
 const APPLE_JWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 
-function hashSha256(value: string): string {
+const hashSha256 = (value: string): string => {
   return crypto.createHash('sha256').update(value).digest('hex');
-}
+};
 
-function signJwt(payload: object, secret: string, expiresIn: string | number): string {
+const signJwt = (payload: object, secret: string, expiresIn: string | number): string => {
   const options: jwt.SignOptions = {
     expiresIn: expiresIn as unknown as jwt.SignOptions['expiresIn'],
   };
   return jwt.sign(payload, secret, options);
-}
+};
 
-function maskTarget(
+const maskTarget = (
   channel: 'EMAIL' | 'PHONE',
   email?: string | null,
   phone?: string | null,
-): string {
+): string => {
   if (channel === 'EMAIL' && email) {
     const [localPart, domain] = email.split('@');
     if (!domain) return email;
@@ -147,9 +83,9 @@ function maskTarget(
     return phone.slice(0, 3) + '***' + phone.slice(-2);
   }
   return '***';
-}
+};
 
-function sanitizeUser(user: {
+const sanitizeUser = (user: {
   id: string;
   email: string | null;
   phone: string | null;
@@ -163,7 +99,7 @@ function sanitizeUser(user: {
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   createdAt: Date;
-}): SanitizedUser {
+}): SanitizedUser => {
   return {
     id: user.id,
     email: user.email,
@@ -179,9 +115,9 @@ function sanitizeUser(user: {
     isPhoneVerified: user.isPhoneVerified,
     createdAt: user.createdAt,
   };
-}
+};
 
-async function generateUniqueReferralCode(): Promise<string> {
+const generateUniqueReferralCode = async (): Promise<string> => {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   for (let attempt = 0; attempt < 5; attempt++) {
     let code = 'DL';
@@ -194,9 +130,9 @@ async function generateUniqueReferralCode(): Promise<string> {
     }
   }
   return `DL${Date.now().toString(36).toUpperCase().slice(-6)}`;
-}
+};
 
-async function issueSessionAndTokens(
+const issueSessionAndTokens = async (
   user: {
     id: string;
     email: string | null;
@@ -214,8 +150,8 @@ async function issueSessionAndTokens(
   },
   rememberMe: boolean,
   clientInfo: ClientInfo,
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
-  const durationDays = rememberMe ? 30 : 1;
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
+  const durationDays = rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS;
   const refreshExpiresInStr = rememberMe
     ? config.jwt.refreshExpiresInRemember || '30d'
     : config.jwt.refreshExpiresInDefault || '1d';
@@ -266,17 +202,17 @@ async function issueSessionAndTokens(
     tokens: {
       accessToken,
       refreshToken,
-      expiresIn: 900,
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
     },
   };
-}
+};
 
-async function dispatchOtp(
+const dispatchOtp = async (
   channel: 'EMAIL' | 'PHONE',
   otp: string,
   targetEmail: string | null,
   targetPhone: string | null,
-): Promise<void> {
+): Promise<void> => {
   const expiryMinutes = Math.max(1, Math.round(config.otp.expiresInSeconds / 60));
 
   if (channel === 'EMAIL' && targetEmail) {
@@ -296,14 +232,14 @@ async function dispatchOtp(
       `Your Deligo verification code is: ${otp}. Valid for ${expiryMinutes} minutes.`,
     );
   }
-}
+};
 
-function sendWelcomeEmailAsync(user: {
+const sendWelcomeEmailAsync = (user: {
   email: string | null;
   firstName: string | null;
   referralCode: string;
   preferredLanguage: string | null;
-}): void {
+}): void => {
   if (!user.email) return;
 
   void sendEmail({
@@ -318,9 +254,9 @@ function sendWelcomeEmailAsync(user: {
   }).catch((err: unknown) => {
     console.error('[AuthService] Failed to send welcome email:', err);
   });
-}
+};
 
-async function verifyGoogleIdToken(idToken: string): Promise<GooglePayload> {
+const verifyGoogleIdToken = async (idToken: string): Promise<GooglePayload> => {
   try {
     const audiences = config.google.audiences;
     if (!audiences || audiences.length === 0) {
@@ -355,9 +291,9 @@ async function verifyGoogleIdToken(idToken: string): Promise<GooglePayload> {
     const message = err instanceof Error ? err.message : 'Google token verification failed';
     throw new UnauthorizedError(`Invalid Google ID token: ${message}`);
   }
-}
+};
 
-async function initiateSignup(
+const initiateSignup = async (
   input: SignupInput,
   role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER' = 'CUSTOMER',
 ): Promise<{
@@ -365,7 +301,7 @@ async function initiateSignup(
   channel: 'EMAIL' | 'PHONE';
   maskedTarget: string;
   expiresIn: number;
-}> {
+}> => {
   const email = input.email;
   const contactNumber = input.contactNumber;
   const channel: 'EMAIL' | 'PHONE' = email ? 'EMAIL' : 'PHONE';
@@ -433,13 +369,13 @@ async function initiateSignup(
     maskedTarget: maskTarget(channel, email, contactNumber),
     expiresIn: config.otp.expiresInSeconds,
   };
-}
+};
 
 /** A client-supplied email / contactNumber (optional) must belong to the signup session. */
-function assertSessionContact(
+const assertSessionContact = (
   session: SignupRedisSession,
   provided: { email?: string; contactNumber?: string },
-): void {
+): void => {
   if (
     (provided.email !== undefined && provided.email !== session.payload.email) ||
     (provided.contactNumber !== undefined &&
@@ -447,14 +383,16 @@ function assertSessionContact(
   ) {
     throw new BadRequestError('The provided contact does not match this signup session');
   }
-}
+};
 
-async function resendSignupOtp(input: ResendOtpInput): Promise<{
+const resendSignupOtp = async (
+  input: ResendOtpInput,
+): Promise<{
   signupSessionId: string;
   channel: 'EMAIL' | 'PHONE';
   maskedTarget: string;
   expiresIn: number;
-}> {
+}> => {
   const redisKey = `signup:session:${input.signupSessionId}`;
   const attemptsKey = `signup:otp:attempts:${input.signupSessionId}`;
   const rawData = await redis.get(redisKey);
@@ -465,7 +403,6 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
 
   const session = JSON.parse(rawData) as SignupRedisSession;
   assertSessionContact(session, input);
-  // The session holds exactly one contact, so the OTP always goes to the channel it was created for.
   const targetChannel = session.otp.channel;
 
   const now = Date.now();
@@ -516,12 +453,12 @@ async function resendSignupOtp(input: ResendOtpInput): Promise<{
     maskedTarget: maskTarget(targetChannel, session.payload.email, session.payload.contactNumber),
     expiresIn: config.otp.expiresInSeconds,
   };
-}
+};
 
-async function verifySignupOtp(
+const verifySignupOtp = async (
   input: VerifyOtpInput,
   clientInfo: ClientInfo,
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   const redisKey = `signup:session:${input.signupSessionId}`;
   const attemptsKey = `signup:otp:attempts:${input.signupSessionId}`;
   const rawData = await redis.get(redisKey);
@@ -635,14 +572,13 @@ async function verifySignupOtp(
   sendWelcomeEmailAsync(createdUser);
 
   return issueSessionAndTokens(createdUser, false, clientInfo);
-}
+};
 
-async function login(
+const login = async (
   input: LoginInput,
   clientInfo: ClientInfo,
   allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
-  // email / contactNumber are normalized by the schema (lowercased email, E.164 +351 phone).
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   const user = await prisma.user.findFirst({
     where: {
       ...(input.email ? { email: input.email } : { phone: input.contactNumber }),
@@ -687,13 +623,13 @@ async function login(
   }
 
   return issueSessionAndTokens(user, Boolean(input.rememberMe), clientInfo);
-}
+};
 
-async function handleSocialAuth(
+const handleSocialAuth = async (
   profile: SocialUserProfile,
   options: SocialAuthOptions,
   clientInfo: ClientInfo,
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   const rememberMe = options.rememberMe ?? true;
 
   const existingAccount = await prisma.account.findUnique({
@@ -900,12 +836,12 @@ async function handleSocialAuth(
   sendWelcomeEmailAsync(newUser);
 
   return issueSessionAndTokens(newUser, rememberMe, clientInfo);
-}
+};
 
-async function googleLogin(
+const googleLogin = async (
   input: GoogleLoginInput,
   clientInfo: ClientInfo,
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   const googlePayload = await verifyGoogleIdToken(input.idToken);
   const firstName =
     googlePayload.given_name || (googlePayload.name ? googlePayload.name.split(' ')[0] : 'User');
@@ -932,12 +868,12 @@ async function googleLogin(
     },
     clientInfo,
   );
-}
+};
 
-async function facebookLogin(
+const facebookLogin = async (
   input: FacebookLoginInput,
   clientInfo: ClientInfo,
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   const appId = config.facebook.appId;
   const appSecret = config.facebook.appSecret;
 
@@ -1037,12 +973,12 @@ async function facebookLogin(
     },
     clientInfo,
   );
-}
+};
 
-async function appleLogin(
+const appleLogin = async (
   input: AppleLoginInput,
   clientInfo: ClientInfo,
-): Promise<{ user: SanitizedUser; tokens: AuthTokens }> {
+): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   let sub: string;
   let email: string | null = null;
   let isEmailVerified = false;
@@ -1127,11 +1063,11 @@ async function appleLogin(
     },
     clientInfo,
   );
-}
+};
 
-async function refreshAccessToken(
+const refreshAccessToken = async (
   refreshToken: string,
-): Promise<{ tokens: AuthTokens; rememberMe: boolean }> {
+): Promise<{ tokens: AuthTokens; rememberMe: boolean }> => {
   if (!refreshToken) {
     throw new UnauthorizedError('Refresh token is required');
   }
@@ -1166,7 +1102,7 @@ async function refreshAccessToken(
     throw new UnauthorizedError('Invalid refresh token signature');
   }
 
-  const durationDays = session.rememberMe ? 30 : 1;
+  const durationDays = session.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS;
   const newExpiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
   const refreshExpiresInStr = session.rememberMe
     ? config.jwt.refreshExpiresInRemember || '30d'
@@ -1232,12 +1168,12 @@ async function refreshAccessToken(
     tokens: {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      expiresIn: 900,
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
     },
   };
-}
+};
 
-async function revokeAllUserSessions(userId: string): Promise<void> {
+const revokeAllUserSessions = async (userId: string): Promise<void> => {
   await prisma.session.updateMany({
     where: { userId, isRevoked: false },
     data: { isRevoked: true },
@@ -1250,9 +1186,9 @@ async function revokeAllUserSessions(userId: string): Promise<void> {
   }
 
   disconnectUserSockets(userId);
-}
+};
 
-async function logoutUser(options: {
+const logoutUser = async (options: {
   sessionId?: string;
   jti?: string;
   exp?: number;
@@ -1262,7 +1198,7 @@ async function logoutUser(options: {
   fcmToken?: string;
   /** Default true. false keeps the user's push token (e.g. "sign out of this browser only"). */
   clearFcmToken?: boolean;
-}): Promise<{ message: string }> {
+}): Promise<{ message: string }> => {
   let revokedSessionId = options.sessionId;
   let ownerId = options.userId;
 
@@ -1290,7 +1226,6 @@ async function logoutUser(options: {
     });
   }
 
-  // Stop push notifications reaching a signed-out device (best-effort, never blocks logout).
   if (ownerId && options.clearFcmToken !== false) {
     try {
       await prisma.user.updateMany({
@@ -1313,17 +1248,17 @@ async function logoutUser(options: {
 
   if (options.jti) {
     const nowSec = Math.floor(Date.now() / 1000);
-    const remainingSec = options.exp ? Math.max(1, options.exp - nowSec) : 900;
+    const remainingSec = options.exp ? Math.max(1, options.exp - nowSec) : ACCESS_TOKEN_TTL_SECONDS;
     await redis.set(`blacklist:token:${options.jti}`, 'revoked', 'EX', remainingSec);
   }
 
   return { message: 'Successfully logged out' };
-}
+};
 
-async function createAdmin(
+const createAdmin = async (
   input: CreateAdminInput,
   creator: { id: string; role: string },
-): Promise<{ user: SanitizedUser; message: string }> {
+): Promise<{ user: SanitizedUser; message: string }> => {
   if (input.role === 'SUPER_ADMIN') {
     const creatorUser = await prisma.user.findUnique({
       where: { id: creator.id },
@@ -1430,9 +1365,9 @@ async function createAdmin(
     user: sanitizeUser(createdAdmin),
     message: 'Admin created. Invitation link sent to email.',
   };
-}
+};
 
-async function setAdminPassword(input: SetAdminPasswordInput): Promise<{ message: string }> {
+const setAdminPassword = async (input: SetAdminPasswordInput): Promise<{ message: string }> => {
   const tokenHash = hashSha256(input.token.trim());
   const redisKey = `admin:invite:${tokenHash}`;
   const rawData = await redis.get(redisKey);
@@ -1488,7 +1423,7 @@ async function setAdminPassword(input: SetAdminPasswordInput): Promise<{ message
   await revokeAllUserSessions(user.id);
 
   return { message: 'Password set successfully. You can now log in.' };
-}
+};
 
 export const AuthService = {
   hashSha256,

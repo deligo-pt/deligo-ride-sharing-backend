@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { NotificationType } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notifications Validation Schemas
@@ -17,30 +16,6 @@ export type ListNotificationsQuery = z.infer<typeof ListNotificationsSchema>;
 // ── PATCH /api/v1/notifications/:id/read ────────────────────────────────────
 // No body — rideId comes from the URL param.
 // (Kept here for completeness; validated in controller via String(req.params.id))
-
-// ── Internal: NotificationService.dispatch() ───────────────────────────────────
-export const NOTIFICATION_CHANNELS = ['IN_APP', 'WEBSOCKET', 'PUSH', 'SMS', 'EMAIL'] as const;
-export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
-
-/** Payload shared by every recipient of NotificationService.sendToUsers(). */
-export interface BulkNotificationPayload {
-  title: string;
-  message: string;
-  type: NotificationType;
-  data?: Record<string, unknown>;
-}
-
-export interface DispatchOptions {
-  userId:    string;
-  title:     string;
-  message:   string;
-  type:      NotificationType;
-  channels?: NotificationChannel[];
-  /** Optional structured metadata stored in the Notification.data JSON column */
-  data?:     Record<string, unknown>;
-  /** Optional rich HTML body used when the EMAIL channel is requested */
-  emailHtml?: string;
-}
 
 // ── PATCH /api/v1/notifications/:id/read ─────────────────────────────────────
 const NotificationParamsSchema = z.object({

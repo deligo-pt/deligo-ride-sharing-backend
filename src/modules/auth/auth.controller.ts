@@ -16,10 +16,14 @@ import {
 import {
   clearRefreshTokenCookie,
   getClientInfo,
-  REFRESH_COOKIE_NAME,
   setRefreshTokenCookie,
   tokensForClient,
 } from './auth.util';
+import {
+  DEFAULT_SESSION_DAYS,
+  REFRESH_COOKIE_NAME,
+  REMEMBER_ME_SESSION_DAYS,
+} from './auth.constant';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
@@ -65,7 +69,11 @@ const login = catchAsync(async (req, res) => {
   const input = req.body as LoginInput;
   const result = await AuthService.login(input, getClientInfo(req), ['CUSTOMER']);
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -82,7 +90,11 @@ const googleLogin = catchAsync(async (req, res) => {
   const input = req.body as GoogleLoginInput;
   const result = await AuthService.googleLogin(input, getClientInfo(req));
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -99,7 +111,11 @@ const facebookLogin = catchAsync(async (req, res) => {
   const input = req.body as FacebookLoginInput;
   const result = await AuthService.facebookLogin(input, getClientInfo(req));
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -116,7 +132,11 @@ const appleLogin = catchAsync(async (req, res) => {
   const input = req.body as AppleLoginInput;
   const result = await AuthService.appleLogin(input, getClientInfo(req));
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -136,7 +156,11 @@ const refreshToken = catchAsync(async (req, res) => {
 
   const { tokens, rememberMe } = await AuthService.refreshAccessToken(token || '');
 
-  setRefreshTokenCookie(res, tokens.refreshToken, rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    tokens.refreshToken,
+    rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -186,7 +210,11 @@ const driverLogin = catchAsync(async (req, res) => {
   const input = req.body as LoginInput;
   const result = await AuthService.login(input, getClientInfo(req), ['DRIVER']);
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -217,7 +245,11 @@ const fleetLogin = catchAsync(async (req, res) => {
   const input = req.body as LoginInput;
   const result = await AuthService.login(input, getClientInfo(req), ['FLEET_MANAGER']);
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -234,7 +266,11 @@ const adminLogin = catchAsync(async (req, res) => {
   const input = req.body as LoginInput;
   const result = await AuthService.login(input, getClientInfo(req), ['ADMIN']);
 
-  setRefreshTokenCookie(res, result.tokens.refreshToken, input.rememberMe ? 30 : 1);
+  setRefreshTokenCookie(
+    res,
+    result.tokens.refreshToken,
+    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
+  );
 
   sendResponse(res, {
     statusCode: 200,

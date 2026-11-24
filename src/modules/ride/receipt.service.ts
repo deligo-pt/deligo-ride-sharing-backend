@@ -1,5 +1,6 @@
 import prisma from '../../config/db';
 import { NotificationService } from '../notification/notification.service';
+import type { ReceiptRideData } from './receipt.interface';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Receipt Service — PRD 3.12 (Email Receipt after ride completion)
@@ -8,21 +9,11 @@ import { NotificationService } from '../notification/notification.service';
 /**
  * Build a clean HTML receipt string for a completed ride.
  */
-function buildReceiptHtml(ride: {
-  id: string;
-  pickupAddress: string;
-  dropoffAddress: string;
-  finalFare: { toString(): string } | null;
-  distanceKm: number | null;
-  durationMinutes: number | null;
-  completedAt: Date | null;
-  vehicleType: string;
-  user: { firstName: string | null; email: string | null };
-}): string {
-  const fare     = ride.finalFare ? `$${Number(ride.finalFare).toFixed(2)}` : 'N/A';
+const buildReceiptHtml = (ride: ReceiptRideData): string => {
+  const fare = ride.finalFare ? `$${Number(ride.finalFare).toFixed(2)}` : 'N/A';
   const distance = ride.distanceKm ? `${Number(ride.distanceKm).toFixed(2)} km` : 'N/A';
   const duration = ride.durationMinutes ? `${ride.durationMinutes} min` : 'N/A';
-  const date     = ride.completedAt
+  const date = ride.completedAt
     ? ride.completedAt.toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })
     : new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
 
@@ -138,7 +129,7 @@ function buildReceiptHtml(ride: {
 </body>
 </html>
   `.trim();
-}
+};
 
 /**
  * Fetch a COMPLETED ride and dispatch a formatted HTML receipt via Email.
@@ -147,7 +138,7 @@ function buildReceiptHtml(ride: {
  * Designed to be called fire-and-forget (no await) from ride.service.ts
  * so it never blocks the completion API response.
  */
-async function generateAndSendReceipt(rideId: string): Promise<void> {
+const generateAndSendReceipt = async (rideId: string): Promise<void> => {
   try {
     const ride = await prisma.ride.findUnique({
       where: { id: rideId },
@@ -178,10 +169,10 @@ async function generateAndSendReceipt(rideId: string): Promise<void> {
 
     await NotificationService.dispatch(
       {
-        userId:    user.id,
-        title:     '🧾 Your Deligo Trip Receipt',
-        message:   `Your trip is complete! Total charged: ${fare}. Check your email for the full receipt.`,
-        type:      'RIDE_COMPLETED',
+        userId: user.id,
+        title: '🧾 Your Deligo Trip Receipt',
+        message: `Your trip is complete! Total charged: ${fare}. Check your email for the full receipt.`,
+        type: 'RIDE_COMPLETED',
         emailHtml: html,
       },
       ['EMAIL', 'SMS'],
@@ -192,7 +183,7 @@ async function generateAndSendReceipt(rideId: string): Promise<void> {
     // Receipt failure must never crash the ride completion flow
     console.error('[RECEIPT] ❌ Failed to generate/send receipt:', err);
   }
-}
+};
 
 export const ReceiptService = {
   generateAndSendReceipt,

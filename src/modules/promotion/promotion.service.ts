@@ -7,18 +7,11 @@ import type {
 } from './promotion.validation';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { buildPaginationMeta } from '../../types/api.types';
+import type { ValidatePromoResult } from './promotion.interface';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Promotions Service  —  PRD 3.10: Promotions & Discounts
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-export interface ValidatePromoResult {
-  discountAmount: number;
-  finalEstimatedFare: number;
-  promoCodeId: string;
-}
 
 // ── Admin: Create PromoCode ───────────────────────────────────────────────────
 
@@ -26,7 +19,7 @@ export interface ValidatePromoResult {
  * Persist a new PromoCode row.
  * The `code` value arrives already uppercased from the Zod schema transform.
  */
-async function createPromoCode(dto: CreatePromoCodeDto) {
+const createPromoCode = async (dto: CreatePromoCodeDto) => {
   return prisma.promoCode.create({
     data: {
       code: dto.code,
@@ -40,7 +33,7 @@ async function createPromoCode(dto: CreatePromoCodeDto) {
       isActive: dto.isActive,
     },
   });
-}
+};
 
 // ── Customer: Validate PromoCode ──────────────────────────────────────────────
 
@@ -63,10 +56,10 @@ async function createPromoCode(dto: CreatePromoCodeDto) {
  *   PROMO_NOT_FOUND | PROMO_EXPIRED | PROMO_LIMIT_REACHED |
  *   PROMO_MIN_FARE_NOT_MET | PROMO_ALREADY_USED
  */
-async function validatePromoCode(
+const validatePromoCode = async (
   userId: string,
   dto: ValidatePromoCodeDto,
-): Promise<ValidatePromoResult> {
+): Promise<ValidatePromoResult> => {
   // 1. Existence + active check
   const promo = await prisma.promoCode.findUnique({
     where: { code: dto.code },
@@ -127,7 +120,7 @@ async function validatePromoCode(
     finalEstimatedFare,
     promoCodeId: promo.id,
   };
-}
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRD 3.10 — PricingService Integration Note
