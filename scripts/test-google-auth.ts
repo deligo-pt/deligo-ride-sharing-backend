@@ -20,6 +20,7 @@ async function runGoogleAuthTests() {
   const baseUrl = `http://127.0.0.1:${port}/api/v1/auth`;
 
   const createdUserIds: string[] = [];
+  let exitCode = 0;
 
   try {
     console.log('▶ Test 1: POST /api/v1/auth/google with invalid ID token');
@@ -237,6 +238,9 @@ async function runGoogleAuthTests() {
     console.log('  ✅ Suspended account rejected with 403 Forbidden');
 
     console.log('\n🎉 ALL 5 GOOGLE AUTH TESTS PASSED SUCCESSFULLY! 🎉\n');
+  } catch (err) {
+    console.error('\n❌ GOOGLE AUTH TEST FAILED:', err);
+    exitCode = 1;
   } finally {
     console.log('🧹 Cleaning up test users from DB...');
     for (const userId of createdUserIds) {
@@ -255,11 +259,8 @@ async function runGoogleAuthTests() {
     server.close();
     await prisma.$disconnect();
     redis.disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 
-runGoogleAuthTests().catch((err) => {
-  console.error('\n❌ GOOGLE AUTH TEST FAILED:', err);
-  process.exit(1);
-});
+void runGoogleAuthTests();

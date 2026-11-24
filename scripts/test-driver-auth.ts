@@ -1,8 +1,8 @@
 import prisma from '../src/config/db';
 import { redis } from '../src/utils/redis';
-import { initiateSignup, verifySignupOtp, login } from '../src/modules/auth/auth.service';
 import { ForbiddenError } from '../src/utils/errors';
 import crypto from 'crypto';
+import { AuthService } from '../src/modules/auth/auth.service';
 
 async function runDriverAuthTests() {
   console.log('🚀 Starting Driver Auth Integration Tests...\n');
@@ -19,14 +19,11 @@ async function runDriverAuthTests() {
     const driverEmail = `driver_test_${testId}@deligo.com`;
     const driverPassword = 'DriverPassword123!';
 
-    const initResult = await initiateSignup(
+    // Step 1: Initiate Driver Signup
+    const initResult = await AuthService.initiateSignup(
       {
-        firstName: 'John',
-        lastName: 'DriverTest',
         email: driverEmail,
         password: driverPassword,
-        preferredLanguage: 'EN',
-        otpChannel: 'EMAIL',
       },
       'DRIVER',
     );
@@ -52,7 +49,8 @@ async function runDriverAuthTests() {
     }
     if (!matchedOtp) throw new Error('Could not find matching OTP code');
 
-    const verifyResult = await verifySignupOtp(
+    // Step 2: Verify OTP
+    const verifyResult = await AuthService.verifySignupOtp(
       {
         signupSessionId: initResult.signupSessionId,
         otp: matchedOtp,
@@ -140,8 +138,9 @@ async function runDriverAuthTests() {
       },
     });
 
-    const driverLoginResult = await login(
-      { identifier: driverEmail, password: driverPassword, rememberMe: false },
+    // Case 2A: Driver logging in via Driver endpoint (allowedRoles: ['DRIVER'])
+    const driverLoginResult = await AuthService.login(
+      { email: driverEmail, password: driverPassword, rememberMe: false },
       clientInfo,
       ['DRIVER'],
     );
@@ -151,8 +150,8 @@ async function runDriverAuthTests() {
 
     let customerBlockedFromDriver = false;
     try {
-      await login(
-        { identifier: customerEmail, password: customerPassword, rememberMe: false },
+      await AuthService.login(
+        { email: customerEmail, password: customerPassword, rememberMe: false },
         clientInfo,
         ['DRIVER'],
       );
@@ -172,8 +171,8 @@ async function runDriverAuthTests() {
 
     let driverBlockedFromCustomer = false;
     try {
-      await login(
-        { identifier: driverEmail, password: driverPassword, rememberMe: false },
+      await AuthService.login(
+        { email: driverEmail, password: driverPassword, rememberMe: false },
         clientInfo,
         ['CUSTOMER'],
       );
@@ -191,8 +190,9 @@ async function runDriverAuthTests() {
       throw new Error('Driver was NOT blocked from customer portal!');
     }
 
-    const customerLoginResult = await login(
-      { identifier: customerEmail, password: customerPassword, rememberMe: false },
+    // Case 2D: Customer logging in via Customer endpoint (allowedRoles: ['CUSTOMER'])
+    const customerLoginResult = await AuthService.login(
+      { email: customerEmail, password: customerPassword, rememberMe: false },
       clientInfo,
       ['CUSTOMER'],
     );
@@ -221,7 +221,9 @@ async function runDriverAuthTests() {
   }
 }
 
-runDriverAuthTests().catch((err) => {
-  console.error('❌ Test failed with error:', err);
-  process.exit(1);
-});
+runDriverAuthTests()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('❌ Test failed with error:', err);
+    process.exit(1);
+  });

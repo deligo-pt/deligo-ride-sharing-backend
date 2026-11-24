@@ -1,11 +1,7 @@
 import prisma from '../src/config/db';
-import {
-  appleLogin,
-  facebookLogin,
-  googleLogin,
-  handleSocialAuth,
-} from '../src/modules/auth/auth.service';
-import { UnauthorizedError } from '../src/utils/errors';
+import { redis } from '../src/utils/redis';
+import { AuthService } from '../src/modules/auth/auth.service';
+import { ForbiddenError, UnauthorizedError } from '../src/utils/errors';
 import crypto from 'crypto';
 
 async function runTests() {
@@ -21,7 +17,7 @@ async function runTests() {
   try {
     console.log('--- Test 1: Apple Sign-In Demo Mode (Case C: New User) ---');
     const demoEmail1 = `apple_test_${testId}_1@example.com`;
-    const result1 = await appleLogin(
+    const result1 = await AuthService.appleLogin(
       {
         idToken: `demo_apple_token_${demoEmail1}`,
         user: {
@@ -69,9 +65,10 @@ async function runTests() {
     console.log('✅ DB records verified: User, Account (APPLE), CustomerProfile, Wallet');
 
     console.log('\n--- Test 2: Apple Sign-In Demo Mode (Case A: Existing Account) ---');
-    const result2 = await appleLogin(
+    const result2 = await AuthService.appleLogin(
       {
         idToken: `demo_apple_token_${demoEmail1}`,
+        preferredLanguage: 'EN',
         rememberMe: false,
       },
       clientInfo,
@@ -82,48 +79,96 @@ async function runTests() {
     }
     console.log(`✅ Existing user successfully logged in with Apple: ${result2.user.id}`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 3: Apple Sign-In Demo Mode — Case B (Account Linking + Takeover Protection)
+    // ─────────────────────────────────────────────────────────────────────────
     console.log(
-      '\n--- Test 3: Apple Sign-In Demo Mode (Case B: Auto-Linking & Takeover Protection) ---',
+      '\n--- Test 3: Apple Sign-In Demo Mode (Case B: Security Reject & Auto-Linking / Takeover Protection) ---',
     );
-    const demoEmail2 = `takeover_test_${testId}@example.com`;
+    const demoEmailPending = `takeover_pending_${testId}@example.com`;
 
-    const unverifiedUser = await prisma.user.create({
+    // 3A: PENDING_VERIFICATION user is rejected with ForbiddenError
+    const pendingUser = await prisma.user.create({
       data: {
-        email: demoEmail2,
-        firstName: 'Squatter',
-        lastName: 'Attacker',
-        referralCode: `TK${testId.toUpperCase()}1`,
+        email: demoEmailPending,
+        firstName: 'Pending',
+        lastName: 'User',
+        referralCode: `TP${testId.toUpperCase()}1`,
         role: 'CUSTOMER',
         status: 'PENDING_VERIFICATION',
         isEmailVerified: false,
       },
     });
-    createdUserIds.push(unverifiedUser.id);
+    createdUserIds.push(pendingUser.id);
+
+    let pendingBlocked = false;
+    try {
+      await AuthService.appleLogin(
+        {
+          idToken: `demo_apple_token_${demoEmailPending}`,
+          user: {
+            firstName: 'Real',
+            lastName: 'Owner',
+          },
+          preferredLanguage: 'EN',
+          rememberMe: false,
+        },
+        clientInfo,
+      );
+    } catch (err: unknown) {
+      if (err instanceof ForbiddenError) {
+        pendingBlocked = true;
+        console.log(`✅ Pending user correctly rejected with ForbiddenError: "${err.message}"`);
+      } else {
+        throw err;
+      }
+    }
+    if (!pendingBlocked) {
+      throw new Error('Pending verification user was NOT blocked from social login!');
+    }
+
+    // 3B: ACTIVE user with unverified email (squatter credentials) - auto-links & soft-deletes credentials
+    const demoEmailActive = `takeover_active_${testId}@example.com`;
+    const unverifiedActiveUser = await prisma.user.create({
+      data: {
+        email: demoEmailActive,
+        firstName: 'Squatter',
+        lastName: 'Attacker',
+        referralCode: `TA${testId.toUpperCase()}2`,
+        role: 'CUSTOMER',
+        status: 'ACTIVE',
+        isEmailVerified: false,
+      },
+    });
+    createdUserIds.push(unverifiedActiveUser.id);
 
     const squatterAccount = await prisma.account.create({
       data: {
-        userId: unverifiedUser.id,
+        userId: unverifiedActiveUser.id,
         provider: 'CREDENTIALS',
-        providerAccountId: demoEmail2,
-        email: demoEmail2,
+        providerAccountId: demoEmailActive,
+        email: demoEmailActive,
         passwordHash: 'dummy_hash',
       },
     });
 
-    const result3 = await appleLogin(
+    // Legitimate owner logs in via Apple with verified email
+    const result3 = await AuthService.appleLogin(
       {
-        idToken: `demo_apple_token_${demoEmail2}`,
+        idToken: `demo_apple_token_${demoEmailActive}`,
         user: {
           firstName: 'Real',
           lastName: 'Owner',
         },
+        preferredLanguage: 'EN',
+        rememberMe: false,
       },
       clientInfo,
     );
 
-    if (result3.user.id !== unverifiedUser.id) {
+    if (result3.user.id !== unverifiedActiveUser.id) {
       throw new Error(
-        `Expected account linking to existing user ID ${unverifiedUser.id}, got ${result3.user.id}`,
+        `Expected account linking to existing user ID ${unverifiedActiveUser.id}, got ${result3.user.id}`,
       );
     }
 
@@ -140,7 +185,7 @@ async function runTests() {
     );
 
     const linkedAppleAccount = await prisma.account.findFirst({
-      where: { userId: unverifiedUser.id, provider: 'APPLE', isDeleted: false },
+      where: { userId: unverifiedActiveUser.id, provider: 'APPLE', isDeleted: false },
     });
     if (!linkedAppleAccount) {
       throw new Error('Apple account was not linked to existing user');
@@ -148,13 +193,15 @@ async function runTests() {
     console.log('✅ Apple account successfully linked to existing user');
 
     console.log('\n--- Test 4: Apple Sign-In Demo Mode (No Email Flow) ---');
-    const result4 = await appleLogin(
+    const result4 = await AuthService.appleLogin(
       {
         idToken: `demo_apple_token_noemail_${testId}`,
         user: {
           firstName: 'Private',
           lastName: 'User',
         },
+        preferredLanguage: 'EN',
+        rememberMe: false,
       },
       clientInfo,
     );
@@ -171,9 +218,11 @@ async function runTests() {
     console.log('\n--- Test 5: Facebook Login (Invalid Token Rejection) ---');
     let fbRejected = false;
     try {
-      await facebookLogin(
+      await AuthService.facebookLogin(
         {
           accessToken: 'EAAB_invalid_mock_token_for_deligo_testing',
+          preferredLanguage: 'EN',
+          rememberMe: false,
         },
         clientInfo,
       );
@@ -194,10 +243,12 @@ async function runTests() {
     console.log('\n--- Test 6: Apple Login (Invalid Production Token Rejection) ---');
     let appleRejected = false;
     try {
-      await appleLogin(
+      await AuthService.appleLogin(
         {
           idToken:
             'eyJhbGciOiJSUzI1NiIsImtpZCI6ImludmFsaWQifQ.eyJzdWIiOiIxMjM0NSJ9.invalid_signature',
+          preferredLanguage: 'EN',
+          rememberMe: false,
         },
         clientInfo,
       );
@@ -231,10 +282,13 @@ async function runTests() {
     }
     console.log('🧹 Cleanup complete.');
     await prisma.$disconnect();
+    await redis.quit();
   }
 }
 
-runTests().catch((err) => {
-  console.error('❌ Test failed with error:', err);
-  process.exit(1);
-});
+runTests()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('❌ Test failed with error:', err);
+    process.exit(1);
+  });
