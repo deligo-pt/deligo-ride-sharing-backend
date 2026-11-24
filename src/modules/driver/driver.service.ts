@@ -2,12 +2,6 @@ import prisma from '../../config/db';
 import type { TripHistoryQuery } from './driver.validation';
 import { NotFoundError } from '../../utils/errors';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Drivers Service  —  PRD 2.2: Driver Dashboard
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── Shared Selects ─────────────────────────────────────────────────────────────
-
 const documentSelect = {
   id: true,
   drivingLicenseUrl: true,
@@ -25,18 +19,7 @@ const documentSelect = {
   updatedAt: true,
 } as const;
 
-// ── Driver Dashboard ───────────────────────────────────────────────────
-
-/**
- * GET /api/v1/drivers/me
- *
- * Returns the full driver dashboard payload:
- *   - DriverProfile (metrics: totalRides, averageRating, isAvailable, etc.)
- *   - Nested Vehicle record
- *   - Nested DriverDocument (KYC status)
- *   - User identity fields (firstName, lastName, email, phone)
- */
-async function getDriverDashboard(userId: string) {
+const getDriverDashboard = async (userId: string) => {
   const profile = await prisma.driverProfile.findUnique({
     where: { userId },
     include: {
@@ -63,18 +46,9 @@ async function getDriverDashboard(userId: string) {
   }
 
   return profile;
-}
+};
 
-// ── Trip History ───────────────────────────────────────────────────────
-
-/**
- * GET /api/v1/drivers/me/history
- *
- * Returns paginated COMPLETED and CANCELLED rides for the logged-in driver.
- * Includes customer details and final fare breakdown.
- */
-async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
-  // 1. Resolve the DriverProfile.id (Ride links on driverProfileId, not userId)
+const getDriverTripHistory = async (userId: string, query: TripHistoryQuery) => {
   const driverProfile = await prisma.driverProfile.findUnique({
     where: { userId },
     select: { id: true },
@@ -87,7 +61,6 @@ async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
   const { page, limit } = query;
   const skip = (page - 1) * limit;
 
-  // 2. Fetch total count for pagination metadata
   const total = await prisma.ride.count({
     where: {
       driverProfileId: driverProfile.id,
@@ -95,7 +68,6 @@ async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
     },
   });
 
-  // 3. Fetch paginated rides
   const rides = await prisma.ride.findMany({
     where: {
       driverProfileId: driverProfile.id,
@@ -116,10 +88,8 @@ async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
         },
       },
     },
-    // Return key fare + trip fields
   });
 
-  // 4. Shape the response — expose what the frontend actually needs
   const items = rides.map((ride) => ({
     id: ride.id,
     status: ride.status,
@@ -153,7 +123,7 @@ async function getDriverTripHistory(userId: string, query: TripHistoryQuery) {
       hasPrevPage: page > 1,
     },
   };
-}
+};
 
 export const DriverService = {
   getDriverDashboard,

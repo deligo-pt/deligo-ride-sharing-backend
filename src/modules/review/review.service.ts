@@ -16,11 +16,11 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/erro
  *  4. After creating the review, the reviewee's profile stats are recalculated
  *     via a Prisma aggregate and updated atomically.
  */
-async function createReview(
+const createReview = async (
   authorUserId: string,
   role: string,
   dto: CreateReviewDto,
-): Promise<ReturnType<typeof prisma.review.findUnique>> {
+): Promise<ReturnType<typeof prisma.review.findUnique>> => {
   const { rideId, rating, comment } = dto;
 
   // ── 1. Fetch ride with both participant IDs ─────────────────────────────────
@@ -37,7 +37,8 @@ async function createReview(
   });
 
   if (!ride) throw new NotFoundError('Ride');
-  if (ride.status !== 'COMPLETED') throw new BadRequestError('You can only review a COMPLETED ride.');
+  if (ride.status !== 'COMPLETED')
+    throw new BadRequestError('You can only review a COMPLETED ride.');
 
   // ── 2. Determine author and reviewee based on caller's role ─────────────────
   let revieweeUserId: string;
@@ -107,13 +108,13 @@ async function createReview(
       target: { select: { id: true, firstName: true, lastName: true } },
     },
   });
-}
+};
 
 /**
  * Fetch all reviews written ABOUT the logged-in user (reviewee), newest first.
  * Includes the reviewer's first name for display.
  */
-async function getMyReviews(userId: string) {
+const getMyReviews = async (userId: string) => {
   return prisma.review.findMany({
     where: { targetId: userId },
     orderBy: { createdAt: 'desc' },
@@ -131,7 +132,7 @@ async function getMyReviews(userId: string) {
       },
     },
   });
-}
+};
 
 export const ReviewService = {
   createReview,

@@ -5,6 +5,7 @@ import {
   NotificationService,
   logNotificationFailure,
 } from '../modules/notification/notification.service';
+import { NEARBY_DRIVER_RADIUS_KM } from '../modules/ride/ride.constant';
 import { RIDE_QUEUE_NAME, ScheduledRideJobData, bullmqConnection } from './ride.queue';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ async function processScheduledRide(job: Job<ScheduledRideJobData>): Promise<voi
   const candidateUserIds = await LocationService.findNearbyDrivers(
     ride.pickupLongitude,
     ride.pickupLatitude,
-    5, // 5 km radius
+    NEARBY_DRIVER_RADIUS_KM,
   );
 
   if (candidateUserIds.length === 0) {

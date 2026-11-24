@@ -10,12 +10,11 @@ import type {
 import { buildPaginationMeta } from '../../types/api.types';
 import { NotificationService, logNotificationFailure } from '../notification/notification.service';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { MAX_EMERGENCY_CONTACTS } from './support.constant';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Support Service  —: Customer Support & Safety
 // ─────────────────────────────────────────────────────────────────────────────
-
-const MAX_EMERGENCY_CONTACTS = 3;
 
 // ── Emergency Contacts ────────────────────────────────────────────────────────
 
@@ -24,7 +23,7 @@ const MAX_EMERGENCY_CONTACTS = 3;
  * Adds a new emergency contact for the user.
  * Throws if the user already has 3 contacts (enforced here at the service layer).
  */
-async function addEmergencyContact(userId: string, dto: CreateEmergencyContactDto) {
+const addEmergencyContact = async (userId: string, dto: CreateEmergencyContactDto) => {
   const existingCount = await prisma.emergencyContact.count({ where: { userId } });
 
   if (existingCount >= MAX_EMERGENCY_CONTACTS) {
@@ -41,18 +40,18 @@ async function addEmergencyContact(userId: string, dto: CreateEmergencyContactDt
       relation: dto.relation,
     },
   });
-}
+};
 
 /**
  * GET /api/v1/support/emergency-contacts
  * Returns all emergency contacts for the authenticated user.
  */
-async function getEmergencyContacts(userId: string) {
+const getEmergencyContacts = async (userId: string) => {
   return prisma.emergencyContact.findMany({
     where: { userId },
     orderBy: { createdAt: 'asc' },
   });
-}
+};
 
 // ── Ticketing System ──────────────────────────────────────────────────────────
 
@@ -62,7 +61,7 @@ async function getEmergencyContacts(userId: string) {
  * Creates a new support ticket.
  * Business rule: SAFETY type automatically escalates priority to CRITICAL.
  */
-async function createTicket(userId: string, dto: CreateTicketDto) {
+const createTicket = async (userId: string, dto: CreateTicketDto) => {
   // Auto-escalate SAFETY tickets
   const priority = dto.type === 'SAFETY' ? 'CRITICAL' : (dto.priority ?? 'MEDIUM');
 
@@ -80,7 +79,7 @@ async function createTicket(userId: string, dto: CreateTicketDto) {
       messages: false,
     },
   });
-}
+};
 
 /**
  * GET /api/v1/support/tickets
@@ -91,7 +90,7 @@ async function createTicket(userId: string, dto: CreateTicketDto) {
  *                ?status= and ?priority=
  * Both are paginated.
  */
-async function listTickets(viewer: { id: string; role: string }, query: ListTicketsQuery) {
+const listTickets = async (viewer: { id: string; role: string }, query: ListTicketsQuery) => {
   const { status, priority, page, limit } = query;
   const isAdmin = viewer.role === 'ADMIN';
 
@@ -120,7 +119,7 @@ async function listTickets(viewer: { id: string; role: string }, query: ListTick
   ]);
 
   return { tickets, meta: buildPaginationMeta(total, page, limit) };
-}
+};
 
 // ── Ticket Messages (Live Chat) ───────────────────────────────────────────────
 
@@ -160,11 +159,11 @@ async function listTickets(viewer: { id: string; role: string }, query: ListTick
  *   });
  * ─────────────────────────────────────────────────────────────────────────────
  */
-async function addTicketMessage(
+const addTicketMessage = async (
   actor: { id: string; role: string },
   ticketId: string,
   dto: AddTicketMessageDto,
-) {
+) => {
   const isAdmin = actor.role === 'ADMIN';
 
   const ticket = await prisma.supportTicket.findUnique({
@@ -216,13 +215,13 @@ async function addTicketMessage(
   }
 
   return savedMessage;
-}
+};
 
 /**
  * PATCH /api/v1/support/admin/tickets/:id  (ADMIN)
  * Updates ticket status / priority; the first admin to touch a ticket claims it.
  */
-async function updateTicket(ticketId: string, adminId: string, payload: UpdateTicketInput) {
+const updateTicket = async (ticketId: string, adminId: string, payload: UpdateTicketInput) => {
   const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
 
   if (!ticket) {
@@ -256,7 +255,7 @@ async function updateTicket(ticketId: string, adminId: string, payload: UpdateTi
   }
 
   return updated;
-}
+};
 
 export const SupportService = {
   addEmergencyContact,

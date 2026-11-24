@@ -9,12 +9,6 @@ import {
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fleet Manager Onboarding Controller
-// The router applies authenticate + authorize('FLEET_MANAGER') to every route.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** GET /api/v1/fleet/onboarding/status */
 const getOnboardingStatus = catchAsync(async (req, res) => {
   const result = await FleetService.getOnboardingStatus(req.user!.id);
   sendResponse(res, {
@@ -25,7 +19,6 @@ const getOnboardingStatus = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/fleet/onboarding/business — Step 3 */
 const updateBusinessDetails = catchAsync(async (req, res) => {
   const result = await FleetService.updateBusinessDetails(
     req.user!.id,

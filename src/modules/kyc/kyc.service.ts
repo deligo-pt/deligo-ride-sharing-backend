@@ -1,13 +1,9 @@
-import type { DocumentStatus, KycStatus, UserStatus } from '@prisma/client';
 import prisma from '../../config/db';
 import { NotificationService, logNotificationFailure } from '../notification/notification.service';
-import {
-  ReviewDocumentInput,
-  ReviewKycInput,
-  REQUIRED_KYC_DOCUMENTS,
-  SingleDocumentPayload,
-} from './kyc.validation';
+import { ReviewDocumentInput, ReviewKycInput } from './kyc.validation';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
+import type { ApplyKycDecisionParams, SingleDocumentPayload } from './kyc.interface';
+import { KYC_OUTCOMES, REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 
 // ─── Shared document select shape ─────────────────────────────────────────────
 
@@ -173,23 +169,6 @@ const getAllDocuments = async () => {
 // PATCH /kyc/profiles/:driverProfileId/review — end up here, so a review ALWAYS updates the
 // document, DriverProfile.kycStatus and User.status together in ONE transaction.
 // (ride acceptance requires kycStatus === APPROVED *and* user.status === ACTIVE.)
-
-export type KycDecision = Exclude<DocumentStatus, 'PENDING'>;
-
-const KYC_OUTCOMES: Record<KycDecision, { kycStatus: KycStatus; userStatus: UserStatus }> = {
-  APPROVED: { kycStatus: 'APPROVED', userStatus: 'ACTIVE' },
-  REJECTED: { kycStatus: 'REJECTED', userStatus: 'PENDING_VERIFICATION' },
-  SUSPENDED: { kycStatus: 'SUSPENDED', userStatus: 'SUSPENDED' },
-  TEMPORARILY_BLOCKED: { kycStatus: 'SUSPENDED', userStatus: 'SUSPENDED' },
-};
-
-interface ApplyKycDecisionParams {
-  driverProfileId: string;
-  userId: string;
-  decision: KycDecision;
-  reviewNote?: string | null;
-  rejectionReason?: string | null;
-}
 
 const applyKycDecision = async (params: ApplyKycDecisionParams) => {
   const { driverProfileId, userId, decision } = params;
