@@ -17,6 +17,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "seed:dev": "ts-node prisma/seed.dev.ts",
     "test:customer": "ts-node customer-test.ts",
     "test:driver": "ts-node driver-test.ts",
     "test:admin": "ts-node admin-test.ts",

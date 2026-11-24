@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 // ─── POST /kyc/documents (BULK) ──────────────────────────────────────────────
 // The driver sends one multipart/form-data request with ALL 7 required files.
 // Each file field must be named after the DocumentType enum value, e.g.:
@@ -18,7 +18,7 @@ import { z } from "zod";
 // Zod schema for the optional expiry dates sent in the body
 const isoDatetime = z
   .string()
-  .datetime({ message: "Must be a valid ISO 8601 datetime (e.g. 2030-12-31T00:00:00Z)" })
+  .datetime({ message: 'Must be a valid ISO 8601 datetime (e.g. 2030-12-31T00:00:00Z)' })
   .optional();
 
 const bulkExpiryDatesSchema = z.object({
@@ -87,6 +87,28 @@ const DriverProfileIdParamSchema = z.object({
 
 export type DriverProfileIdParam = z.infer<typeof DriverProfileIdParamSchema>;
 
+// ─── Unified Admin KYC Review & Block/Unblock Schemas ────────────────────────
+
+const UserIdParamSchema = z.object({
+  id: z.string().uuid('Invalid user ID format'),
+});
+
+export type UserIdParam = z.infer<typeof UserIdParamSchema>;
+
+const PendingKycQuerySchema = z.object({
+  role: z.enum(['DRIVER', 'FLEET_MANAGER']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export type PendingKycQueryInput = z.infer<typeof PendingKycQuerySchema>;
+
+const RejectUserBodySchema = z.object({
+  rejectionReason: z.string().trim().min(5).max(500),
+});
+
+export type RejectUserInput = z.infer<typeof RejectUserBodySchema>;
+
 // ─── Grouped validation (consumed by validateRequest in kyc.route.ts) ─────────
 
 export const KycValidation = {
@@ -95,4 +117,14 @@ export const KycValidation = {
   uploadDocuments: { body: bulkExpiryDatesSchema },
   /** PATCH /kyc/documents/:id/review */
   reviewDocument: { body: reviewDocumentBodySchema },
+  /** GET /kyc/pending */
+  getPendingKyc: { query: PendingKycQuerySchema },
+  /** PATCH /kyc/:id/accept-user */
+  acceptUser: { params: UserIdParamSchema },
+  /** PATCH /kyc/:id/reject-user */
+  rejectUser: { params: UserIdParamSchema, body: RejectUserBodySchema },
+  /** PATCH /kyc/:id/block-user */
+  blockUser: { params: UserIdParamSchema },
+  /** PATCH /kyc/:id/unblock-user */
+  unblockUser: { params: UserIdParamSchema },
 };

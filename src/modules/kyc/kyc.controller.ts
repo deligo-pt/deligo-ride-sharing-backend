@@ -1,5 +1,11 @@
 import { KycService } from './kyc.service';
-import { BulkExpiryDates, ReviewDocumentInput, ReviewKycInput } from './kyc.validation';
+import {
+  BulkExpiryDates,
+  PendingKycQueryInput,
+  RejectUserInput,
+  ReviewDocumentInput,
+  ReviewKycInput,
+} from './kyc.validation';
 import { REQUIRED_DOCUMENT_TYPES, REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { sendResponse } from '../../utils/sendResponse';
@@ -188,6 +194,68 @@ const reviewProfile = catchAsync(async (req, res) => {
   });
 });
 
+/** GET /kyc/pending — admin: paginated list of pending DRIVER and FLEET_MANAGER KYC requests. */
+const getPendingKyc = catchAsync(async (req, res) => {
+  const result = await KycService.getPendingKyc(req.query as unknown as PendingKycQueryInput);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Pending KYC requests retrieved successfully',
+    meta: result.meta,
+    data: {
+      items: result.items,
+    },
+  });
+});
+
+/** PATCH /kyc/:id/accept-user — admin approves a DRIVER or FLEET_MANAGER user KYC. */
+const acceptUser = catchAsync(async (req, res) => {
+  const result = await KycService.acceptUser(req.user!.id, req.params.id as string);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/** PATCH /kyc/:id/reject-user — admin rejects a DRIVER or FLEET_MANAGER user KYC. */
+const rejectUser = catchAsync(async (req, res) => {
+  const result = await KycService.rejectUser(
+    req.user!.id,
+    req.params.id as string,
+    req.body as RejectUserInput,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/** PATCH /kyc/:id/block-user — admin blocks/suspends a DRIVER or FLEET_MANAGER user. */
+const blockUser = catchAsync(async (req, res) => {
+  const result = await KycService.blockUser(req.user!.id, req.params.id as string);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+/** PATCH /kyc/:id/unblock-user — admin restores a previously blocked DRIVER or FLEET_MANAGER user. */
+const unblockUser = catchAsync(async (req, res) => {
+  const result = await KycService.unblockUser(req.user!.id, req.params.id as string);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
 export const KycController = {
   getPendingProfiles,
   reviewProfile,
@@ -198,4 +266,9 @@ export const KycController = {
   getPendingDocuments,
   getAllDocuments,
   reviewDocument,
+  getPendingKyc,
+  acceptUser,
+  rejectUser,
+  blockUser,
+  unblockUser,
 };

@@ -54,4 +54,45 @@ router.patch(
   KycController.reviewProfile,
 );
 
+// ─── Unified Admin KYC & Block/Unblock ───────────────────────────────────────
+router.get(
+  '/pending',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.getPendingKyc),
+  KycController.getPendingKyc,
+);
+
+router.patch(
+  '/:id/accept-user',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.acceptUser),
+  KycController.acceptUser,
+);
+
+router.patch(
+  '/:id/reject-user',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.rejectUser),
+  KycController.rejectUser,
+);
+
+router.patch(
+  '/:id/block-user',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.blockUser),
+  KycController.blockUser,
+);
+
+router.patch(
+  '/:id/unblock-user',
+  authenticate,
+  authorize('ADMIN'),
+  validateRequest(KycValidation.unblockUser),
+  KycController.unblockUser,
+);
+
 export default router;

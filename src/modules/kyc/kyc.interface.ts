@@ -31,3 +31,27 @@ export interface ApplyKycDecisionParams {
   reviewNote?: string | null;
   rejectionReason?: string | null;
 }
+
+export interface FlattenedKycDocuments {
+  drivingLicenseUrl: string;
+  nationalIdUrl: string;
+  vehicleRegistrationUrl: string;
+  vehicleInsuranceUrl: string;
+  driverSelfieUrl: string;
+  proofOfAddressUrl: string;
+  taxIdUrl: string;
+}
+
+export interface KycRequirementItem {
+  documentType: DocumentType;
+  label: string;
+  description: string;
+  requiresExpiry: boolean;
+}
+
+export interface UserKycActionResponse {
+  message: string;
+  userId: string;
+  role: string;
+  status: string;
+}
