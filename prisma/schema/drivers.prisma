@@ -34,7 +34,8 @@ model DriverProfile {
   totalRides       Int       @default(0)
   totalReviews     Int       @default(0)
   averageRating    Float     @default(5.0)
-  kycStatus        KycStatus @default(NOT_SUBMITTED)
+  kycStatus         KycStatus  @default(NOT_SUBMITTED)
+  previousKycStatus KycStatus?
   isAvailable      Boolean   @default(false)
   currentLatitude  Float?
   currentLongitude Float?
@@ -102,7 +103,8 @@ model DriverDocument {
   taxIdUrl                     String?
   taxIdExpiresAt               DateTime?
 
-  verificationStatus DocumentStatus @default(PENDING)
+  verificationStatus         DocumentStatus  @default(PENDING)
+  previousVerificationStatus DocumentStatus?
   reviewNote         String?
   reviewedAt         DateTime?
   rejectionReason    String?

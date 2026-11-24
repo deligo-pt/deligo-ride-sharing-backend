@@ -73,6 +73,7 @@ model User {
   lastName          String?
   role              UserRole           @default(CUSTOMER)
   status            UserStatus         @default(ACTIVE)
+  previousStatus    UserStatus?
   profilePicture    String?
   preferredLanguage PreferredLanguage? @default(EN)
 
@@ -213,7 +214,8 @@ model FleetManagerProfile {
   termsAcceptedAt    DateTime?
   privacyAcceptedAt  DateTime?
 
-  verificationStatus FleetVerificationStatus @default(PENDING_VERIFICATION)
+  verificationStatus         FleetVerificationStatus  @default(PENDING_VERIFICATION)
+  previousVerificationStatus FleetVerificationStatus?
   submittedAt        DateTime?
   reviewedAt         DateTime?
   reviewedById       String?
