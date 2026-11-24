@@ -25,6 +25,7 @@ async function runGoogleAuthTests() {
 
   // Test data IDs to clean up at the end
   const createdUserIds: string[] = [];
+  let exitCode = 0;
 
   try {
     // ── Test 1: Invalid Google ID Token rejected ─────────────────────────────
@@ -248,6 +249,9 @@ async function runGoogleAuthTests() {
     console.log('  ✅ Suspended account rejected with 403 Forbidden');
 
     console.log('\n🎉 ALL 5 GOOGLE AUTH TESTS PASSED SUCCESSFULLY! 🎉\n');
+  } catch (err) {
+    console.error('\n❌ GOOGLE AUTH TEST FAILED:', err);
+    exitCode = 1;
   } finally {
     // Cleanup created test records
     console.log('🧹 Cleaning up test users from DB...');
@@ -267,11 +271,8 @@ async function runGoogleAuthTests() {
     server.close();
     await prisma.$disconnect();
     redis.disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 
-runGoogleAuthTests().catch((err) => {
-  console.error('\n❌ GOOGLE AUTH TEST FAILED:', err);
-  process.exit(1);
-});
+void runGoogleAuthTests();
