@@ -8,21 +8,6 @@ import { isAccessTokenRevoked } from '../utils/revocation';
 import { JwtPayload } from '../types/auth.types';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Authentication Middleware
-//
-// Verifies the Bearer JWT in the Authorization header and attaches the
-// decoded user payload to req.user. Checks Redis blacklist to prevent revoked
-// tokens from being used. Throws UnauthorizedError if the token is missing,
-// malformed, expired, or revoked.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Verifies an access token (signature + expiry), the Redis token blacklist and the
- * Redis user/session revocation markers (see utils/revocation.ts).
- * Shared by the REST `authenticate` middleware and the Socket.IO handshake so
- * both transports accept exactly the same tokens.
- */
 export async function verifyAccessToken(token: string): Promise<JwtPayload> {
   const secret = config.jwt.accessSecret;
   let payload: JwtPayload;
@@ -41,7 +26,6 @@ export async function verifyAccessToken(token: string): Promise<JwtPayload> {
     }
   }
 
-  // Check Redis token blacklist
   if (payload.jti) {
     const isBlacklisted = await redis.get(`blacklist:token:${payload.jti}`);
     if (isBlacklisted) {
@@ -49,7 +33,6 @@ export async function verifyAccessToken(token: string): Promise<JwtPayload> {
     }
   }
 
-  // Instant revocation: user suspended / sessions revoked / session logged out
   if (await isAccessTokenRevoked(payload)) {
     throw new UnauthorizedError('Session has been revoked. Please sign in again.');
   }
@@ -57,11 +40,6 @@ export async function verifyAccessToken(token: string): Promise<JwtPayload> {
   return payload;
 }
 
-/**
- * Confirms the session referenced by a token is still live: it exists, belongs to
- * the token's user, has not been revoked (logout / refresh rotation / reuse
- * detection) and has not expired.
- */
 export async function assertSessionActive(sessionId: string, userId: string): Promise<void> {
   const session = await prisma.session.findFirst({
     where: { id: sessionId, userId, isRevoked: false, expiresAt: { gt: new Date() } },
@@ -73,7 +51,11 @@ export async function assertSessionActive(sessionId: string, userId: string): Pr
   }
 }
 
-export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+export async function authenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
 
@@ -96,13 +78,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Authorization Middleware Factory
 //
-// Usage: authorize(UserRole.ADMIN) or authorize(UserRole.DRIVER, UserRole.ADMIN)
-// Throws ForbiddenError if the authenticated user's role is not included.
-// Must be used AFTER the authenticate middleware.
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function authorize(...allowedRoles: UserRole[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -118,10 +94,6 @@ export function authorize(...allowedRoles: UserRole[]) {
   };
 }
 
-/**
- * Role-checking middleware supporting extended roles (e.g. 'ADMIN', 'SUPER_ADMIN').
- * Resolves effective role from AdminProfile if the user has role 'ADMIN'.
- */
 export function requireRole(...allowedRoles: string[]) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -151,11 +123,6 @@ export function requireRole(...allowedRoles: string[]) {
   };
 }
 
-/**
- * Attaches req.user when a Bearer token is supplied, but never rejects: an
- * absent, expired or invalid token simply proceeds without req.user. Used by
- * endpoints that must also work for cookie-only clients (e.g. logout).
- */
 export async function optionalAuthenticate(
   req: Request,
   res: Response,
@@ -163,7 +130,6 @@ export async function optionalAuthenticate(
 ): Promise<void> {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
     return authenticate(req, res, () => {
-      // Token verification failed (or succeeded): proceed either way.
       next();
     });
   }

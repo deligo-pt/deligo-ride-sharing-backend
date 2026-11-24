@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
-// Values that mean "someone copied .env.example / docker-compose.yml into production".
 const PLACEHOLDER_SECRET_MARKERS = [
   'your_',
   'change_in_production',
@@ -66,8 +65,6 @@ const envObject = z.object({
   ADMIN_FRONTEND_URL: z.string().optional().default('http://localhost:3000/admin'),
 });
 
-// ── Production-only guards ───────────────────────────────────────────────────
-// Development and test keep their convenient defaults; production must be explicit.
 const envSchema = envObject.superRefine((data, ctx) => {
   if (data.NODE_ENV !== 'production') return;
 
@@ -75,7 +72,6 @@ const envSchema = envObject.superRefine((data, ctx) => {
     ctx.addIssue({ code: 'custom', path: [path], message });
   };
 
-  // 1. JWT secrets: explicit access secret, and no placeholder/dev values.
   if (!data.JWT_ACCESS_SECRET) {
     fail('JWT_ACCESS_SECRET', 'JWT_ACCESS_SECRET must be set explicitly in production');
   }
@@ -86,14 +82,15 @@ const envSchema = envObject.superRefine((data, ctx) => {
     }
   }
 
-  // 2. Apple Sign-In: the demo IDs must never be used to verify real tokens.
   for (const key of ['APPLE_CLIENT_ID', 'APPLE_BUNDLE_ID'] as const) {
     if (!data[key] || data[key].toLowerCase().includes('.demo')) {
-      fail(key, `${key} must be set to your real Apple identifier in production (not the demo value)`);
+      fail(
+        key,
+        `${key} must be set to your real Apple identifier in production (not the demo value)`,
+      );
     }
   }
 
-  // 3. Admin frontend: invite/reset links must not point at localhost.
   try {
     const { hostname } = new URL(data.ADMIN_FRONTEND_URL);
     if (LOCAL_HOSTNAMES.has(hostname.toLowerCase())) {

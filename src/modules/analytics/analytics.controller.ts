@@ -3,7 +3,6 @@ import { catchAsync } from '../../utils/catchAsync';
 import { AnalyticsService } from './analytics.service';
 import { ExportReportQuery, GetTrendsQuery } from './analytics.validation';
 
-/** GET /api/v1/analytics/dashboard */
 const getDashboard = catchAsync(async (_req, res) => {
   const summary = await AnalyticsService.getDashboardSummary();
   sendResponse(res, {
@@ -14,7 +13,6 @@ const getDashboard = catchAsync(async (_req, res) => {
   });
 });
 
-/** GET /api/v1/analytics/trends */
 const getTrends = catchAsync(async (req, res) => {
   const trends = await AnalyticsService.getTrends(req.query as unknown as GetTrendsQuery);
   sendResponse(res, {
@@ -25,7 +23,6 @@ const getTrends = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/analytics/export — streams a CSV attachment (not a JSON envelope). */
 const exportReport = catchAsync(async (req, res) => {
   const reportType = (req.query.reportType as string) || 'REVENUE';
 
@@ -33,7 +30,6 @@ const exportReport = catchAsync(async (req, res) => {
     req.query as unknown as ExportReportQuery,
   );
 
-  // Unescape the raw newlines to actual newlines for proper CSV formatting
   const rawCsv = csvString.replace(/\\n/g, '\n');
 
   res.setHeader('Content-Type', 'text/csv');

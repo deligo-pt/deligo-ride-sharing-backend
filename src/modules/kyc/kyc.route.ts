@@ -6,17 +6,12 @@ import { KycController } from './kyc.controller';
 import { KycValidation } from './kyc.validation';
 import { REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 
-// Mounted at: /api/v1/kyc (see src/routes/index.ts)
 const router: Router = Router();
 
-// ─── Public ───────────────────────────────────────────────────────────────────
 router.get('/requirements', KycController.getKycRequirements);
 
-// ─── Driver ───────────────────────────────────────────────────────────────────
 router.get('/status', authenticate, authorize('DRIVER'), KycController.getKycStatus);
 
-// Bulk upload: every required document as a separate multipart file field named
-// after its DocumentType. A missing field returns 400 listing all absent documents.
 router.post(
   '/documents',
   authenticate,
@@ -28,7 +23,6 @@ router.post(
 
 router.get('/documents/me', authenticate, authorize('DRIVER'), KycController.getMyDocuments);
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
 router.get(
   '/documents/pending',
   authenticate,
@@ -44,7 +38,6 @@ router.patch(
   KycController.reviewDocument,
 );
 
-// Driver-profile level KYC review queue (approve/reject the whole submission)
 router.get('/profiles/pending', authenticate, authorize('ADMIN'), KycController.getPendingProfiles);
 router.patch(
   '/profiles/:driverProfileId/review',
@@ -54,7 +47,6 @@ router.patch(
   KycController.reviewProfile,
 );
 
-// ─── Unified Admin KYC & Block/Unblock ───────────────────────────────────────
 router.get(
   '/pending',
   authenticate,

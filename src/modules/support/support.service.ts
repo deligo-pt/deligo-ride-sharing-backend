@@ -12,17 +12,6 @@ import { NotificationService, logNotificationFailure } from '../notification/not
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { MAX_EMERGENCY_CONTACTS } from './support.constant';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Support Service  —: Customer Support & Safety
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── Emergency Contacts ────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/emergency-contacts
- * Adds a new emergency contact for the user.
- * Throws if the user already has 3 contacts (enforced here at the service layer).
- */
 const addEmergencyContact = async (userId: string, dto: CreateEmergencyContactDto) => {
   const existingCount = await prisma.emergencyContact.count({ where: { userId } });
 
@@ -42,10 +31,6 @@ const addEmergencyContact = async (userId: string, dto: CreateEmergencyContactDt
   });
 };
 
-/**
- * GET /api/v1/support/emergency-contacts
- * Returns all emergency contacts for the authenticated user.
- */
 const getEmergencyContacts = async (userId: string) => {
   return prisma.emergencyContact.findMany({
     where: { userId },
@@ -53,16 +38,7 @@ const getEmergencyContacts = async (userId: string) => {
   });
 };
 
-// ── Ticketing System ──────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/tickets
- *
- * Creates a new support ticket.
- * Business rule: SAFETY type automatically escalates priority to CRITICAL.
- */
 const createTicket = async (userId: string, dto: CreateTicketDto) => {
-  // Auto-escalate SAFETY tickets
   const priority = dto.type === 'SAFETY' ? 'CRITICAL' : (dto.priority ?? 'MEDIUM');
 
   return prisma.supportTicket.create({
@@ -81,15 +57,6 @@ const createTicket = async (userId: string, dto: CreateTicketDto) => {
   });
 };
 
-/**
- * GET /api/v1/support/tickets
- *
- * One endpoint, scoped by role:
- *   - any user → ONLY their own tickets (with the message thread), newest first
- *   - ADMIN    → every ticket (with the reporter and assigned admin), filterable by
- *                ?status= and ?priority=
- * Both are paginated.
- */
 const listTickets = async (viewer: { id: string; role: string }, query: ListTicketsQuery) => {
   const { status, priority, page, limit } = query;
   const isAdmin = viewer.role === 'ADMIN';
@@ -121,44 +88,6 @@ const listTickets = async (viewer: { id: string; role: string }, query: ListTick
   return { tickets, meta: buildPaginationMeta(total, page, limit) };
 };
 
-// ── Ticket Messages (Live Chat) ───────────────────────────────────────────────
-
-/**
- * POST /api/v1/support/tickets/:id/messages
- *
- * Appends a new message to an existing ticket.
- * Guards: ticket must exist AND belong to the caller (or the caller is an ADMIN).
- * An ADMIN reply also assigns an unassigned ticket to that admin and notifies the owner.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * WEBSOCKET INTEGRATION NOTE (Live Chat with Admins)
- * ─────────────────────────────────────────────────────────────────────────────
- * After persisting the TicketMessage, the CALLING CONTROLLER should broadcast
- * the new message over Socket.io so both the customer and any assigned admin
- * see it in real time without polling.
- *
- * Recommended implementation in the controller (or a thin socket helper):
- *
- *   import { getIo } from '../../server';          // or inject via NotificationService
- *   const io = getIo();
- *   if (io) {
- *     io.to(`ticket_${ticketId}`).emit('ticket_message', {
- *       id:        savedMessage.id,
- *       senderId:  savedMessage.senderId,
- *       message:   savedMessage.message,
- *       createdAt: savedMessage.createdAt,
- *     });
- *   }
- *
- * Clients (customer + admin) join the ticket room via:
- *   socket.emit('join_ticket_room', { ticketId });   // new Socket event
- *
- * Add the handler in socket.handlers.ts:
- *   socket.on('join_ticket_room', ({ ticketId }) => {
- *     socket.join(`ticket_${ticketId}`);
- *   });
- * ─────────────────────────────────────────────────────────────────────────────
- */
 const addTicketMessage = async (
   actor: { id: string; role: string },
   ticketId: string,
@@ -173,12 +102,10 @@ const addTicketMessage = async (
 
   if (!ticket) throw new NotFoundError('Ticket');
 
-  // Owners may post on their own tickets; any ADMIN may post on any ticket.
   if (!isAdmin && ticket.userId !== actor.id) {
     throw new ForbiddenError('You do not have access to this ticket');
   }
 
-  // Prevent messages on resolved tickets (admins can still post)
   if (ticket.status === 'RESOLVED' && !isAdmin) {
     throw new BadRequestError('This ticket has been resolved. You cannot add more messages.');
   }
@@ -191,7 +118,6 @@ const addTicketMessage = async (
     },
   });
 
-  // OPEN → IN_PROGRESS on the first message; the first admin to reply claims the ticket.
   const claim = isAdmin && !ticket.adminId;
   if (claim || ticket.status === 'OPEN') {
     await prisma.supportTicket.update({
@@ -203,7 +129,6 @@ const addTicketMessage = async (
     });
   }
 
-  // An admin reply notifies the ticket owner.
   if (isAdmin) {
     void NotificationService.dispatch({
       userId: ticket.userId,
@@ -217,10 +142,6 @@ const addTicketMessage = async (
   return savedMessage;
 };
 
-/**
- * PATCH /api/v1/support/admin/tickets/:id  (ADMIN)
- * Updates ticket status / priority; the first admin to touch a ticket claims it.
- */
 const updateTicket = async (ticketId: string, adminId: string, payload: UpdateTicketInput) => {
   const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
 
@@ -242,7 +163,6 @@ const updateTicket = async (ticketId: string, adminId: string, payload: UpdateTi
     },
   });
 
-  // Tell the ticket owner when their ticket is resolved.
   if (payload.status === 'RESOLVED' && ticket.status !== 'RESOLVED') {
     void NotificationService.dispatch({
       userId: ticket.userId,

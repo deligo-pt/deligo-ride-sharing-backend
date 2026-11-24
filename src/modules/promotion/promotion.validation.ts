@@ -1,11 +1,5 @@
 import { z } from 'zod';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Promotions Validation Schemas
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── POST /api/v1/promotions  (ADMIN) ─────────────────────────────────────────
-
 const CreatePromoCodeSchema = z
   .object({
     code: z
@@ -21,20 +15,9 @@ const CreatePromoCodeSchema = z
       .number({ error: 'discountValue is required and must be a number' })
       .positive('discountValue must be greater than 0'),
 
-    /**
-     * Only meaningful for PERCENTAGE codes.
-     * When provided, the computed percentage discount is capped at this amount.
-     */
-    maxDiscountCap: z
-      .number()
-      .positive('maxDiscountCap must be greater than 0')
-      .optional(),
+    maxDiscountCap: z.number().positive('maxDiscountCap must be greater than 0').optional(),
 
-    minRideValue: z
-      .number()
-      .min(0, 'minRideValue cannot be negative')
-      .optional()
-      .default(0),
+    minRideValue: z.number().min(0, 'minRideValue cannot be negative').optional().default(0),
 
     maxGlobalUses: z
       .number({ error: 'maxGlobalUses is required and must be a number' })
@@ -57,18 +40,12 @@ const CreatePromoCodeSchema = z
     message: 'validUntil must be after validFrom',
     path: ['validUntil'],
   })
-  .refine(
-    (data) =>
-      !(data.discountType === 'FLAT' && data.maxDiscountCap !== undefined),
-    {
-      message: 'maxDiscountCap is only applicable for PERCENTAGE discount types',
-      path: ['maxDiscountCap'],
-    },
-  );
+  .refine((data) => !(data.discountType === 'FLAT' && data.maxDiscountCap !== undefined), {
+    message: 'maxDiscountCap is only applicable for PERCENTAGE discount types',
+    path: ['maxDiscountCap'],
+  });
 
 export type CreatePromoCodeDto = z.infer<typeof CreatePromoCodeSchema>;
-
-// ── POST /api/v1/promotions/validate  (CUSTOMER) ─────────────────────────────
 
 const ValidatePromoCodeSchema = z.object({
   code: z
@@ -97,8 +74,6 @@ export type DeactivatePromotionInput = z.infer<typeof DeactivatePromotionSchema>
 const PromoIdParamSchema = z.object({
   id: z.string().uuid('id must be a valid UUID'),
 });
-
-// ── Grouped validation (consumed by validateRequest in the matching *.route.ts) ─────────
 
 export const PromotionValidation = {
   create: { body: CreatePromoCodeSchema },

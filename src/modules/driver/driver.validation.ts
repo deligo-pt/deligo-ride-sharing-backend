@@ -1,12 +1,5 @@
 import { z } from 'zod';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Drivers Domain — Validation Schemas  (PRD 2.2)
-// KYC document upload lives in the kyc module (POST /kyc/documents).
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── GET /drivers/me/history — pagination query ─────────────────────────────────
-
 const TripHistoryQuerySchema = z.object({
   page: z
     .string()
@@ -30,6 +23,5 @@ const TripHistoryQuerySchema = z.object({
 export type TripHistoryQuery = z.infer<typeof TripHistoryQuerySchema>;
 
 export const DriverValidation = {
-  /** GET /drivers/me/history */
   tripHistory: { query: TripHistoryQuerySchema },
 };

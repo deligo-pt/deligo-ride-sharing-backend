@@ -1,5 +1,3 @@
-// CUSTOMER SUPPORT & SAFETY  —  PRD 3.x & PRD 3.13 / 4.13 (Emergency SOS)
-
 enum TicketType {
   SAFETY
   COMPLAINT
@@ -20,7 +18,6 @@ enum TicketPriority {
   CRITICAL
 }
 
-/// Emergency contacts linked to a user (max 3 enforced at the app layer).
 model EmergencyContact {
   id     String @id @default(uuid())
   userId String
@@ -28,7 +25,7 @@ model EmergencyContact {
 
   name        String
   phoneNumber String
-  relation    String // e.g. "Spouse", "Parent", "Friend"
+  relation    String
 
   createdAt DateTime @default(now())
 
@@ -36,14 +33,12 @@ model EmergencyContact {
   @@map("emergency_contacts")
 }
 
-/// A support ticket opened by any authenticated user.
 model SupportTicket {
   id String @id @default(uuid())
 
   userId String
   user   User   @relation("TicketCreator", fields: [userId], references: [id], onDelete: Cascade)
 
-  /// Optional link to the ride that triggered the ticket.
   rideId String?
   ride   Ride?   @relation(fields: [rideId], references: [id])
 
@@ -53,18 +48,15 @@ model SupportTicket {
   status      TicketStatus   @default(OPEN)
   priority    TicketPriority @default(MEDIUM)
 
-  /// Admin assigned to handle this ticket.
   adminId String?
   admin   User?   @relation("TicketAdmin", fields: [adminId], references: [id])
 
-  // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   messages TicketMessage[]
 
   @@index([userId, status])
@@ -72,13 +64,12 @@ model SupportTicket {
   @@map("support_tickets")
 }
 
-/// A single message in a support ticket thread (for Live Chat).
 model TicketMessage {
   id       String        @id @default(uuid())
   ticketId String
   ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  senderId String // userId of the sender (customer or admin)
+  senderId String
   message  String
 
   createdAt DateTime @default(now())
@@ -86,8 +77,6 @@ model TicketMessage {
   @@index([ticketId])
   @@map("ticket_messages")
 }
-
-// ── Emergency SOS  —  PRD 3.13 / 4.13 ───────────────────────────────────────
 
 enum AlertInitiatorRole {
   CUSTOMER
@@ -100,31 +89,24 @@ enum EmergencyAlertStatus {
   FALSE_ALARM
 }
 
-/// A live SOS alert triggered by a customer or driver.
-/// Separate from SupportTicket due to critical severity and distinct resolution workflow.
 model EmergencyAlert {
   id String @id @default(uuid())
 
-  /// Optional link to the ride during which the alert was triggered.
   rideId String?
 
-  /// The user who triggered the SOS.
   initiatorId String
   initiator   User   @relation("SosInitiator", fields: [initiatorId], references: [id])
 
   initiatorRole AlertInitiatorRole
 
-  /// GPS coordinates at the time of trigger.
   lat Float
   lng Float
 
   status EmergencyAlertStatus @default(ACTIVE)
 
-  /// Admin who resolved / dismissed the alert.
   resolvedById String?
   resolvedBy   User?   @relation("SosResolver", fields: [resolvedById], references: [id])
 
-  /// Free-text notes added by the resolving admin.
   notes String?
 
   createdAt DateTime @default(now())

@@ -14,17 +14,6 @@ import {
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Rides Controller
-// Role checks live in ride.route.ts (authorize); validation in ride.validation.ts;
-// domain errors are thrown by the services as AppErrors.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/v1/rides — Role: CUSTOMER | DRIVER | ADMIN.
- * Paginated and scoped by role (customer: own rides, driver: assigned rides,
- * admin: all, with optional ?status= and ?userId=).
- */
 const listRides = catchAsync(async (req, res) => {
   const { rides, meta } = await RideService.listRides(
     { id: req.user!.id, role: req.user!.role },
@@ -40,7 +29,6 @@ const listRides = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/rides/:id — Role: CUSTOMER | DRIVER | ADMIN. 404 when outside the caller's scope. */
 const getRide = catchAsync(async (req, res) => {
   const ride = await RideService.getRide(
     { id: req.user!.id, role: req.user!.role },
@@ -55,7 +43,6 @@ const getRide = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/rides/location — Role: DRIVER. Updates live position (Redis geo + DB). */
 const updateLocation = catchAsync(async (req, res) => {
   await RideService.updateDriverLocation(req.user!.id, req.body as UpdateLocationDto);
 
@@ -67,7 +54,6 @@ const updateLocation = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/rides/search — Role: CUSTOMER. Nearby available drivers. */
 const searchRide = catchAsync(async (req, res) => {
   const drivers = await RideService.findNearbyDrivers(req.body as SearchRideDto);
 
@@ -79,7 +65,6 @@ const searchRide = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/rides/estimate — Role: CUSTOMER. Upfront fare estimates per vehicle type. */
 const estimateFare = catchAsync(async (req, res) => {
   const estimates = await RideService.estimateFare(req.user!.id, req.body as EstimateFareDto);
 
@@ -91,12 +76,10 @@ const estimateFare = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/rides/request — Role: CUSTOMER. On-demand or scheduled ride request. */
 const requestRide = catchAsync(async (req, res) => {
   const result = await RideService.requestRide(req.user!.id, req.body as RequestRideDto);
 
   if (result.scheduled) {
-    // Scheduled ride: BullMQ job enqueued, no immediate driver dispatch.
     sendResponse(res, {
       statusCode: 201,
       success: true,
@@ -111,7 +94,6 @@ const requestRide = catchAsync(async (req, res) => {
     return;
   }
 
-  // On-demand ride: driver search already triggered.
   sendResponse(res, {
     statusCode: 201,
     success: true,
@@ -124,7 +106,6 @@ const requestRide = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/rides/:id/accept — Role: DRIVER. Atomically claims the ride. */
 const acceptRide = catchAsync(async (req, res) => {
   const ride = await RideService.acceptRide(req.user!.id, String(req.params.id));
 
@@ -136,11 +117,6 @@ const acceptRide = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * PATCH /api/v1/rides/:id/status — Role: DRIVER.
- * Advances to DRIVER_ARRIVED / IN_PROGRESS / COMPLETED. On COMPLETED the driver
- * is released back to the pool and ride counts are incremented.
- */
 const updateRideStatus = catchAsync(async (req, res) => {
   const result = await RideService.updateRideStatus(
     req.user!.id,
@@ -156,7 +132,6 @@ const updateRideStatus = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/rides/:id/cancel — Role: CUSTOMER | DRIVER (the ride's own participants). Cancels and releases the driver. */
 const cancelRide = catchAsync(async (req, res) => {
   const ride = await RideService.cancelRide(
     req.user!.id,
@@ -172,11 +147,6 @@ const cancelRide = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /api/v1/rides/:id/share — Role: CUSTOMER | DRIVER.
- * Generates a 24-hour tracking token (Redis) and a public tracking URL; a guest
- * can use the token to join the Socket.io room read-only.
- */
 const shareRide = catchAsync(async (req, res) => {
   const result = await RideService.shareRide(req.user!.id, String(req.params.id));
 
@@ -188,11 +158,6 @@ const shareRide = catchAsync(async (req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Recurring Rides  —  PRD 3.9
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** POST /api/v1/rides/recurring — Role: CUSTOMER. Creates a RecurringRideProfile. */
 const createRecurringProfile = catchAsync(async (req, res) => {
   const profile = await RecurringService.createRecurringProfile(
     req.user!.id,
@@ -207,7 +172,6 @@ const createRecurringProfile = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/rides/recurring — Role: CUSTOMER. All own recurring profiles. */
 const getMyRecurringProfiles = catchAsync(async (req, res) => {
   const profiles = await RecurringService.getMyRecurringProfiles(req.user!.id);
 
@@ -219,7 +183,6 @@ const getMyRecurringProfiles = catchAsync(async (req, res) => {
   });
 });
 
-/** DELETE /api/v1/rides/recurring/:id — Role: CUSTOMER. Soft-deactivates a profile. */
 const deactivateRecurringProfile = catchAsync(async (req, res) => {
   const profile = await RecurringService.deactivateRecurringProfile(
     req.user!.id,
@@ -234,10 +197,6 @@ const deactivateRecurringProfile = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /api/v1/rides/recurring/evaluate — Role: ADMIN.
- * Manually triggers the recurring-profile evaluation sweep (normally a cron job).
- */
 const triggerRecurringEvaluate = catchAsync(async (_req, res) => {
   const result = await RecurringService.evaluateRecurringProfiles();
 
@@ -249,7 +208,6 @@ const triggerRecurringEvaluate = catchAsync(async (_req, res) => {
   });
 });
 
-/** PATCH /api/v1/rides/:id/admin-cancel — Role: ADMIN. Force-cancel with notifications to both parties. */
 const adminCancelRide = catchAsync(async (req, res) => {
   const result = await RideService.cancelRideByAdmin(
     String(req.params.id),

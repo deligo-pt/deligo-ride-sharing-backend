@@ -11,7 +11,6 @@ import {
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
-// ── 1. Production Safety Guard ──────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
   console.error('⛔ Refusing to run dev seed script in production environment!');
   process.exit(1);
@@ -30,7 +29,6 @@ const BCRYPT_SALT_ROUNDS = 12;
 async function main(): Promise<void> {
   console.log('🌱 Starting idempotent development database seed...\n');
 
-  // ── 1. Seed Dummy Super Admin ─────────────────────────────────────────────
   const adminEmail = 'superadmin@deligo.test';
   const adminPassword = 'SuperAdmin@123';
   const adminPasswordHash = await bcrypt.hash(adminPassword, BCRYPT_SALT_ROUNDS);
@@ -92,7 +90,6 @@ async function main(): Promise<void> {
 
   console.log(`✅ Super Admin ready: ${superAdmin.email} (User ID: ${superAdmin.id})`);
 
-  // ── 2. Seed Pending Driver ────────────────────────────────────────────────
   const driverEmail = 'driver.pending@deligo.test';
   const driverPassword = 'Driver@123';
   const driverPasswordHash = await bcrypt.hash(driverPassword, BCRYPT_SALT_ROUNDS);
@@ -195,7 +192,6 @@ async function main(): Promise<void> {
 
   console.log(`✅ Pending Driver ready: ${pendingDriver.email} (User ID: ${pendingDriver.id})`);
 
-  // ── 3. Seed Pending Fleet Manager ─────────────────────────────────────────
   const fleetEmail = 'fleet.pending@deligo.test';
   const fleetPassword = 'Fleet@123';
   const fleetPasswordHash = await bcrypt.hash(fleetPassword, BCRYPT_SALT_ROUNDS);
@@ -270,7 +266,9 @@ async function main(): Promise<void> {
     },
   });
 
-  console.log(`✅ Pending Fleet Manager ready: ${pendingFleet.email} (User ID: ${pendingFleet.id})\n`);
+  console.log(
+    `✅ Pending Fleet Manager ready: ${pendingFleet.email} (User ID: ${pendingFleet.id})\n`,
+  );
 
   console.log('═════════════════════════════════════════════════════════════════');
   console.log('              DEV SEED CREDENTIALS & USER IDS                  ');

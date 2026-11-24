@@ -23,7 +23,6 @@ const contactNumberSchema = z
     return phone;
   });
 
-// A contact is either an email OR a Portuguese contactNumber (normalized to E.164 +351...).
 const contactFields = {
   email: emailSchema.optional(),
   contactNumber: contactNumberSchema.optional(),
@@ -55,7 +54,6 @@ function allowAtMostOneContact(data: ContactFields, ctx: z.RefinementCtx): void 
   }
 }
 
-// ── Customer signup: email XOR Portuguese contactNumber ────────────────────────
 export const InitiateSignupSchema = z
   .object({
     ...contactFields,
@@ -66,7 +64,6 @@ export const InitiateSignupSchema = z
 
 export type InitiateSignupInput = z.infer<typeof InitiateSignupSchema>;
 
-// ── Driver / fleet manager signup: email only ──────────────────────────────────
 export const EmailOnlySignupSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
@@ -75,8 +72,6 @@ export const EmailOnlySignupSchema = z.object({
 
 export type EmailOnlySignupInput = z.infer<typeof EmailOnlySignupSchema>;
 
-// The signup session is addressed by signupSessionId (returned by initiate). email / contactNumber
-// are optional and, when sent, must match the contact the session was created for.
 const ResendOtpSchema = z
   .object({
     signupSessionId: z.string().uuid('Invalid signupSessionId format'),
@@ -111,7 +106,6 @@ const LoginSchema = z
 
 export type LoginInput = z.infer<typeof LoginSchema>;
 
-// POST /auth/logout: every field optional (the refresh token may come from the cookie instead).
 const LogoutSchema = z.object({
   refreshToken: z.string().optional(),
   /** This device's FCM token: when sent, only that token is cleared (precise device logout). */

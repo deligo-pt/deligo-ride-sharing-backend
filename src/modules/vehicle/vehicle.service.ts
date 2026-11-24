@@ -4,7 +4,6 @@ import { CreateVehicleInput, UpdateVehicleInput, ReviewVehicleInput } from './ve
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { NotificationService, logNotificationFailure } from '../notification/notification.service';
 
-// ─── Shared vehicle select shape ───────────────────────────────────────────────
 const vehicleSelect = {
   id: true,
   vehicleClass: true,
@@ -33,9 +32,6 @@ const vehicleSelect = {
     },
   },
 } as const;
-
-// ─── POST /api/v1/vehicles ────────────────────────────────────────────────────
-// Driver registers their vehicle. Only one vehicle per driver profile is allowed.
 
 const createVehicle = async (userId: string, payload: CreateVehicleInput) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
@@ -81,9 +77,6 @@ const createVehicle = async (userId: string, payload: CreateVehicleInput) => {
   });
 };
 
-// ─── GET /api/v1/vehicles/me ──────────────────────────────────────────────────
-// Driver fetches their own vehicle.
-
 const getMyVehicle = async (userId: string) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
@@ -105,9 +98,6 @@ const getMyVehicle = async (userId: string) => {
   return vehicle;
 };
 
-// ─── GET /api/v1/vehicles (ADMIN) ─────────────────────────────────────────────
-// Admin fetches all vehicles with an optional filter by approvalStatus.
-
 const getAllVehicles = async (statusFilter?: string) => {
   return await prisma.vehicle.findMany({
     where: statusFilter
@@ -117,9 +107,6 @@ const getAllVehicles = async (statusFilter?: string) => {
     orderBy: { createdAt: 'desc' },
   });
 };
-
-// ─── PATCH /api/v1/vehicles ───────────────────────────────────────────────────
-// Driver updates their vehicle information. Re-triggers approval (status → PENDING_REVIEW).
 
 const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
@@ -138,7 +125,6 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
     });
   }
 
-  // If the driver is changing the license plate, ensure it's not already taken
   if (payload.licensePlate && payload.licensePlate !== existingVehicle.licensePlate) {
     const plateExists = await prisma.vehicle.findUnique({
       where: { licensePlate: payload.licensePlate },
@@ -160,7 +146,7 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
       insuranceExpiryDate: payload.insuranceExpiryDate
         ? new Date(payload.insuranceExpiryDate)
         : undefined,
-      // Changing vehicle info requires re-approval
+
       approvalStatus: 'PENDING_REVIEW',
       adminNote: null,
       reviewedAt: null,
@@ -168,9 +154,6 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
     select: vehicleSelect,
   });
 };
-
-// ─── POST /api/v1/vehicles/photos ─────────────────────────────────────────────
-// Driver uploads vehicle photos (up to 5). Appends to existing photoUrls.
 
 const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[]) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
@@ -196,7 +179,6 @@ const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[])
     );
   }
 
-  // Upload all photos concurrently to Cloudinary
   const uploadedUrls = await Promise.all(
     files.map((file) => uploadToCloudinary(file.buffer, 'vehicle-photos', file.mimetype)),
   );
@@ -207,7 +189,7 @@ const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[])
     where: { id: vehicle.id },
     data: {
       photoUrls: { push: newPhotoUrls },
-      // New photos require re-approval
+
       approvalStatus: 'PENDING_REVIEW',
       adminNote: null,
       reviewedAt: null,
@@ -215,9 +197,6 @@ const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[])
     select: vehicleSelect,
   });
 };
-
-// ─── PATCH /api/v1/vehicles/:id/review (ADMIN) ────────────────────────────────
-// Admin reviews a vehicle registration (Approve / Reject / Suspend).
 
 const reviewVehicle = async (vehicleId: string, payload: ReviewVehicleInput) => {
   const vehicle = await prisma.vehicle.findUnique({

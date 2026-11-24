@@ -15,7 +15,6 @@ const getFinancialLedger = async (query: GetLedgerQuery) => {
     }),
   };
 
-  // 1. Calculate total revenue using Prisma aggregate
   const aggregation = await prisma.ride.aggregate({
     where,
     _sum: {
@@ -28,13 +27,6 @@ const getFinancialLedger = async (query: GetLedgerQuery) => {
 
   const totalRevenue = aggregation._sum.finalFare ? Number(aggregation._sum.finalFare) : 0;
   const totalCompletedRides = aggregation._count.id;
-
-  // 2. Fetch PricingRules to get the exact admin fee percentages per vehicle type
-  // Wait, calculating driver earnings/platform commission perfectly requires iterating
-  // through rides or using raw SQL, since adminFee is per ride's vehicle type.
-  // For Phase 3, PRD says: "Write a basic loop or query to calculate Platform Commission (e.g., 20% of the total) and the Driver Earnings (80%)."
-  // So we'll fetch all rides and loop, or just do a 20/80 split if they want a basic query.
-  // Let's do a basic loop to be perfectly accurate based on adminFeePercentage of the ride's vehicleType.
 
   const rides = await prisma.ride.findMany({
     where,
@@ -51,7 +43,7 @@ const getFinancialLedger = async (query: GetLedgerQuery) => {
   });
 
   const pricingRules = await prisma.pricingRule.findMany();
-  const feeMap = new Map(pricingRules.map(pr => [pr.vehicleType, pr.adminFeePercentage]));
+  const feeMap = new Map(pricingRules.map((pr) => [pr.vehicleType, pr.adminFeePercentage]));
 
   let platformCommission = 0;
   let driverEarnings = 0;
@@ -60,10 +52,10 @@ const getFinancialLedger = async (query: GetLedgerQuery) => {
     const fare = ride.finalFare ? Number(ride.finalFare) : 0;
     const vType = ride.driverProfile?.vehicle?.vehicleType;
     const feePercent = vType ? (feeMap.get(vType) ?? 20.0) : 20.0; // Default 20%
-    
+
     const commission = fare * (feePercent / 100);
     platformCommission += commission;
-    driverEarnings += (fare - commission);
+    driverEarnings += fare - commission;
   }
 
   return {

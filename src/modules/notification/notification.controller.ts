@@ -8,11 +8,6 @@ import { sendBulkGateSms } from '../../utils/bulkgate';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Notifications Controller  — PRD 3.12
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** GET /api/v1/notifications — paginated inbox (?page, ?limit, ?unread). */
 const listNotifications = catchAsync(async (req, res) => {
   const result = await NotificationService.getInbox(
     req.user!.id,
@@ -26,7 +21,6 @@ const listNotifications = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/notifications/:id/read — marks one notification read (verifies ownership). */
 const readNotification = catchAsync(async (req, res) => {
   const notification = await NotificationService.markAsRead(req.user!.id, String(req.params.id));
   sendResponse(res, {
@@ -37,7 +31,6 @@ const readNotification = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /api/v1/notifications/read-all — marks ALL unread notifications read. */
 const readAllNotifications = catchAsync(async (req, res) => {
   const result = await NotificationService.markAllAsRead(req.user!.id);
   sendResponse(res, {
@@ -48,7 +41,6 @@ const readAllNotifications = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/notifications/test-sms — temporary endpoint to test BulkGate SMS. */
 const testSms = catchAsync(async (req, res) => {
   const { phone, message } = req.body as TestSmsDto;
 
@@ -62,7 +54,6 @@ const testSms = catchAsync(async (req, res) => {
   });
 });
 
-/** POST /api/v1/notifications/broadcast — ADMIN. SYSTEM notification to a role (or everyone). */
 const broadcast = catchAsync(async (req, res) => {
   const result = await NotificationService.broadcastNotification(
     req.body as BroadcastNotificationInput,

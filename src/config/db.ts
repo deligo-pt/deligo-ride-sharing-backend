@@ -61,16 +61,11 @@ declare global {
   var __prisma: ExtendedPrismaClient | undefined;
 }
 
-// ── Factory ───────────────────────────────────────────────────────────────────
-
 function createPrismaClient(): ExtendedPrismaClient {
   const adapter = new PrismaPg({ connectionString: config.database.url });
   const base = new PrismaClient({
     adapter,
-    log:
-      config.isDevelopment
-        ? ['query', 'info', 'warn', 'error']
-        : ['warn', 'error'],
+    log: config.isDevelopment ? ['query', 'info', 'warn', 'error'] : ['warn', 'error'],
   });
   return buildExtendedClient(base);
 }

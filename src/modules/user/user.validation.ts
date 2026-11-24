@@ -1,25 +1,19 @@
 import { z } from 'zod';
 
-// ── PATCH /api/v1/users/fcm-token ────────────────────────────────────────────
 const saveFcmTokenBodySchema = z.object({
   fcmToken: z.string({ error: 'fcmToken is required' }).min(1, 'fcmToken cannot be empty'),
 });
 
 export type SaveFcmTokenDto = z.infer<typeof saveFcmTokenBodySchema>;
 
-// ─── GET /users (paginated list) ────────────────────────────────────────
-
-const ListUsersQuerySchema = z
-  .object({
-    role: z.enum(['CUSTOMER', 'DRIVER']).optional(),
-    status: z.enum(['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION', 'DEACTIVATED']).optional(),
-    page: z.coerce.number().int().min(1).default(1),
-    limit: z.coerce.number().int().min(1).max(100).default(20),
-  });
+const ListUsersQuerySchema = z.object({
+  role: z.enum(['CUSTOMER', 'DRIVER']).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION', 'DEACTIVATED']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
 
 export type ListUsersQuery = z.infer<typeof ListUsersQuerySchema>;
-
-// ─── PATCH /users/:userId/status ────────────────────────────────────────
 
 const UserIdParamSchema = z.object({
   userId: z.string().uuid('userId must be a valid UUID'),

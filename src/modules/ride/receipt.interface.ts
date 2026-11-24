@@ -1,4 +1,3 @@
-/** The ride + customer fields the HTML receipt template reads. */
 export interface ReceiptRideData {
   id: string;
   pickupAddress: string;

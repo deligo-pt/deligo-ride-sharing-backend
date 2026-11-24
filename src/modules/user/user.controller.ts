@@ -3,10 +3,6 @@ import { ListUsersQuery, SaveFcmTokenDto, UpdateUserStatusInput } from './user.v
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
-/**
- * PATCH /api/v1/users/fcm-token
- * Any authenticated role. Saves/replaces the device's FCM push token.
- */
 const saveFcmToken = catchAsync(async (req, res) => {
   const { fcmToken } = req.body as SaveFcmTokenDto;
   const result = await UserService.saveFcmToken(req.user!.id, fcmToken);
@@ -19,7 +15,6 @@ const saveFcmToken = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /api/v1/users — Role: ADMIN. Paginated user list (?role, ?status). */
 const listUsers = catchAsync(async (req, res) => {
   const { users, meta } = await UserService.listUsers(req.query as unknown as ListUsersQuery);
   sendResponse(res, {
@@ -31,10 +26,6 @@ const listUsers = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * PATCH /api/v1/users/:userId/status — Role: ADMIN.
- * An admin can never change their own status; only a SUPER_ADMIN can change another ADMIN.
- */
 const updateUserStatus = catchAsync(async (req, res) => {
   const updated = await UserService.updateUserStatus(
     { id: req.user!.id },

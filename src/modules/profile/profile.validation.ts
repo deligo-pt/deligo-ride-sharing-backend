@@ -22,7 +22,6 @@ export type UpdateCustomerProfileInput = z.infer<typeof updateCustomerBodySchema
 export type UpdateDriverProfileInput = z.infer<typeof updateDriverBodySchema>;
 
 export const ProfileValidation = {
-  /** PATCH /profile/me — the body schema depends on the caller's role. */
   updateMyProfile: {
     customer: { body: updateCustomerBodySchema },
     driver: { body: updateDriverBodySchema },

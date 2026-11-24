@@ -1,11 +1,5 @@
 import { z } from 'zod';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Safety Domain — Validation Schemas  (PRD 3.13 / 4.13)
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── POST /safety/sos ──────────────────────────────────────────────────────────
-
 const TriggerSosSchema = z.object({
   rideId: z.string().uuid('rideId must be a valid UUID').optional(),
 
@@ -22,8 +16,6 @@ const TriggerSosSchema = z.object({
 
 export type TriggerSosDto = z.infer<typeof TriggerSosSchema>;
 
-// ── PATCH /safety/sos/:id/resolve ────────────────────────────────────────────
-
 const ResolveAlertSchema = z.object({
   status: z.enum(['RESOLVED', 'FALSE_ALARM'], {
     error: 'status must be one of: RESOLVED, FALSE_ALARM',
@@ -37,7 +29,6 @@ const ResolveAlertSchema = z.object({
 
 export type ResolveAlertDto = z.infer<typeof ResolveAlertSchema>;
 
-// ── PATCH /safety/sos/:id/resolve — path param ───────────────────────────────
 const AlertParamsSchema = z.object({
   id: z.string().min(1, 'Alert ID is required'),
 });

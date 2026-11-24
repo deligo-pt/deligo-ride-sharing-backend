@@ -6,22 +6,10 @@ import { InternalError } from '../../utils/errors';
 import type { FareBreakdown, ZoneSurcharge } from './pricing.interface';
 import { SERVICE_FEE, TAX_RATE } from './pricing.constant';
 
-// Single source of truth for all fare arithmetic. Both the estimate endpoint
-// and the trip-completion flow call this engine so the numbers are consistent.
-
-// ── Rate table ────────────────────────────────────────────────────────────────
-
-// Removed TIER_RATES (migrated to DB)
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
 const round2 = (n: number): number => {
   return Math.round(n * 100) / 100;
 };
 
-/**
- * Validate and return a promo code record, or null if invalid / not found.
- */
 const resolvePromoCode = async (code: string | undefined) => {
   if (!code) return null;
 
@@ -41,29 +29,10 @@ const resolvePromoCode = async (code: string | undefined) => {
       isActive: true,
       isDeleted: true,
       deletedAt: true,
-
-      // discountPercent: true,
-      // discountAmount: true,
-      // maxUses: true,
-      // usedCount: true,
-      // validUntil: true,
-      // validFrom: true,
-      // isActive: true,
-      // minimumFareAmount: true,
     },
   });
 };
 
-/**
- * Core arithmetic — shared by both estimate and final-fare paths.
- *
- * @param vehicleType      Prisma VehicleType enum value
- * @param distanceKm       Actual or estimated distance
- * @param durationMinutes  Actual or estimated duration
- * @param surgeMultiplier  Default 1.0
- * @param tolls            Optional extra charges (tolls, waiting time, etc.)
- * @param promoCode        Optional promo code string
- */
 const computeFare = async (
   vehicleType: VehicleType,
   distanceKm: number,
@@ -84,7 +53,6 @@ const computeFare = async (
     );
   }
 
-  // Map the rule to the expected class (fallback mapping since class isn't in rule directly)
   const vehicleClassMap: Record<string, string> = {
     Hatchback: 'ECONOMY',
     Micro: 'ECONOMY',
@@ -95,7 +63,6 @@ const computeFare = async (
   };
   const vehicleClass = vehicleClassMap[vehicleType as string] || 'ECONOMY';
 
-  // ── Line items ────────────────────────────────────────────────────────────
   const baseFare = round2(rule.baseFare);
   const distanceFare = round2(distanceKm * rule.perKmRate);
   const timeFare = round2(durationMinutes * rule.perMinRate);
@@ -106,7 +73,6 @@ const computeFare = async (
   const serviceFee = SERVICE_FEE;
   const taxAmount = round2((afterSurge + serviceFee) * TAX_RATE);
 
-  // ── Promo code ────────────────────────────────────────────────────────────
   const promo = await resolvePromoCode(promoCode);
   let discount = 0;
   let appliedCode: string | null = null;
@@ -152,10 +118,6 @@ const computeFare = async (
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Haversine — exported so rides.service can still use it without circular deps
-// ─────────────────────────────────────────────────────────────────────────────
-
 const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const R = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -167,21 +129,6 @@ const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.asin(Math.sqrt(a));
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fare calculation
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Calculate an upfront fare estimate for a given route.
- *
- * Accepts an optional array of intermediate `stops` between pickup and
- * dropoff. When supplied, the full coordinate chain
- * (pickup → stop1 → … → stopN → dropoff) is sent to the routing provider
- * in a single request so distance and duration are cumulative.
- *
- * Returns one FareBreakdown per vehicle type, or a single one if
- * vehicleType is given.
- */
 const calculateEstimate = async (
   pickupLat: number,
   pickupLng: number,
@@ -192,19 +139,16 @@ const calculateEstimate = async (
   surgeMultiplier: number = 1.0,
   stops: Coordinate[] = [],
 ): Promise<FareBreakdown[]> => {
-  // ── Build full coordinate chain (pickup → intermediate stops → dropoff) ──
   const coordinates: Coordinate[] = [
     { lat: pickupLat, lng: pickupLng },
     ...stops,
     { lat: dropoffLat, lng: dropoffLng },
   ];
 
-  // ── Fetch real-world route data (single API call for the full itinerary) ─
   const routeData = await getMultiStopRouteData(coordinates);
   const distanceKm = routeData.distanceMeters / 1_000;
   const durationMinutes = routeData.durationSeconds / 60;
 
-  // ── Geofencing: find SURCHARGE zones that intersect pickup or dropoff ──
   const activeZones = await prisma.zone.findMany({
     where: { isActive: true, type: 'SURCHARGE' },
   });
@@ -231,7 +175,6 @@ const calculateEstimate = async (
     }
   }
 
-  // Fetch active rules from DB
   let rules = await prisma.pricingRule.findMany();
   if (vehicleType) {
     rules = rules.filter((r) => r.vehicleType === vehicleType);
@@ -252,12 +195,6 @@ const calculateEstimate = async (
   );
 };
 
-/**
- * Calculate the final, authoritative fare at trip completion.
- *
- * Uses actual GPS-measured distance, actual elapsed time, and any
- * extra charges (tolls, waiting time).
- */
 const calculateFinalFare = async (
   vehicleType: VehicleType,
   actualDistanceKm: number,
@@ -271,7 +208,6 @@ const calculateFinalFare = async (
 ): Promise<FareBreakdown> => {
   const { tolls = 0, waitingTimeMinutes = 0, surgeMultiplier = 1.0, promoCode } = options;
 
-  // Waiting time is billed at the per-minute rate on top of driving time
   const totalMinutes = actualDurationMinutes + waitingTimeMinutes;
 
   return computeFare(
@@ -283,10 +219,6 @@ const calculateFinalFare = async (
     promoCode,
   );
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const PricingService = {
   calculateEstimate,

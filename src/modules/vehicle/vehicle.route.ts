@@ -5,10 +5,8 @@ import { validateRequest } from '../../middlewares/validateRequest';
 import { VehicleController } from './vehicle.controller';
 import { VehicleValidation } from './vehicle.validation';
 
-// Mounted at: /api/v1/vehicles (see src/routes/index.ts)
 const router: Router = Router();
 
-// ─── Driver ───────────────────────────────────────────────────────────────────
 router.post(
   '/',
   authenticate,
@@ -32,7 +30,6 @@ router.post(
   VehicleController.uploadVehiclePhotos,
 );
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
 router.get(
   '/',
   authenticate,

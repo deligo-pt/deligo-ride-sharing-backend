@@ -4,7 +4,6 @@ import { validateRequest } from '../../middlewares/validateRequest';
 import { ProfileController } from './profile.controller';
 import { ProfileValidation } from './profile.validation';
 
-// Mounted at: /api/v1/profile (see src/routes/index.ts)
 const router: Router = Router();
 
 router.get('/me', authenticate, ProfileController.getMyProfile);

@@ -34,16 +34,7 @@ const getKycStatus = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * POST /kyc/documents (BULK)
- * Driver uploads ALL required KYC documents in one multipart/form-data call.
- *
- * Each document is a file field named after its DocumentType. Optional text
- * fields `<TYPE>_expiryDate` carry ISO 8601 dates (validated in the route).
- * If ANY required file is missing, a 400 lists every absent document.
- */
 const uploadDocuments = catchAsync(async (req, res) => {
-  // req.files is a dictionary when using multer.fields()
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
 
   if (!files || Object.keys(files).length === 0) {
@@ -60,7 +51,6 @@ const uploadDocuments = catchAsync(async (req, res) => {
     );
   }
 
-  // Step 1: every required document type must have a file
   const missingDocuments = REQUIRED_KYC_DOCUMENTS.filter(
     (doc) => !files[doc.type] || files[doc.type].length === 0,
   );
@@ -86,10 +76,8 @@ const uploadDocuments = catchAsync(async (req, res) => {
     );
   }
 
-  // Step 2: optional expiry dates (already validated by validateRequest)
   const expiryDates = req.body as BulkExpiryDates;
 
-  // Step 3: upload all files to Cloudinary concurrently
   const uploadResults = await Promise.all(
     REQUIRED_KYC_DOCUMENTS.map(async (doc) => {
       const file = files[doc.type][0];
@@ -108,7 +96,6 @@ const uploadDocuments = catchAsync(async (req, res) => {
     }),
   );
 
-  // Step 4: upsert all documents + set driver status to PENDING_VERIFICATION
   const savedDocuments = await KycService.uploadAllDocuments(req.user!.id, uploadResults);
 
   sendResponse(res, {

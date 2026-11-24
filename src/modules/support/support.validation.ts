@@ -1,11 +1,5 @@
 import { z } from 'zod';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Support Domain — Validation Schemas  (PRD 3.x)
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── POST /support/emergency-contacts ─────────────────────────────────────────
-
 const CreateEmergencyContactSchema = z.object({
   name: z
     .string({ error: 'name is required' })
@@ -25,8 +19,6 @@ const CreateEmergencyContactSchema = z.object({
 
 export type CreateEmergencyContactDto = z.infer<typeof CreateEmergencyContactSchema>;
 
-// ── POST /support/tickets ─────────────────────────────────────────────────────
-
 const CreateTicketSchema = z.object({
   subject: z
     .string({ error: 'subject is required' })
@@ -44,14 +36,10 @@ const CreateTicketSchema = z.object({
 
   rideId: z.string().uuid('rideId must be a valid UUID').optional(),
 
-  priority: z
-    .enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
-    .optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
 });
 
 export type CreateTicketDto = z.infer<typeof CreateTicketSchema>;
-
-// ── POST /support/tickets/:id/messages ───────────────────────────────────────
 
 const AddTicketMessageSchema = z.object({
   message: z
@@ -62,13 +50,10 @@ const AddTicketMessageSchema = z.object({
 
 export type AddTicketMessageDto = z.infer<typeof AddTicketMessageSchema>;
 
-// ── Path param shared by the ticket routes ───────────────────────────────────
 const TicketParamsSchema = z.object({
   id: z.string().uuid('id must be a valid UUID'),
 });
 
-// ── GET /support/tickets — role-scoped, paginated list ────────────────────────
-// `status` / `priority` filters apply to both users and admins.
 const ListTicketsQuerySchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
@@ -77,7 +62,6 @@ const ListTicketsQuerySchema = z.object({
 });
 export type ListTicketsQuery = z.infer<typeof ListTicketsQuerySchema>;
 
-// ── PATCH /support/admin/tickets/:id  (ADMIN) ─────────────────────────────────
 const UpdateTicketSchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),

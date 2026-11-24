@@ -2,13 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { ForbiddenError, UnauthorizedError } from '../utils/errors';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fleet Operational Guard Middleware
-//
-// Ensures the authenticated user is a FLEET_MANAGER and that their FleetManagerProfile
-// exists, is not soft-deleted, and has achieved APPROVED verification status.
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function requireApprovedFleet(
   req: Request,
   _res: Response,
@@ -28,11 +21,7 @@ export async function requireApprovedFleet(
       select: { verificationStatus: true, isDeleted: true },
     });
 
-    if (
-      !profile ||
-      profile.isDeleted ||
-      profile.verificationStatus !== 'APPROVED'
-    ) {
+    if (!profile || profile.isDeleted || profile.verificationStatus !== 'APPROVED') {
       throw new ForbiddenError(
         'Your Fleet Manager account must be approved to perform this action',
       );

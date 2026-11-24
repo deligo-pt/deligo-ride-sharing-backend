@@ -22,32 +22,28 @@ enum DocumentStatus {
   TEMPORARILY_BLOCKED
 }
 
-// DRIVER PROFILE
-
 model DriverProfile {
   id     String @id @default(uuid())
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  licenseNumber    String?   @unique
-  licenseExpiresAt DateTime?
-  totalRides       Int       @default(0)
-  totalReviews     Int       @default(0)
-  averageRating    Float     @default(5.0)
+  licenseNumber     String?    @unique
+  licenseExpiresAt  DateTime?
+  totalRides        Int        @default(0)
+  totalReviews      Int        @default(0)
+  averageRating     Float      @default(5.0)
   kycStatus         KycStatus  @default(NOT_SUBMITTED)
   previousKycStatus KycStatus?
-  isAvailable      Boolean   @default(false)
-  currentLatitude  Float?
-  currentLongitude Float?
+  isAvailable       Boolean    @default(false)
+  currentLatitude   Float?
+  currentLongitude  Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Soft delete
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  // Relations
   vehicle  Vehicle?
   document DriverDocument?
   rides    Ride[]          @relation("DriverRides")
@@ -105,9 +101,9 @@ model DriverDocument {
 
   verificationStatus         DocumentStatus  @default(PENDING)
   previousVerificationStatus DocumentStatus?
-  reviewNote         String?
-  reviewedAt         DateTime?
-  rejectionReason    String?
+  reviewNote                 String?
+  reviewedAt                 DateTime?
+  rejectionReason            String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -3,39 +3,33 @@ enum DiscountType {
   PERCENTAGE
 }
 
-// PROMO CODES
-
 model PromoCode {
-  id             String       @id @default(uuid())
-  /// Stored as uppercase. Enforced at the application layer via Zod transform.
-  code           String       @unique
-  discountType   DiscountType
-  discountValue  Float
-  /// For PERCENTAGE codes: cap the maximum discount amount. Null = uncapped.
-  maxDiscountCap Float?
-  /// Minimum ride fare required to apply this promo code.
-  minRideValue   Float        @default(0)
-  maxGlobalUses  Int
-  currentUses    Int          @default(0)
-  validFrom      DateTime
-  validUntil     DateTime
-  isActive       Boolean      @default(true)
+  id String @id @default(uuid())
 
-  // Soft delete
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Float
+
+  maxDiscountCap Float?
+
+  minRideValue  Float    @default(0)
+  maxGlobalUses Int
+  currentUses   Int      @default(0)
+  validFrom     DateTime
+  validUntil    DateTime
+  isActive      Boolean  @default(true)
+
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
   createdAt DateTime @default(now())
 
-  // Relations
   rides  Ride[]
   usages PromoUsage[]
 
   @@map("promo_codes")
 }
 
-/// Records a single redemption of a PromoCode by a User.
-/// Written when a ride reaches COMPLETED status with a promo attached.
 model PromoUsage {
   id String @id @default(uuid())
 
@@ -45,10 +39,8 @@ model PromoUsage {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /// Optional: populated once the ride that used the code is COMPLETED.
   rideId String?
 
-  /// The actual monetary discount that was applied to the ride fare.
   discountApplied Float
 
   createdAt DateTime @default(now())
