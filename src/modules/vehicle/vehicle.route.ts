@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../middlewares/auth';
-import { kycUpload } from '../../middlewares/uploadMiddleware';
 import { validateRequest } from '../../middlewares/validateRequest';
 import { VehicleController } from './vehicle.controller';
 import { VehicleValidation } from './vehicle.validation';
@@ -26,8 +25,8 @@ router.post(
   '/photos',
   authenticate,
   authorize('DRIVER'),
-  kycUpload.array('photos', 5),
-  VehicleController.uploadVehiclePhotos,
+  validateRequest(VehicleValidation.addPhotos),
+  VehicleController.addVehiclePhotos,
 );
 
 router.get(

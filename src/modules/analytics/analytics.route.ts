@@ -4,7 +4,6 @@ import { validateRequest } from '../../middlewares/validateRequest';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsValidation } from './analytics.validation';
 
-// Mounted at: /api/v1/analytics (see src/routes/index.ts) — every route is ADMIN only.
 const router: Router = Router();
 
 router.get('/dashboard', authenticate, authorize('ADMIN'), AnalyticsController.getDashboard);

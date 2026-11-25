@@ -79,15 +79,11 @@ async function runTests() {
     }
     console.log(`✅ Existing user successfully logged in with Apple: ${result2.user.id}`);
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Test 3: Apple Sign-In Demo Mode — Case B (Account Linking + Takeover Protection)
-    // ─────────────────────────────────────────────────────────────────────────
     console.log(
       '\n--- Test 3: Apple Sign-In Demo Mode (Case B: Security Reject & Auto-Linking / Takeover Protection) ---',
     );
     const demoEmailPending = `takeover_pending_${testId}@example.com`;
 
-    // 3A: PENDING_VERIFICATION user is rejected with ForbiddenError
     const pendingUser = await prisma.user.create({
       data: {
         email: demoEmailPending,
@@ -127,7 +123,6 @@ async function runTests() {
       throw new Error('Pending verification user was NOT blocked from social login!');
     }
 
-    // 3B: ACTIVE user with unverified email (squatter credentials) - auto-links & soft-deletes credentials
     const demoEmailActive = `takeover_active_${testId}@example.com`;
     const unverifiedActiveUser = await prisma.user.create({
       data: {
@@ -152,7 +147,6 @@ async function runTests() {
       },
     });
 
-    // Legitimate owner logs in via Apple with verified email
     const result3 = await AuthService.appleLogin(
       {
         idToken: `demo_apple_token_${demoEmailActive}`,

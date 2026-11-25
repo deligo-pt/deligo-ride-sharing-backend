@@ -142,3 +142,11 @@ export const generalRateLimiter: RequestHandler = createRateLimiter({
   keys: (req) => [`ip:${clientIp(req)}`],
   skip: (req) => req.path === '/' || req.method === 'OPTIONS',
 });
+
+export const uploadRateLimiter: RequestHandler = createRateLimiter({
+  name: 'upload',
+  windowSeconds: 60,
+  max: 30,
+  keys: (req) => [req.user ? `user:${req.user.id}` : `ip:${clientIp(req)}`],
+  message: 'Too many uploads. Please slow down.',
+});

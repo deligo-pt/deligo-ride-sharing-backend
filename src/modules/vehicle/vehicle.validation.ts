@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { VehicleClass, VehicleType } from '@prisma/client';
+import { storedFileUrlSchema } from '../upload/upload.validation';
 
 const isoDate = z
   .string()
@@ -37,6 +38,20 @@ const updateVehicleSchema = z.object({
 
 export type UpdateVehicleInput = z.infer<typeof updateVehicleSchema>['body'];
 
+const MAX_VEHICLE_PHOTOS = 5;
+
+const addVehiclePhotosSchema = z.object({
+  body: z.object({
+    photos: z
+      .array(storedFileUrlSchema('vehicle-photos'), { error: 'photos must be an array of URLs' })
+      .min(1, 'Provide at least one photo URL')
+      .max(MAX_VEHICLE_PHOTOS, `You can send a maximum of ${MAX_VEHICLE_PHOTOS} photos`)
+      .refine((urls) => new Set(urls).size === urls.length, 'Duplicate photo URLs'),
+  }),
+});
+
+export type AddVehiclePhotosInput = z.infer<typeof addVehiclePhotosSchema>['body'];
+
 const reviewVehicleSchema = z.object({
   body: z
     .object({
@@ -60,6 +75,7 @@ export type ListVehiclesQuery = z.infer<typeof listVehiclesQuerySchema>;
 export const VehicleValidation = {
   create: { body: createVehicleSchema.shape.body },
   update: { body: updateVehicleSchema.shape.body },
+  addPhotos: { body: addVehiclePhotosSchema.shape.body },
   review: { body: reviewVehicleSchema.shape.body },
   list: { query: listVehiclesQuerySchema },
 };

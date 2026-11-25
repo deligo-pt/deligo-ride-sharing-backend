@@ -30,6 +30,20 @@ services:
       timeout: 3s
       retries: 5
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: deligo-rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_CONSOLE_ENABLE: 'true'
+      RUSTFS_CONSOLE_ADDRESS: ':9001'
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - rustfsdata:/data
+
   migration:
     build:
       context: .
@@ -67,15 +81,20 @@ services:
       ENABLE_WORKER: 'false'
       JWT_SECRET: 'deligo_development_jwt_secret_key_at_least_32_chars_long'
       JWT_REFRESH_SECRET: 'deligo_development_jwt_refresh_secret_at_least_32_chars'
-      CLOUDINARY_CLOUD_NAME: 'deligo-dev'
-      CLOUDINARY_API_KEY: '123456789012345'
-      CLOUDINARY_API_SECRET: 'mock_cloudinary_secret_key_12345'
+      RUSTFS_ENDPOINT: 'http://rustfs:9000'
+      RUSTFS_REGION: 'us-east-1'
+      RUSTFS_ACCESS_KEY: 'rustfsadmin'
+      RUSTFS_SECRET_KEY: 'rustfsadmin'
+      RUSTFS_BUCKET: 'deligo-ride-sharing'
+      RUSTFS_PUBLIC_URL: 'http://localhost:9000/deligo-ride-sharing'
       CORS_ORIGIN: 'http://localhost:3000,http://localhost:5173'
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rustfs:
+        condition: service_started
       migration:
         condition: service_completed_successfully
 
@@ -94,9 +113,12 @@ services:
       REDIS_URL: 'redis://redis:6379'
       JWT_SECRET: 'deligo_development_jwt_secret_key_at_least_32_chars_long'
       JWT_REFRESH_SECRET: 'deligo_development_jwt_refresh_secret_at_least_32_chars'
-      CLOUDINARY_CLOUD_NAME: 'deligo-dev'
-      CLOUDINARY_API_KEY: '123456789012345'
-      CLOUDINARY_API_SECRET: 'mock_cloudinary_secret_key_12345'
+      RUSTFS_ENDPOINT: 'http://rustfs:9000'
+      RUSTFS_REGION: 'us-east-1'
+      RUSTFS_ACCESS_KEY: 'rustfsadmin'
+      RUSTFS_SECRET_KEY: 'rustfsadmin'
+      RUSTFS_BUCKET: 'deligo-ride-sharing'
+      RUSTFS_PUBLIC_URL: 'http://localhost:9000/deligo-ride-sharing'
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,3 +130,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  rustfsdata:

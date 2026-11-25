@@ -15,6 +15,7 @@ import notificationRouter from '../modules/notification/notification.route';
 import analyticsRouter from '../modules/analytics/analytics.route';
 import financeRouter from '../modules/finance/finance.route';
 import pricingRouter from '../modules/pricing/pricing.route';
+import uploadRouter from '../modules/upload/upload.route';
 
 interface ModuleRoute {
   path: string;
@@ -39,6 +40,7 @@ const moduleRoutes: ModuleRoute[] = [
   { path: '/analytics', route: analyticsRouter },
   { path: '/finances', route: financeRouter },
   { path: '/pricing', route: pricingRouter },
+  { path: '/upload', route: uploadRouter },
 ];
 
 const router: Router = Router();

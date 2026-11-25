@@ -1,18 +1,14 @@
 import { KycService } from './kyc.service';
 import {
-  BulkExpiryDates,
   PendingKycQueryInput,
   RejectUserInput,
   ReviewDocumentInput,
   ReviewKycInput,
+  SubmitKycDocumentsInput,
 } from './kyc.validation';
-import { REQUIRED_DOCUMENT_TYPES, REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
-import { uploadToCloudinary } from '../../utils/cloudinary';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { BadRequestError } from '../../utils/errors';
 
-/** GET /kyc/requirements — public: the full list of required KYC documents. */
 const getKycRequirements = catchAsync((_req, res) => {
   const requirements = KycService.getKycRequirements();
   sendResponse(res, {
@@ -23,7 +19,6 @@ const getKycRequirements = catchAsync((_req, res) => {
   });
 });
 
-/** GET /kyc/status — driver checklist of uploaded documents and their status. */
 const getKycStatus = catchAsync(async (req, res) => {
   const status = await KycService.getKycStatus(req.user!.id);
   sendResponse(res, {
@@ -34,82 +29,22 @@ const getKycStatus = catchAsync(async (req, res) => {
   });
 });
 
-const uploadDocuments = catchAsync(async (req, res) => {
-  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+const submitDocuments = catchAsync(async (req, res) => {
+  const { documents } = req.body as SubmitKycDocumentsInput;
 
-  if (!files || Object.keys(files).length === 0) {
-    throw new BadRequestError(
-      `No files were received. You must upload all ${REQUIRED_KYC_DOCUMENTS.length} required documents in a single request.`,
-      {
-        requiredDocuments: REQUIRED_KYC_DOCUMENTS.map((d) => ({
-          fieldName: d.type,
-          label: d.label,
-          description: d.description,
-        })),
-      },
-      'NO_FILES_UPLOADED',
-    );
-  }
-
-  const missingDocuments = REQUIRED_KYC_DOCUMENTS.filter(
-    (doc) => !files[doc.type] || files[doc.type].length === 0,
-  );
-
-  if (missingDocuments.length > 0) {
-    throw new BadRequestError(
-      `You are missing ${missingDocuments.length} of the ${REQUIRED_KYC_DOCUMENTS.length} required documents. Please attach all missing files and re-submit.`,
-      {
-        missingDocuments: missingDocuments.map((doc) => ({
-          fieldName: doc.type,
-          label: doc.label,
-          description: doc.description,
-          requiresExpiry: doc.requiresExpiry,
-          hint: doc.requiresExpiry
-            ? `Also send a text field "${doc.type}_expiryDate" with an ISO 8601 date (e.g. 2030-12-31T00:00:00Z).`
-            : undefined,
-        })),
-        uploadedSoFar: REQUIRED_DOCUMENT_TYPES.filter(
-          (type) => files[type] && files[type].length > 0,
-        ),
-      },
-      'MISSING_REQUIRED_DOCUMENTS',
-    );
-  }
-
-  const expiryDates = req.body as BulkExpiryDates;
-
-  const uploadResults = await Promise.all(
-    REQUIRED_KYC_DOCUMENTS.map(async (doc) => {
-      const file = files[doc.type][0];
-      const cloudinaryResult = await uploadToCloudinary(
-        file.buffer,
-        'kyc-documents',
-        file.mimetype,
-      );
-      const expiryKey = `${doc.type}_expiryDate` as keyof BulkExpiryDates;
-
-      return {
-        documentType: doc.type,
-        documentUrl: cloudinaryResult.secureUrl,
-        expiryDate: expiryDates[expiryKey],
-      };
-    }),
-  );
-
-  const savedDocuments = await KycService.uploadAllDocuments(req.user!.id, uploadResults);
+  const savedDocuments = await KycService.submitAllDocuments(req.user!.id, documents);
 
   sendResponse(res, {
     statusCode: 201,
     success: true,
-    message: 'KYC documents uploaded successfully',
+    message: 'KYC documents submitted successfully',
     data: {
-      message: 'All 7 KYC documents uploaded successfully. Your application is now under review.',
+      message: 'All 7 KYC documents submitted successfully. Your application is now under review.',
       document: savedDocuments,
     },
   });
 });
 
-/** GET /kyc/documents/me — driver: raw list of own documents. */
 const getMyDocuments = catchAsync(async (req, res) => {
   const documents = await KycService.getMyDocuments(req.user!.id);
   sendResponse(res, {
@@ -120,7 +55,6 @@ const getMyDocuments = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /kyc/documents/pending — admin. */
 const getPendingDocuments = catchAsync(async (_req, res) => {
   const documents = await KycService.getPendingDocuments();
   sendResponse(res, {
@@ -131,7 +65,6 @@ const getPendingDocuments = catchAsync(async (_req, res) => {
   });
 });
 
-/** GET /kyc/documents/all — admin. */
 const getAllDocuments = catchAsync(async (_req, res) => {
   const documents = await KycService.getAllDocuments();
   sendResponse(res, {
@@ -142,7 +75,6 @@ const getAllDocuments = catchAsync(async (_req, res) => {
   });
 });
 
-/** PATCH /kyc/documents/:id/review — admin approves or rejects a document. */
 const reviewDocument = catchAsync(async (req, res) => {
   const updated = await KycService.reviewDocument(
     req.params.id as string,
@@ -156,7 +88,6 @@ const reviewDocument = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /kyc/profiles/pending — admin: driver profiles waiting in the KYC review queue. */
 const getPendingProfiles = catchAsync(async (_req, res) => {
   const profiles = await KycService.getPendingKycProfiles();
   sendResponse(res, {
@@ -167,7 +98,6 @@ const getPendingProfiles = catchAsync(async (_req, res) => {
   });
 });
 
-/** PATCH /kyc/profiles/:driverProfileId/review — admin approves or rejects a driver's full KYC. */
 const reviewProfile = catchAsync(async (req, res) => {
   const result = await KycService.reviewDriverKyc(
     req.params.driverProfileId as string,
@@ -181,7 +111,6 @@ const reviewProfile = catchAsync(async (req, res) => {
   });
 });
 
-/** GET /kyc/pending — admin: paginated list of pending DRIVER and FLEET_MANAGER KYC requests. */
 const getPendingKyc = catchAsync(async (req, res) => {
   const result = await KycService.getPendingKyc(req.query as unknown as PendingKycQueryInput);
   sendResponse(res, {
@@ -195,7 +124,6 @@ const getPendingKyc = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /kyc/:id/accept-user — admin approves a DRIVER or FLEET_MANAGER user KYC. */
 const acceptUser = catchAsync(async (req, res) => {
   const result = await KycService.acceptUser(req.user!.id, req.params.id as string);
   sendResponse(res, {
@@ -206,7 +134,6 @@ const acceptUser = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /kyc/:id/reject-user — admin rejects a DRIVER or FLEET_MANAGER user KYC. */
 const rejectUser = catchAsync(async (req, res) => {
   const result = await KycService.rejectUser(
     req.user!.id,
@@ -221,7 +148,6 @@ const rejectUser = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /kyc/:id/block-user — admin blocks/suspends a DRIVER or FLEET_MANAGER user. */
 const blockUser = catchAsync(async (req, res) => {
   const result = await KycService.blockUser(req.user!.id, req.params.id as string);
   sendResponse(res, {
@@ -232,7 +158,6 @@ const blockUser = catchAsync(async (req, res) => {
   });
 });
 
-/** PATCH /kyc/:id/unblock-user — admin restores a previously blocked DRIVER or FLEET_MANAGER user. */
 const unblockUser = catchAsync(async (req, res) => {
   const result = await KycService.unblockUser(req.user!.id, req.params.id as string);
   sendResponse(res, {
@@ -248,7 +173,7 @@ export const KycController = {
   reviewProfile,
   getKycRequirements,
   getKycStatus,
-  uploadDocuments,
+  submitDocuments,
   getMyDocuments,
   getPendingDocuments,
   getAllDocuments,

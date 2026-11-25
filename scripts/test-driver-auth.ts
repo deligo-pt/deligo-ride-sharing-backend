@@ -19,7 +19,6 @@ async function runDriverAuthTests() {
     const driverEmail = `driver_test_${testId}@deligo.com`;
     const driverPassword = 'DriverPassword123!';
 
-    // Step 1: Initiate Driver Signup
     const initResult = await AuthService.initiateSignup(
       {
         email: driverEmail,
@@ -49,7 +48,6 @@ async function runDriverAuthTests() {
     }
     if (!matchedOtp) throw new Error('Could not find matching OTP code');
 
-    // Step 2: Verify OTP
     const verifyResult = await AuthService.verifySignupOtp(
       {
         signupSessionId: initResult.signupSessionId,
@@ -138,7 +136,6 @@ async function runDriverAuthTests() {
       },
     });
 
-    // Case 2A: Driver logging in via Driver endpoint (allowedRoles: ['DRIVER'])
     const driverLoginResult = await AuthService.login(
       { email: driverEmail, password: driverPassword, rememberMe: false },
       clientInfo,
@@ -190,7 +187,6 @@ async function runDriverAuthTests() {
       throw new Error('Driver was NOT blocked from customer portal!');
     }
 
-    // Case 2D: Customer logging in via Customer endpoint (allowedRoles: ['CUSTOMER'])
     const customerLoginResult = await AuthService.login(
       { email: customerEmail, password: customerPassword, rememberMe: false },
       clientInfo,

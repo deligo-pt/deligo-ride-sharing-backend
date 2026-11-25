@@ -65,10 +65,17 @@ export const config = {
     apiKey: env.RESEND_API_KEY,
   },
 
-  cloudinary: {
-    cloudName: env.CLOUDINARY_CLOUD_NAME,
-    apiKey: env.CLOUDINARY_API_KEY,
-    apiSecret: env.CLOUDINARY_API_SECRET,
+  rustfs: {
+    endpoint: env.RUSTFS_ENDPOINT,
+    region: env.RUSTFS_REGION,
+    accessKey: env.RUSTFS_ACCESS_KEY,
+    secretKey: env.RUSTFS_SECRET_KEY,
+    bucket: env.RUSTFS_BUCKET,
+    publicUrl: env.RUSTFS_PUBLIC_URL,
+    allowedUrlHosts: (env.UPLOAD_ALLOWED_URL_HOSTS ?? '')
+      .split(',')
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
   },
 
   bulkgate: {

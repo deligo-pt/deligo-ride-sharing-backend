@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import { MulterError } from 'multer';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/errors';
 import { ErrorSource, errorResponse } from '../types/api.types';
@@ -58,6 +59,15 @@ function resolveError(err: unknown): ResolvedError {
         path: issue.path.join('.'),
         message: issue.message,
       })),
+    };
+  }
+
+  if (err instanceof MulterError) {
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    return {
+      statusCode: tooLarge ? 413 : 400,
+      message: tooLarge ? 'File is too large (max 10 MB per file)' : err.message,
+      code: tooLarge ? 'FILE_TOO_LARGE' : err.code,
     };
   }
 
