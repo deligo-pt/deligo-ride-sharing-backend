@@ -1,4 +1,5 @@
 services:
+  # ── DELIGO: PostgreSQL ──────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: deligo-postgres
@@ -16,6 +17,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── DELIGO: Redis ───────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: deligo-redis
@@ -44,13 +46,12 @@ services:
     volumes:
       - rustfsdata:/data
 
+  # ── DELIGO: Prisma Migration ────────────────────────────
   migration:
     build:
       context: .
       target: dependencies
     container_name: deligo-migration
-    # Applies committed migrations only — never drops or rewrites data.
-    # The datasource URL comes from DATABASE_URL (see prisma.config.ts).
     command: sh -c "npx prisma migrate deploy && npx prisma generate"
     volumes:
       - .:/app
@@ -62,6 +63,7 @@ services:
         condition: service_healthy
     restart: 'no'
 
+  # ── DELIGO: API ─────────────────────────────────────────
   api:
     build:
       context: .
@@ -98,6 +100,7 @@ services:
       migration:
         condition: service_completed_successfully
 
+  # ── DELIGO: Background Worker ──────────────────────────
   worker:
     build:
       context: .
@@ -127,7 +130,70 @@ services:
       migration:
         condition: service_completed_successfully
 
+  # ── DOCMOST: Documentation Application ─────────────────
+  docmost:
+    image: docmost/docmost:latest
+    container_name: deligo-docmost
+    environment:
+      APP_URL: 'http://localhost:3001'
+      APP_SECRET: ${DOCMOST_APP_SECRET:?Set DOCMOST_APP_SECRET in .env}
+      DATABASE_URL: 'postgresql://docmost:${DOCMOST_DB_PASSWORD:?Set DOCMOST_DB_PASSWORD in .env}@docmost-postgres:5432/docmost_db'
+      REDIS_URL: 'redis://docmost-redis:6379'
+    ports:
+      - '3001:3000'
+    volumes:
+      - docmostdata:/app/data/storage
+    depends_on:
+      docmost-postgres:
+        condition: service_healthy
+      docmost-redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── DOCMOST: Dedicated PostgreSQL ──────────────────────
+  docmost-postgres:
+    image: postgres:18
+    container_name: deligo-docmost-postgres
+    environment:
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: ${DOCMOST_DB_PASSWORD:?Set DOCMOST_DB_PASSWORD in .env}
+      POSTGRES_DB: docmost_db
+    volumes:
+      - docmost_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U docmost -d docmost_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── DOCMOST: Dedicated Redis ───────────────────────────
+  docmost-redis:
+    image: redis:8
+    container_name: deligo-docmost-redis
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - docmost_redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+# ── Persistent Volumes ────────────────────────────────────
 volumes:
+  # Deligo
   pgdata:
   redisdata:
   rustfsdata:
+
+  # Docmost
+  docmostdata:
+  docmost_pgdata:
+  docmost_redisdata:
