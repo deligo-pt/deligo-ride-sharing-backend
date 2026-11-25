@@ -15,4 +15,4 @@ router.post(
   ReviewController.submitReview,
 );
 
-export default router;
+export const reviewRouter = router;

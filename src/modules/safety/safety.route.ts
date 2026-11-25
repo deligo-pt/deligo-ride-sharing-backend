@@ -24,4 +24,4 @@ router.patch(
   SafetyController.resolveAlert,
 );
 
-export default router;
+export const safetyRouter = router;

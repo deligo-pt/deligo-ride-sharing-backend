@@ -16,4 +16,4 @@ router.get(
   DriverController.getTripHistory,
 );
 
-export default router;
+export const driverRouter = router;

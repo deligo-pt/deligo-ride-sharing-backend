@@ -38,4 +38,4 @@ router.post(
   NotificationController.testSms,
 );
 
-export default router;
+export const notificationRouter = router;

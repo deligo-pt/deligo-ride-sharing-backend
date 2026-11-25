@@ -27,4 +27,4 @@ router.post(
   UploadController.uploadMultiple,
 );
 
-export default router;
+export const uploadRouter = router;

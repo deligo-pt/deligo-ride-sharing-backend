@@ -84,4 +84,4 @@ router.patch(
   KycController.unblockUser,
 );
 
-export default router;
+export const kycRouter = router;

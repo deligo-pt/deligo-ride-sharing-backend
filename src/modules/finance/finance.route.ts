@@ -14,4 +14,4 @@ router.get(
   FinanceController.getLedger,
 );
 
-export default router;
+export const financeRouter = router;

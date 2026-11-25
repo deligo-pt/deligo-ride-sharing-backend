@@ -17,7 +17,7 @@ import {
 import { REQUIRED_KYC_DOCUMENTS } from '../src/modules/kyc/kyc.constant';
 import { KycValidation } from '../src/modules/kyc/kyc.validation';
 import { VehicleValidation } from '../src/modules/vehicle/vehicle.validation';
-import uploadRouter from '../src/modules/upload/upload.route';
+import { uploadRouter } from '../src/modules/upload/upload.route';
 import { MAX_MULTIPLE_FILES } from '../src/modules/upload/upload.constant';
 import type { UploadFileResult } from '../src/modules/upload/upload.interface';
 import { errorHandler } from '../src/middlewares/errorHandler';

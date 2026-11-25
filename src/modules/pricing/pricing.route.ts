@@ -15,4 +15,4 @@ router.patch(
   PricingController.updatePricingRule,
 );
 
-export default router;
+export const pricingRouter = router;

@@ -1,21 +1,21 @@
 import { RequestHandler, Router } from 'express';
-import authRouter from '../modules/auth/auth.route';
-import userRouter from '../modules/user/user.route';
-import profileRouter from '../modules/profile/profile.route';
-import driverRouter from '../modules/driver/driver.route';
-import fleetRouter from '../modules/fleet/fleet.route';
-import kycRouter from '../modules/kyc/kyc.route';
-import vehicleRouter from '../modules/vehicle/vehicle.route';
-import rideRouter from '../modules/ride/ride.route';
-import promotionRouter from '../modules/promotion/promotion.route';
-import reviewRouter from '../modules/review/review.route';
-import supportRouter from '../modules/support/support.route';
-import safetyRouter from '../modules/safety/safety.route';
-import notificationRouter from '../modules/notification/notification.route';
-import analyticsRouter from '../modules/analytics/analytics.route';
-import financeRouter from '../modules/finance/finance.route';
-import pricingRouter from '../modules/pricing/pricing.route';
-import uploadRouter from '../modules/upload/upload.route';
+import { authRouter } from '../modules/auth/auth.route';
+import { userRouter } from '../modules/user/user.route';
+import { profileRouter } from '../modules/profile/profile.route';
+import { driverRouter } from '../modules/driver/driver.route';
+import { fleetRouter } from '../modules/fleet/fleet.route';
+import { kycRouter } from '../modules/kyc/kyc.route';
+import { vehicleRouter } from '../modules/vehicle/vehicle.route';
+import { rideRouter } from '../modules/ride/ride.route';
+import { promotionRouter } from '../modules/promotion/promotion.route';
+import { reviewRouter } from '../modules/review/review.route';
+import { supportRouter } from '../modules/support/support.route';
+import { safetyRouter } from '../modules/safety/safety.route';
+import { notificationRouter } from '../modules/notification/notification.route';
+import { analyticsRouter } from '../modules/analytics/analytics.route';
+import { financeRouter } from '../modules/finance/finance.route';
+import { pricingRouter } from '../modules/pricing/pricing.route';
+import { uploadRouter } from '../modules/upload/upload.route';
 
 interface ModuleRoute {
   path: string;

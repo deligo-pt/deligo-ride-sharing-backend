@@ -22,4 +22,4 @@ router.get(
   AnalyticsController.exportReport,
 );
 
-export default router;
+export const analyticsRouter = router;

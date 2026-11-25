@@ -44,4 +44,4 @@ router.patch(
   VehicleController.reviewVehicle,
 );
 
-export default router;
+export const vehicleRouter = router;
