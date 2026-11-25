@@ -5,9 +5,6 @@ import { createApp } from '../src/app';
 import prisma from '../src/config/db';
 import { redis } from '../src/utils/redis';
 
-const hashSha256 = (value: string): string =>
-  crypto.createHash('sha256').update(value).digest('hex');
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin Authentication & One-Time Set-Password Invite Flow E2E Tests
 // ─────────────────────────────────────────────────────────────────────────────
