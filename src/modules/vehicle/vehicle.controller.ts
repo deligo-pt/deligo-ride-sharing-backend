@@ -1,5 +1,6 @@
 import { VehicleService } from './vehicle.service';
 import {
+  AddVehiclePhotosInput,
   CreateVehicleInput,
   ListVehiclesQuery,
   ReviewVehicleInput,
@@ -7,7 +8,6 @@ import {
 } from './vehicle.validation';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
-import { BadRequestError } from '../../utils/errors';
 
 const createVehicle = catchAsync(async (req, res) => {
   const vehicle = await VehicleService.createVehicle(req.user!.id, req.body as CreateVehicleInput);
@@ -53,18 +53,14 @@ const updateMyVehicle = catchAsync(async (req, res) => {
   });
 });
 
-const uploadVehiclePhotos = catchAsync(async (req, res) => {
-  const files = req.files as Express.Multer.File[] | undefined;
+const addVehiclePhotos = catchAsync(async (req, res) => {
+  const { photos } = req.body as AddVehiclePhotosInput;
 
-  if (!files || files.length === 0) {
-    throw new BadRequestError('Please attach at least one photo.', undefined, 'NO_FILES');
-  }
-
-  const vehicle = await VehicleService.uploadVehiclePhotos(req.user!.id, files);
+  const vehicle = await VehicleService.addVehiclePhotos(req.user!.id, photos);
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Vehicle photos uploaded successfully',
+    message: 'Vehicle photos saved successfully',
     data: vehicle,
   });
 });
@@ -87,6 +83,6 @@ export const VehicleController = {
   getMyVehicle,
   getAllVehicles,
   updateMyVehicle,
-  uploadVehiclePhotos,
+  addVehiclePhotos,
   reviewVehicle,
 };

@@ -23,8 +23,9 @@
     "test:driver": "ts-node scripts/test-driver-auth.ts",
     "test:google": "ts-node scripts/test-google-auth.ts",
     "test:social": "ts-node scripts/test-social-auth.ts",
+    "test:rustfs": "ts-node scripts/test-rustfs.ts",
     "test:e2e": "ts-node scripts/test-auth-e2e.ts",
-    "test:all": "npm run test:admin && npm run test:driver && npm run test:google && npm run test:social && npm run test:e2e",
+    "test:all": "npm run test:rustfs && npm run test:admin && npm run test:driver && npm run test:google && npm run test:social && npm run test:e2e",
     "test": "npm run test:all"
   },
   "keywords": [
@@ -45,7 +46,6 @@
     "axios": "^1.17.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.78.0",
-    "cloudinary": "^2.10.0",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

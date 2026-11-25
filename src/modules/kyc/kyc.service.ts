@@ -9,8 +9,10 @@ import {
   ReviewKycInput,
 } from './kyc.validation';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { deleteFromRustFSInBackground } from '../../utils/rustfs.util';
 import type {
   ApplyKycDecisionParams,
+  DocumentType,
   FlattenedKycDocuments,
   KycRequirementItem,
   SingleDocumentPayload,
@@ -79,19 +81,26 @@ export interface ApplyKycDecisionResult {
 
 const buildFlattenedData = (documents: SingleDocumentPayload[]): FlattenedKycDocuments => {
   const map = new Map(documents.map((d) => [d.documentType, d]));
+  const expiry = (type: DocumentType): Date | undefined => {
+    const value = map.get(type)?.expiryDate;
+    return value ? new Date(value) : undefined;
+  };
 
   return {
     drivingLicenseUrl: map.get('DRIVING_LICENSE')?.documentUrl as string,
+    drivingLicenseExpiresAt: expiry('DRIVING_LICENSE'),
     nationalIdUrl: map.get('NATIONAL_ID')?.documentUrl as string,
     vehicleRegistrationUrl: map.get('VEHICLE_REGISTRATION')?.documentUrl as string,
+    vehicleRegistrationExpiresAt: expiry('VEHICLE_REGISTRATION'),
     vehicleInsuranceUrl: map.get('VEHICLE_INSURANCE')?.documentUrl as string,
+    vehicleInsuranceExpiresAt: expiry('VEHICLE_INSURANCE'),
     driverSelfieUrl: map.get('DRIVER_SELFIE')?.documentUrl as string,
     proofOfAddressUrl: map.get('PROOF_OF_ADDRESS')?.documentUrl as string,
     taxIdUrl: map.get('TAX_ID')?.documentUrl as string,
   };
 };
 
-const uploadAllDocuments = async (
+const submitAllDocuments = async (
   userId: string,
   documents: SingleDocumentPayload[],
 ): Promise<DriverDocument> => {
@@ -101,11 +110,15 @@ const uploadAllDocuments = async (
 
   if (!driverProfile) {
     throw new NotFoundError('Driver profile', {
-      message: 'Driver profile not found. Only registered drivers can upload KYC documents.',
+      message: 'Driver profile not found. Only registered drivers can submit KYC documents.',
     });
   }
 
   const flattenedData = buildFlattenedData(documents);
+
+  const previous = await prisma.driverDocument.findUnique({
+    where: { driverProfileId: driverProfile.id },
+  });
 
   const [upserted] = await prisma.$transaction([
     prisma.driverDocument.upsert({
@@ -121,6 +134,10 @@ const uploadAllDocuments = async (
         rejectionReason: null,
         reviewedAt: null,
         ...flattenedData,
+        // A re-submission without an expiry clears the previously stored one.
+        drivingLicenseExpiresAt: flattenedData.drivingLicenseExpiresAt ?? null,
+        vehicleRegistrationExpiresAt: flattenedData.vehicleRegistrationExpiresAt ?? null,
+        vehicleInsuranceExpiresAt: flattenedData.vehicleInsuranceExpiresAt ?? null,
       },
     }),
 
@@ -133,6 +150,22 @@ const uploadAllDocuments = async (
       data: { status: 'PENDING_VERIFICATION' },
     }),
   ]);
+
+  // Drop superseded objects in the background, but never one that was just re-submitted.
+  if (previous) {
+    const kept = new Set(documents.map((d) => d.documentUrl));
+    deleteFromRustFSInBackground(
+      ...[
+        previous.drivingLicenseUrl,
+        previous.nationalIdUrl,
+        previous.vehicleRegistrationUrl,
+        previous.vehicleInsuranceUrl,
+        previous.driverSelfieUrl,
+        previous.proofOfAddressUrl,
+        previous.taxIdUrl,
+      ].filter((url) => url && !kept.has(url)),
+    );
+  }
 
   return upserted;
 };
@@ -843,7 +876,7 @@ const unblockUser = async (adminId: string, userId: string): Promise<UserKycActi
 };
 
 export const KycService = {
-  uploadAllDocuments,
+  submitAllDocuments,
   getKycStatus,
   getPendingDocuments,
   getAllDocuments,

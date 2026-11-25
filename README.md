@@ -112,7 +112,7 @@ The decoded JWT payload provides the user's `role`. The middleware enforces stri
 Ensure you have the following installed on your machine:
 - **Node.js** (v18.x or higher)
 - **PostgreSQL** (v14.x or higher)
-- **Cloudinary Account** (for KYC document & asset storage)
+- **RustFS** (S3-compatible object storage for KYC documents & vehicle photos; `docker compose up` starts one locally)
 
 ### 2. Environment Configuration
 Clone the repository and set up your local environment variables:

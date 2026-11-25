@@ -1,10 +1,8 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../middlewares/auth';
-import { kycUpload } from '../../middlewares/uploadMiddleware';
 import { validateRequest } from '../../middlewares/validateRequest';
 import { KycController } from './kyc.controller';
 import { KycValidation } from './kyc.validation';
-import { REQUIRED_KYC_DOCUMENTS } from './kyc.constant';
 
 const router: Router = Router();
 
@@ -16,9 +14,8 @@ router.post(
   '/documents',
   authenticate,
   authorize('DRIVER'),
-  kycUpload.fields(REQUIRED_KYC_DOCUMENTS.map((doc) => ({ name: doc.type, maxCount: 1 }))),
-  validateRequest(KycValidation.uploadDocuments),
-  KycController.uploadDocuments,
+  validateRequest(KycValidation.submitDocuments),
+  KycController.submitDocuments,
 );
 
 router.get('/documents/me', authenticate, authorize('DRIVER'), KycController.getMyDocuments);
@@ -87,4 +84,4 @@ router.patch(
   KycController.unblockUser,
 );
 
-export default router;
+export const kycRouter = router;

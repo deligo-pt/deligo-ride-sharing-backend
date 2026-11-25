@@ -161,6 +161,12 @@
       "value": "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a",
       "type": "string",
       "description": "Mock Fleet Manager User ID (Carlos Fleet)"
+    },
+    {
+      "key": "uploadedFileUrl",
+      "value": "",
+      "type": "string",
+      "description": "URL of the last file uploaded via the Upload folder (auto-populated)"
     }
   ],
   "item": [
@@ -2373,6 +2379,129 @@
       ]
     },
     {
+      "name": "Upload",
+      "description": "Reusable file upload backed by RustFS. Upload first, then send the returned URLs as JSON to KYC / Vehicle endpoints.",
+      "item": [
+        {
+          "name": "Upload Single File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"File uploaded\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.url).to.be.a('string');",
+                  "    pm.collectionVariables.set('uploadedFileUrl', json.data.url);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "JPEG, PNG, WEBP or PDF (max 10 MB)"
+                },
+                {
+                  "key": "folder",
+                  "value": "kyc-documents",
+                  "type": "text",
+                  "description": "Optional: kyc-documents | vehicle-photos | avatars | fleet-documents | support-attachments | general (default)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upload"
+              ]
+            },
+            "description": "Uploads one file to RustFS storage and returns its URL. Pass the returned `url` to endpoints such as POST /kyc/documents or POST /vehicles/photos. `folder` may also be sent as a query parameter."
+          }
+        },
+        {
+          "name": "Upload Multiple Files",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Files uploaded\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    pm.collectionVariables.set('uploadedFileUrl', json.data[0].url);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driverAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "description": "Repeat the 'files' field for each file (max 10, 10 MB each)"
+                },
+                {
+                  "key": "files",
+                  "type": "file"
+                },
+                {
+                  "key": "folder",
+                  "value": "vehicle-photos",
+                  "type": "text",
+                  "description": "Optional: see Upload Single File"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/upload/multiple",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upload",
+                "multiple"
+              ]
+            },
+            "description": "Uploads up to 10 files at once. If any upload fails, files already stored by the request are rolled back. Returns an array of { key, url, originalName, mimetype, size }."
+          }
+        }
+      ]
+    },
+    {
       "name": "Vehicles",
       "description": "Vehicle registration, photo inspection management, driver vehicle updates, and admin vehicle approval workflows.",
       "item": [
@@ -2532,14 +2661,14 @@
           }
         },
         {
-          "name": "Driver - Upload Vehicle Photos (Multipart)",
+          "name": "Driver - Add Vehicle Photos (JSON URLs)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"Vehicle photos uploaded\", function () {",
+                  "pm.test(\"Vehicle photos saved\", function () {",
                   "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.true;",
@@ -2555,17 +2684,21 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "photos",
-                  "type": "file",
-                  "description": "Upload up to 5 vehicle inspection photos"
+              "mode": "raw",
+              "raw": "{\n  \"photos\": [\n    \"http://localhost:9000/deligo-ride-sharing/vehicle-photos/1700000000000-11111111-1111-4111-8111-111111111111.jpg\",\n    \"http://localhost:9000/deligo-ride-sharing/vehicle-photos/1700000000001-22222222-2222-4222-8222-222222222222.jpg\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/vehicles/photos",
@@ -2577,7 +2710,7 @@
                 "photos"
               ]
             },
-            "description": "Driver uploads up to 5 vehicle exterior and interior photos."
+            "description": "Driver attaches up to 5 vehicle photos by URL. Upload each file first with POST /upload/multiple (folder=vehicle-photos) and send the returned `url` values. Photos are appended; the vehicle may hold at most 5 in total."
           }
         },
         {
@@ -2782,14 +2915,14 @@
           }
         },
         {
-          "name": "Driver - Bulk Upload All 7 KYC Documents (Multipart)",
+          "name": "Driver - Submit All 7 KYC Documents (JSON URLs)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"KYC documents uploaded\", function () {",
+                  "pm.test(\"KYC documents submitted\", function () {",
                   "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.true;",
@@ -2805,62 +2938,21 @@
                 "key": "Authorization",
                 "value": "Bearer {{driverAccessToken}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
               }
             ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "DRIVING_LICENSE",
-                  "type": "file",
-                  "description": "Driver License document"
-                },
-                {
-                  "key": "NATIONAL_ID",
-                  "type": "file",
-                  "description": "National ID / Passport document"
-                },
-                {
-                  "key": "VEHICLE_REGISTRATION",
-                  "type": "file",
-                  "description": "Vehicle registration certificate"
-                },
-                {
-                  "key": "VEHICLE_INSURANCE",
-                  "type": "file",
-                  "description": "Vehicle insurance certificate"
-                },
-                {
-                  "key": "DRIVER_SELFIE",
-                  "type": "file",
-                  "description": "Recent driver headshot photo"
-                },
-                {
-                  "key": "PROOF_OF_ADDRESS",
-                  "type": "file",
-                  "description": "Utility bill or bank statement"
-                },
-                {
-                  "key": "TAX_ID",
-                  "type": "file",
-                  "description": "TIN / Tax ID document"
-                },
-                {
-                  "key": "DRIVING_LICENSE_expiryDate",
-                  "value": "2030-12-31T00:00:00.000Z",
-                  "type": "text"
-                },
-                {
-                  "key": "VEHICLE_REGISTRATION_expiryDate",
-                  "value": "2028-06-30T00:00:00.000Z",
-                  "type": "text"
-                },
-                {
-                  "key": "VEHICLE_INSURANCE_expiryDate",
-                  "value": "2027-12-31T00:00:00.000Z",
-                  "type": "text"
+              "mode": "raw",
+              "raw": "{\n  \"documents\": [\n    {\n      \"documentType\": \"DRIVING_LICENSE\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-driving-license.pdf\",\n      \"expiryDate\": \"2030-12-31T00:00:00.000Z\"\n    },\n    {\n      \"documentType\": \"NATIONAL_ID\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-national-id.pdf\"\n    },\n    {\n      \"documentType\": \"VEHICLE_REGISTRATION\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-vehicle-registration.pdf\",\n      \"expiryDate\": \"2028-06-30T00:00:00.000Z\"\n    },\n    {\n      \"documentType\": \"VEHICLE_INSURANCE\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-vehicle-insurance.pdf\",\n      \"expiryDate\": \"2027-12-31T00:00:00.000Z\"\n    },\n    {\n      \"documentType\": \"DRIVER_SELFIE\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-driver-selfie.pdf\"\n    },\n    {\n      \"documentType\": \"PROOF_OF_ADDRESS\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-proof-of-address.pdf\"\n    },\n    {\n      \"documentType\": \"TAX_ID\",\n      \"documentUrl\": \"http://localhost:9000/deligo-ride-sharing/kyc-documents/1700000000000-tax-id.pdf\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/kyc/documents",
@@ -2872,7 +2964,7 @@
                 "documents"
               ]
             },
-            "description": "Driver submits all 7 KYC documents in a single atomic multipart request."
+            "description": "Driver submits all 7 KYC documents as URLs. Upload each file first with POST /upload (folder=kyc-documents) and use the returned `url`. Every document type must appear exactly once; expiryDate (ISO 8601) is optional. Re-submitting replaces the previous documents (the superseded files are deleted from storage)."
           }
         },
         {

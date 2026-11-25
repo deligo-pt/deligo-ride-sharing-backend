@@ -40,9 +40,18 @@ const envObject = z.object({
   SMTP_PASS: z.string().default(''),
   EMAIL_FROM_NAME: z.string().default('Deligo Ride'),
   EMAIL_FROM_ADDRESS: z.string().default('noreply@deligo.com'),
-  CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME must be set'),
-  CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY must be set'),
-  CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET must be set'),
+  RUSTFS_ENDPOINT: z
+    .string()
+    .url('RUSTFS_ENDPOINT must be a valid URL (e.g. http://localhost:9000)'),
+  RUSTFS_REGION: z.string().min(1).default('us-east-1'),
+  RUSTFS_ACCESS_KEY: z.string().min(1, 'RUSTFS_ACCESS_KEY must be set'),
+  RUSTFS_SECRET_KEY: z.string().min(1, 'RUSTFS_SECRET_KEY must be set'),
+  RUSTFS_BUCKET: z.string().min(1, 'RUSTFS_BUCKET must be set'),
+  UPLOAD_ALLOWED_URL_HOSTS: z.string().optional(),
+  RUSTFS_PUBLIC_URL: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+    z.string().url('RUSTFS_PUBLIC_URL must be a valid URL').optional(),
+  ),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('./firebase-service-account.json'),
   RESEND_API_KEY: z.string().optional(),

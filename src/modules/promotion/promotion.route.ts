@@ -38,4 +38,4 @@ router.patch(
   PromotionController.updatePromotion,
 );
 
-export default router;
+export const promotionRouter = router;

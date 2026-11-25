@@ -114,4 +114,4 @@ router.get(
   RideController.getRide,
 );
 
-export default router;
+export const rideRouter = router;

@@ -34,9 +34,12 @@ export interface ApplyKycDecisionParams {
 
 export interface FlattenedKycDocuments {
   drivingLicenseUrl: string;
+  drivingLicenseExpiresAt?: Date;
   nationalIdUrl: string;
   vehicleRegistrationUrl: string;
+  vehicleRegistrationExpiresAt?: Date;
   vehicleInsuranceUrl: string;
+  vehicleInsuranceExpiresAt?: Date;
   driverSelfieUrl: string;
   proofOfAddressUrl: string;
   taxIdUrl: string;

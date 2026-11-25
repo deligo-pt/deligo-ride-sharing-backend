@@ -155,7 +155,6 @@ async function runTests() {
     }
     console.log(`  ✅ Login with email succeeded. User: ${loginEmailJson.data.user.email}`);
 
-    // Update created test user with a valid Portuguese phone number for phone login test
     await prisma.user.update({
       where: { id: createdUserId },
       data: { phone: testPhone, isPhoneVerified: true },
@@ -165,7 +164,6 @@ async function runTests() {
       data: { phone: testPhone },
     });
 
-    // ── Test 6: POST /login with phone ─────────────────────────────────────────
     console.log('\n▶ Test 6: POST /login with phone (contactNumber)');
     const loginPhoneRes = await fetch(`${baseUrl}/login`, {
       method: 'POST',
@@ -246,7 +244,6 @@ async function runTests() {
     console.log('  ✅ Logout successful');
 
     console.log('\n▶ Test 11: Authenticate with blacklisted Access Token');
-    // Call a route with authenticate middleware (/api/v1/profile/me)
     const testBlacklistRes = await fetch(`http://127.0.0.1:${port}/api/v1/profile/me`, {
       method: 'GET',
       headers: {

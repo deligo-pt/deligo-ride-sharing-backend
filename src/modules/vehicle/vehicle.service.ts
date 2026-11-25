@@ -1,5 +1,4 @@
 import prisma from '../../config/db';
-import { uploadToCloudinary } from '../../utils/cloudinary';
 import { CreateVehicleInput, UpdateVehicleInput, ReviewVehicleInput } from './vehicle.validation';
 import { BadRequestError, NotFoundError } from '../../utils/errors';
 import { NotificationService, logNotificationFailure } from '../notification/notification.service';
@@ -155,7 +154,7 @@ const updateMyVehicle = async (userId: string, payload: UpdateVehicleInput) => {
   });
 };
 
-const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[]) => {
+const addVehiclePhotos = async (userId: string, photoUrls: string[]) => {
   const driverProfile = await prisma.driverProfile.findUnique({ where: { userId } });
 
   if (!driverProfile) {
@@ -172,18 +171,13 @@ const uploadVehiclePhotos = async (userId: string, files: Express.Multer.File[])
     });
   }
 
+  const newPhotoUrls = photoUrls.filter((url) => !vehicle.photoUrls.includes(url));
   const existingPhotoCount = vehicle.photoUrls.length;
-  if (existingPhotoCount + files.length > 5) {
+  if (existingPhotoCount + newPhotoUrls.length > 5) {
     throw new BadRequestError(
-      `You can upload a maximum of 5 vehicle photos. You currently have ${existingPhotoCount} and are trying to add ${files.length} more.`,
+      `You can upload a maximum of 5 vehicle photos. You currently have ${existingPhotoCount} and are trying to add ${newPhotoUrls.length} more.`,
     );
   }
-
-  const uploadedUrls = await Promise.all(
-    files.map((file) => uploadToCloudinary(file.buffer, 'vehicle-photos', file.mimetype)),
-  );
-
-  const newPhotoUrls = uploadedUrls.map((r) => r.secureUrl);
 
   return await prisma.vehicle.update({
     where: { id: vehicle.id },
@@ -255,6 +249,6 @@ export const VehicleService = {
   getMyVehicle,
   getAllVehicles,
   updateMyVehicle,
-  uploadVehiclePhotos,
+  addVehiclePhotos,
   reviewVehicle,
 };

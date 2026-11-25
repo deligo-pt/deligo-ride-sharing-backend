@@ -7,6 +7,7 @@ import { config } from './config';
 import { NotificationService } from './modules/notification/notification.service';
 import { initSocketServer } from './sockets';
 import { rideWorker } from './queues/ride.worker';
+import { ensureRustFSBucketExists } from './utils/rustfs.util';
 
 // Server Entry Point
 
@@ -19,6 +20,9 @@ async function bootstrap(): Promise<void> {
     console.error('❌ Failed to connect to the database:', err);
     process.exit(1);
   }
+
+  // Object storage: create the bucket if missing (logs only — never blocks boot, e.g. offline dev)
+  await ensureRustFSBucketExists();
 
   // ── 2. Create Express app + HTTP server + Socket.io ────────────────────────
   const app = createApp();

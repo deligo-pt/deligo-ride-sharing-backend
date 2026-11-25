@@ -1,17 +1,49 @@
 import { z } from 'zod';
+import { storedFileUrlSchema } from '../upload/upload.validation';
+import { REQUIRED_DOCUMENT_TYPES } from './kyc.constant';
+import type { DocumentType } from './kyc.interface';
 
 const isoDatetime = z
   .string()
   .datetime({ message: 'Must be a valid ISO 8601 datetime (e.g. 2030-12-31T00:00:00Z)' })
   .optional();
 
-const bulkExpiryDatesSchema = z.object({
-  DRIVING_LICENSE_expiryDate: isoDatetime,
-  VEHICLE_REGISTRATION_expiryDate: isoDatetime,
-  VEHICLE_INSURANCE_expiryDate: isoDatetime,
+const kycDocumentSchema = z.object({
+  documentType: z.enum(REQUIRED_DOCUMENT_TYPES as [DocumentType, ...DocumentType[]], {
+    error: `documentType must be one of: ${REQUIRED_DOCUMENT_TYPES.join(', ')}`,
+  }),
+  documentUrl: storedFileUrlSchema('kyc-documents'),
+  expiryDate: isoDatetime,
 });
 
-export type BulkExpiryDates = z.infer<typeof bulkExpiryDatesSchema>;
+const submitKycDocumentsSchema = z
+  .object({
+    documents: z.array(kycDocumentSchema, { error: 'documents must be an array' }),
+  })
+  .superRefine((data, ctx) => {
+    const seen = new Set<string>();
+    data.documents.forEach((doc, index) => {
+      if (seen.has(doc.documentType)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['documents', index, 'documentType'],
+          message: `Duplicate document type ${doc.documentType}`,
+        });
+      }
+      seen.add(doc.documentType);
+    });
+
+    const missing = REQUIRED_DOCUMENT_TYPES.filter((type) => !seen.has(type));
+    if (missing.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['documents'],
+        message: `All ${REQUIRED_DOCUMENT_TYPES.length} documents are required. Missing: ${missing.join(', ')}`,
+      });
+    }
+  });
+
+export type SubmitKycDocumentsInput = z.infer<typeof submitKycDocumentsSchema>;
 
 const reviewDocumentBodySchema = z
   .object({
@@ -76,7 +108,7 @@ export type RejectUserInput = z.infer<typeof RejectUserBodySchema>;
 
 export const KycValidation = {
   reviewProfile: { params: DriverProfileIdParamSchema, body: ReviewKycSchema },
-  uploadDocuments: { body: bulkExpiryDatesSchema },
+  submitDocuments: { body: submitKycDocumentsSchema },
   reviewDocument: { body: reviewDocumentBodySchema },
   getPendingKyc: { query: PendingKycQuerySchema },
   acceptUser: { params: UserIdParamSchema },

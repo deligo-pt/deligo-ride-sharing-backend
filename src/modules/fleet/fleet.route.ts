@@ -53,4 +53,4 @@ router.post(
   FleetController.submitOnboarding,
 );
 
-export default router;
+export const fleetRouter = router;

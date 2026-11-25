@@ -106,4 +106,4 @@ router.post(
   AuthController.setAdminPassword,
 );
 
-export default router;
+export const authRouter = router;

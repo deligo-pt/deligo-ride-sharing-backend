@@ -42,4 +42,4 @@ router.patch(
   SupportController.updateTicket,
 );
 
-export default router;
+export const supportRouter = router;

@@ -19,4 +19,4 @@ router.patch(
   ProfileController.updateMyProfile,
 );
 
-export default router;
+export const profileRouter = router;

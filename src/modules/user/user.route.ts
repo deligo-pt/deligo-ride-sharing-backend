@@ -29,4 +29,4 @@ router.patch(
   UserController.updateUserStatus,
 );
 
-export default router;
+export const userRouter = router;
