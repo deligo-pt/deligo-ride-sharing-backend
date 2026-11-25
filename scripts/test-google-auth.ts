@@ -105,7 +105,9 @@ async function runGoogleAuthTests() {
     if (!dbUser || !dbUser.customerProfile || !dbUser.wallet) {
       throw new Error('Database atomic transaction verification failed for Case C');
     }
-    const googleAccount = dbUser.account.find((a) => a.provider === 'GOOGLE');
+    const googleAccount = dbUser.account.find(
+      (a: { provider: string; providerAccountId: string }) => a.provider === 'GOOGLE',
+    );
     if (!googleAccount || googleAccount.providerAccountId !== brandNewSub) {
       throw new Error('Google Account record was not properly linked in DB');
     }
@@ -200,14 +202,18 @@ async function runGoogleAuthTests() {
       throw new Error('User.isEmailVerified was not set to true after Google verification');
     }
 
-    const credentialsAccount = postTakeoverUser.account.find((a) => a.provider === 'CREDENTIALS');
+    const credentialsAccount = postTakeoverUser.account.find(
+      (a: { provider: string; isDeleted: boolean }) => a.provider === 'CREDENTIALS',
+    );
     if (!credentialsAccount || !credentialsAccount.isDeleted) {
       throw new Error(
         'Pre-Account Takeover Protection failed: Unverified credentials account was not invalidated!',
       );
     }
 
-    const linkedGoogleAccount = postTakeoverUser.account.find((a) => a.provider === 'GOOGLE');
+    const linkedGoogleAccount = postTakeoverUser.account.find(
+      (a: { provider: string; providerAccountId: string }) => a.provider === 'GOOGLE',
+    );
     if (!linkedGoogleAccount || linkedGoogleAccount.providerAccountId !== preExistingSub) {
       throw new Error('Google account was not linked to existing user');
     }
