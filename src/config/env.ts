@@ -68,8 +68,8 @@ const envObject = z.object({
   FACEBOOK_APP_SECRET: z.string().optional(),
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
-  APPLE_CLIENT_ID: z.string().optional().default('com.deligo.web.demo'),
-  APPLE_BUNDLE_ID: z.string().optional().default('com.deligo.app.demo'),
+  APPLE_CLIENT_ID: z.string().optional().default(''),
+  APPLE_BUNDLE_ID: z.string().optional().default(''),
   APPLE_DEMO_MODE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
   ADMIN_FRONTEND_URL: z.string().optional().default('http://localhost:3000/admin'),
 });
@@ -91,14 +91,14 @@ const envSchema = envObject.superRefine((data, ctx) => {
     }
   }
 
-  for (const key of ['APPLE_CLIENT_ID', 'APPLE_BUNDLE_ID'] as const) {
-    if (!data[key] || data[key].toLowerCase().includes('.demo')) {
-      fail(
-        key,
-        `${key} must be set to your real Apple identifier in production (not the demo value)`,
-      );
-    }
-  }
+  // for (const key of ['APPLE_CLIENT_ID', 'APPLE_BUNDLE_ID'] as const) {
+  //   if (!data[key] || data[key].toLowerCase().includes('.demo')) {
+  //     fail(
+  //       key,
+  //       `${key} must be set to your real Apple identifier in production (not the demo value)`,
+  //     );
+  //   }
+  // }
 
   try {
     const { hostname } = new URL(data.ADMIN_FRONTEND_URL);

@@ -1,29 +1,32 @@
+name: deligo
+
 services:
-  # ── DELIGO: PostgreSQL ──────────────────────────────────
+  # ── PostgreSQL ────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: deligo-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: deligo_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-deligo_db}
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d deligo_db']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-deligo_db}']
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
-  # ── DELIGO: Redis ───────────────────────────────────────
+  # ── Redis ──────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: deligo-redis
-    command: redis-server --appendonly yes
+    command: ['redis-server', '--appendonly', 'yes']
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redisdata:/data
     healthcheck:
@@ -31,65 +34,107 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
+  # ── RustFS Object Storage ──────────────────────────────────────────────
   rustfs:
     image: rustfs/rustfs:latest
     container_name: deligo-rustfs
     environment:
-      RUSTFS_ACCESS_KEY: rustfsadmin
-      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
       RUSTFS_CONSOLE_ENABLE: 'true'
       RUSTFS_CONSOLE_ADDRESS: ':9001'
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - '${RUSTFS_API_PORT:-9000}:9000'
+      - '${RUSTFS_CONSOLE_PORT:-9001}:9001'
     volumes:
       - rustfsdata:/data
+    restart: unless-stopped
 
-  # ── DELIGO: Prisma Migration ────────────────────────────
+  # ── Prisma Migration ──────────────────────────────────────────────────
   migration:
     build:
       context: .
-      target: dependencies
+      target: migration
     container_name: deligo-migration
-    command: sh -c "npx prisma migrate deploy && npx prisma generate"
-    volumes:
-      - .:/app
-      - /app/node_modules
+    env_file:
+      - path: .env
+        required: false
     environment:
-      DATABASE_URL: 'postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public'
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public}
+    command: ['sh', '-c', 'pnpm --offline exec prisma migrate deploy']
     depends_on:
       postgres:
         condition: service_healthy
     restart: 'no'
 
-  # ── DELIGO: API ─────────────────────────────────────────
+  # ── API Server ────────────────────────────────────────────────────────
   api:
     build:
       context: .
-      target: dependencies
+      target: ${DOCKER_BUILD_TARGET:-builder}
     container_name: deligo-api
-    command: sh -c "npx prisma generate && npm run dev"
     ports:
-      - '3000:3000'
-    volumes:
-      - .:/app
-      - /app/node_modules
+      - '${API_PORT:-3000}:3000'
+    env_file:
+      - path: .env
+        required: false
     environment:
-      NODE_ENV: development
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
-      DATABASE_URL: 'postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public'
-      REDIS_URL: 'redis://redis:6379'
-      ENABLE_WORKER: 'false'
-      JWT_SECRET: 'deligo_development_jwt_secret_key_at_least_32_chars_long'
-      JWT_REFRESH_SECRET: 'deligo_development_jwt_refresh_secret_at_least_32_chars'
-      RUSTFS_ENDPOINT: 'http://rustfs:9000'
-      RUSTFS_REGION: 'us-east-1'
-      RUSTFS_ACCESS_KEY: 'rustfsadmin'
-      RUSTFS_SECRET_KEY: 'rustfsadmin'
-      RUSTFS_BUCKET: 'deligo-ride-sharing'
-      RUSTFS_PUBLIC_URL: 'http://localhost:9000/deligo-ride-sharing'
-      CORS_ORIGIN: 'http://localhost:3000,http://localhost:5173'
+      ENABLE_WORKER: ${ENABLE_WORKER:-false}
+
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+      JWT_SECRET: ${JWT_SECRET:-deligo_dev_jwt_secret_key_change_in_prod_32ch}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-deligo_dev_access_secret_key_change_in_prod_32ch}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-deligo_dev_refresh_secret_key_change_in_prod_32ch}
+      JWT_REFRESH_EXPIRES_IN_DEFAULT: ${JWT_REFRESH_EXPIRES_IN_DEFAULT:-1d}
+      JWT_REFRESH_EXPIRES_IN_REMEMBER: ${JWT_REFRESH_EXPIRES_IN_REMEMBER:-30d}
+      SAMESITE_COOKIE: ${SAMESITE_COOKIE:-lax}
+
+      RUSTFS_ENDPOINT: ${RUSTFS_ENDPOINT:-http://rustfs:9000}
+      RUSTFS_REGION: ${RUSTFS_REGION:-us-east-1}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-deligo-ride-sharing}
+      RUSTFS_PUBLIC_URL: ${RUSTFS_PUBLIC_URL:-http://localhost:9000/deligo-ride-sharing}
+      UPLOAD_ALLOWED_URL_HOSTS: ${UPLOAD_ALLOWED_URL_HOSTS:-}
+
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Deligo Ride}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@deligo.com}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      BULKGATE_APPLICATION_ID: ${BULKGATE_APPLICATION_ID:-}
+      BULKGATE_APPLICATION_TOKEN: ${BULKGATE_APPLICATION_TOKEN:-}
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-./firebase-service-account.json}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-}
+      GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
+
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-}
+
+      ADMIN_FRONTEND_URL: ${ADMIN_FRONTEND_URL:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+
+    command: ['sh', '-c', '${APP_START_CMD:-pnpm run dev}']
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,48 +144,92 @@ services:
         condition: service_started
       migration:
         condition: service_completed_successfully
+    restart: unless-stopped
 
-  # ── DELIGO: Background Worker ──────────────────────────
+  # ── Background Worker ─────────────────────────────────────────────────
   worker:
     build:
       context: .
-      target: dependencies
+      target: ${DOCKER_BUILD_TARGET:-builder}
     container_name: deligo-worker
-    command: sh -c "npx prisma generate && npm run dev:worker"
-    volumes:
-      - .:/app
-      - /app/node_modules
+    env_file:
+      - path: .env
+        required: false
     environment:
-      NODE_ENV: development
-      DATABASE_URL: 'postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public'
-      REDIS_URL: 'redis://redis:6379'
-      JWT_SECRET: 'deligo_development_jwt_secret_key_at_least_32_chars_long'
-      JWT_REFRESH_SECRET: 'deligo_development_jwt_refresh_secret_at_least_32_chars'
-      RUSTFS_ENDPOINT: 'http://rustfs:9000'
-      RUSTFS_REGION: 'us-east-1'
-      RUSTFS_ACCESS_KEY: 'rustfsadmin'
-      RUSTFS_SECRET_KEY: 'rustfsadmin'
-      RUSTFS_BUCKET: 'deligo-ride-sharing'
-      RUSTFS_PUBLIC_URL: 'http://localhost:9000/deligo-ride-sharing'
+      NODE_ENV: ${NODE_ENV:-development}
+      ENABLE_WORKER: 'true'
+
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgrespassword@postgres:5432/deligo_db?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+      JWT_SECRET: ${JWT_SECRET:-deligo_dev_jwt_secret_key_change_in_prod_32ch}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-deligo_dev_access_secret_key_change_in_prod_32ch}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-deligo_dev_refresh_secret_key_change_in_prod_32ch}
+      JWT_REFRESH_EXPIRES_IN_DEFAULT: ${JWT_REFRESH_EXPIRES_IN_DEFAULT:-1d}
+      JWT_REFRESH_EXPIRES_IN_REMEMBER: ${JWT_REFRESH_EXPIRES_IN_REMEMBER:-30d}
+      SAMESITE_COOKIE: ${SAMESITE_COOKIE:-lax}
+
+      RUSTFS_ENDPOINT: ${RUSTFS_ENDPOINT:-http://rustfs:9000}
+      RUSTFS_REGION: ${RUSTFS_REGION:-us-east-1}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-deligo-ride-sharing}
+      RUSTFS_PUBLIC_URL: ${RUSTFS_PUBLIC_URL:-http://localhost:9000/deligo-ride-sharing}
+      UPLOAD_ALLOWED_URL_HOSTS: ${UPLOAD_ALLOWED_URL_HOSTS:-}
+
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Deligo Ride}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@deligo.com}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      BULKGATE_APPLICATION_ID: ${BULKGATE_APPLICATION_ID:-}
+      BULKGATE_APPLICATION_TOKEN: ${BULKGATE_APPLICATION_TOKEN:-}
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-./firebase-service-account.json}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-}
+      GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
+
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-}
+
+      ADMIN_FRONTEND_URL: ${ADMIN_FRONTEND_URL:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+
+    command: ['sh', '-c', '${WORKER_START_CMD:-pnpm run dev:worker}']
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rustfs:
+        condition: service_started
       migration:
         condition: service_completed_successfully
+    restart: unless-stopped
 
-  # ── DOCMOST: Documentation Application ─────────────────
+  # ── Docmost ────────────────────────────────────────────────────────────
   docmost:
     image: docmost/docmost:latest
     container_name: deligo-docmost
     environment:
-      APP_URL: 'http://localhost:3001'
-      APP_SECRET: ${DOCMOST_APP_SECRET:?Set DOCMOST_APP_SECRET in .env}
-      DATABASE_URL: 'postgresql://docmost:${DOCMOST_DB_PASSWORD:?Set DOCMOST_DB_PASSWORD in .env}@docmost-postgres:5432/docmost_db'
-      REDIS_URL: 'redis://docmost-redis:6379'
+      APP_URL: ${DOCMOST_APP_URL:-http://localhost:3001}
+      APP_SECRET: ${DOCMOST_APP_SECRET:-deligo_docmost_secret_change_in_prod_32ch}
+      DATABASE_URL: postgresql://${DOCMOST_DB_USER:-docmost}:${DOCMOST_DB_PASSWORD:-docmostpassword}@docmost-postgres:5432/${DOCMOST_DB_NAME:-docmost_db}
+      REDIS_URL: redis://docmost-redis:6379
     ports:
-      - '3001:3000'
+      - '${DOCMOST_PORT:-3001}:3000'
     volumes:
       - docmostdata:/app/data/storage
     depends_on:
@@ -150,33 +239,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── DOCMOST: Dedicated PostgreSQL ──────────────────────
+  # ── Docmost PostgreSQL ─────────────────────────────────────────────────
   docmost-postgres:
-    image: postgres:18
+    image: postgres:16-alpine
     container_name: deligo-docmost-postgres
     environment:
-      POSTGRES_USER: docmost
-      POSTGRES_PASSWORD: ${DOCMOST_DB_PASSWORD:?Set DOCMOST_DB_PASSWORD in .env}
-      POSTGRES_DB: docmost_db
+      POSTGRES_USER: ${DOCMOST_DB_USER:-docmost}
+      POSTGRES_PASSWORD: ${DOCMOST_DB_PASSWORD:-docmostpassword}
+      POSTGRES_DB: ${DOCMOST_DB_NAME:-docmost_db}
     volumes:
-      - docmost_pgdata:/var/lib/postgresql
+      - docmost_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U docmost -d docmost_db']
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${DOCMOST_DB_USER:-docmost} -d ${DOCMOST_DB_NAME:-docmost_db}']
       interval: 5s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
-  # ── DOCMOST: Dedicated Redis ───────────────────────────
+  # ── Docmost Redis ──────────────────────────────────────────────────────
   docmost-redis:
-    image: redis:8
+    image: redis:7-alpine
     container_name: deligo-docmost-redis
-    command:
-      - redis-server
-      - --appendonly
-      - 'yes'
-      - --maxmemory-policy
-      - noeviction
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
     volumes:
       - docmost_redisdata:/data
     healthcheck:
@@ -186,14 +271,11 @@ services:
       retries: 5
     restart: unless-stopped
 
-# ── Persistent Volumes ────────────────────────────────────
+# ── Persistent Volumes ──────────────────────────────────────────────────
 volumes:
-  # Deligo
   pgdata:
   redisdata:
   rustfsdata:
-
-  # Docmost
   docmostdata:
   docmost_pgdata:
   docmost_redisdata:
