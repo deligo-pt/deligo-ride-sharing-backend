@@ -72,6 +72,7 @@ COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/prisma ./prisma
 COPY --chown=node:node --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --chown=node:node package.json ./
+COPY --chown=node:node --from=builder /app/src/templates ./src/templates
 
 EXPOSE 3000
 

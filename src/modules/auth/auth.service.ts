@@ -217,8 +217,13 @@ const dispatchOtp = async (
 ): Promise<void> => {
   const expiryMinutes = Math.max(1, Math.round(config.otp.expiresInSeconds / 60));
 
-  if (channel === 'EMAIL' && targetEmail) {
-    await sendEmail({
+  if (channel === 'EMAIL') {
+    if (!targetEmail) {
+      console.error('[OTP-TRACE] ❌ 8a. channel is EMAIL but targetEmail is missing');
+      throw new BadRequestError('Email address is required to send OTP');
+    }
+
+    const result = await sendEmail({
       to: targetEmail,
       subject: 'Deligo Verification Code',
       template: 'otp-verification',
@@ -228,7 +233,25 @@ const dispatchOtp = async (
         preferredLanguage: DEFAULT_LANGUAGE,
       },
     });
-  } else if (channel === 'PHONE' && targetPhone) {
+
+    if (!result.success) {
+      console.error('[OTP-TRACE] ❌ 10. sendEmail returned success:false', result.error);
+      throw new AppError(
+        result.error ? `Failed to send OTP email: ${result.error}` : 'Failed to send OTP email',
+        502,
+        'OTP_EMAIL_DELIVERY_FAILED',
+      );
+    }
+
+    return;
+  }
+
+  if (channel === 'PHONE') {
+    if (!targetPhone) {
+      console.error('[OTP-TRACE] ❌ 8c. channel is PHONE but targetPhone is missing');
+      throw new BadRequestError('Phone number is required to send OTP');
+    }
+
     await sendBulkGateSms(
       targetPhone,
       `Your Deligo verification code is: ${otp}. Valid for ${expiryMinutes} minutes.`,
@@ -304,13 +327,14 @@ const CustomerSignUp = async (
   maskedTarget: string;
   expiresIn: number;
 }> => {
-  const email = input.email;
-  const contactNumber = input.contactNumber;
+  const email = input.email?.trim().toLowerCase();
+  const contactNumber = input.contactNumber?.trim();
   const channel: 'EMAIL' | 'PHONE' = email ? 'EMAIL' : 'PHONE';
 
   if (email) {
     const existing = await prisma.user.findFirst({ where: { email, isDeleted: false } });
     if (existing) {
+      console.warn('[OTP-TRACE] ❌ 3a-fail. Email already exists');
       throw new ConflictError('A user with this email address already exists');
     }
   } else if (contactNumber) {
@@ -318,6 +342,7 @@ const CustomerSignUp = async (
       where: { phone: contactNumber, isDeleted: false },
     });
     if (existing) {
+      console.warn('[OTP-TRACE] ❌ 3b-fail. Phone already exists');
       throw new ConflictError('A user with this phone number already exists');
     }
   }
@@ -329,6 +354,7 @@ const CustomerSignUp = async (
       where: { referralCode: code },
     });
     if (!referrer || referrer.isDeleted) {
+      console.warn('[OTP-TRACE] ❌ 4-fail. Invalid referral code');
       throw new BadRequestError('Invalid referral code provided');
     }
     referrerId = referrer.id;
@@ -361,7 +387,13 @@ const CustomerSignUp = async (
   const redisKey = `signup:session:${signupSessionId}`;
   await redis.set(redisKey, JSON.stringify(sessionData), 'EX', config.otp.signupSessionTtlSeconds);
 
-  await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
+  try {
+    await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
+  } catch (error) {
+    console.error('[OTP-TRACE] ❌ 12. dispatchOtp failed, deleting Redis key:', redisKey, error);
+    await redis.del(redisKey);
+    throw error;
+  }
 
   return {
     signupSessionId,

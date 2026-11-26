@@ -59,10 +59,18 @@ class EmailService {
         if (error) {
           console.warn('⚠️ [EmailService] SMTP verification warning:', error.message);
         } else {
+          // eslint-disable-next-line no-console
           console.log('✅ [EmailService] SMTP Transporter ready');
         }
       });
     }
+  }
+
+  private getTemplatesDir(): string {
+    if (!fs.existsSync(this.templatesDir)) {
+      this.templatesDir = resolveTemplatesDir();
+    }
+    return this.templatesDir;
   }
 
   public async renderTemplate<T extends Record<string, unknown>>(
@@ -70,9 +78,10 @@ class EmailService {
     data: T,
     subject: string,
   ): Promise<string> {
+    const activeTemplatesDir = this.getTemplatesDir();
     const templateFileName = templateName.endsWith('.ejs') ? templateName : `${templateName}.ejs`;
-    const templatePath = path.join(this.templatesDir, templateFileName);
-    const layoutPath = path.join(this.templatesDir, 'layout.ejs');
+    const templatePath = path.join(activeTemplatesDir, templateFileName);
+    const layoutPath = path.join(activeTemplatesDir, 'layout.ejs');
 
     if (!fs.existsSync(templatePath)) {
       throw new Error(`Email template not found: ${templatePath}`);
@@ -104,9 +113,11 @@ class EmailService {
       const from = `"${fromName}" <${fromAddress}>`;
 
       if (!config.smtp.user || !config.smtp.pass) {
+        // eslint-disable-next-line no-console
         console.log(
           `[EmailService DEV FALLBACK] → To: ${options.to} | Subject: ${options.subject}`,
         );
+        // eslint-disable-next-line no-console
         console.log(
           `[EmailService DEV Content preview]: Template: ${options.template}, Data:`,
           options.data,
