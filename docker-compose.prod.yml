@@ -1,13 +1,3 @@
-version: '3.8'
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Production stack. Every variable the app validates in production is passed
-# through explicitly, so a container can never silently fall back to a dev default.
-#   ${VAR:?msg}   REQUIRED — `docker compose` aborts if it is unset/empty.
-#   ${VAR:-x}     OPTIONAL — falls back to the same default src/config/env.ts uses.
-# The API and worker both load src/config/env.ts, so both get the same block.
-# Run database migrations separately (`npx prisma migrate deploy`) — not done here.
-# ─────────────────────────────────────────────────────────────────────────────
 x-app-env: &app-env
   NODE_ENV: production
   DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -55,12 +45,12 @@ x-app-env: &app-env
   FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
   META_APP_ID: ${META_APP_ID:-}
   META_APP_SECRET: ${META_APP_SECRET:-}
-  APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:?APPLE_CLIENT_ID is required in production}
-  APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:?APPLE_BUNDLE_ID is required in production}
+  APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+  APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-}
 
   # Frontend / CORS
-  ADMIN_FRONTEND_URL: ${ADMIN_FRONTEND_URL:?ADMIN_FRONTEND_URL is required in production}
-  CORS_ORIGIN: ${CORS_ORIGIN:-}  # empty = no browser origins allowed (fail closed)
+  ADMIN_FRONTEND_URL: ${ADMIN_FRONTEND_URL:-}
+  CORS_ORIGIN: ${CORS_ORIGIN:-}
 
 services:
   api:
@@ -70,13 +60,12 @@ services:
     container_name: deligo-api-prod
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - '${PORT:-3000}:3000'
     environment:
       <<: *app-env
       PORT: 3000
-      # A dedicated worker container below runs the queue; keep it out of the API process.
       ENABLE_WORKER: ${ENABLE_WORKER:-false}
-    command: ["node", "dist/server.js"]
+    command: ['node', 'dist/server.js']
 
   worker:
     build:
@@ -86,4 +75,4 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-    command: ["node", "dist/worker.js"]
+    command: ['node', 'dist/worker.js']

@@ -16,3 +16,5 @@ src/auth
 client
 
 AUDIT_REPORT.md
+
+.env.prod
