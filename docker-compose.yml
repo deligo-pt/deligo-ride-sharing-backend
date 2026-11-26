@@ -4,7 +4,7 @@ services:
   # ── PostgreSQL ────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: deligo-postgres
+    container_name: deligo-ride-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
@@ -23,7 +23,7 @@ services:
   # ── Redis ──────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: deligo-redis
+    container_name: deligo-ride-redis
     command: ['redis-server', '--appendonly', 'yes']
     ports:
       - '${REDIS_PORT:-6379}:6379'
@@ -39,7 +39,7 @@ services:
   # ── RustFS Object Storage ──────────────────────────────────────────────
   rustfs:
     image: rustfs/rustfs:latest
-    container_name: deligo-rustfs
+    container_name: deligo-ride-rustfs
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
@@ -57,7 +57,7 @@ services:
     build:
       context: .
       target: migration
-    container_name: deligo-migration
+    container_name: deligo-ride-migration
     env_file:
       - path: .env
         required: false
@@ -75,7 +75,7 @@ services:
     build:
       context: .
       target: ${DOCKER_BUILD_TARGET:-builder}
-    container_name: deligo-api
+    container_name: deligo-ride-api
     ports:
       - '${API_PORT:-3000}:3000'
     env_file:
@@ -151,7 +151,7 @@ services:
     build:
       context: .
       target: ${DOCKER_BUILD_TARGET:-builder}
-    container_name: deligo-worker
+    container_name: deligo-ride-worker
     env_file:
       - path: .env
         required: false
@@ -222,7 +222,7 @@ services:
   # ── Docmost ────────────────────────────────────────────────────────────
   docmost:
     image: docmost/docmost:latest
-    container_name: deligo-docmost
+    container_name: deligo-ride-docmost
     environment:
       APP_URL: ${DOCMOST_APP_URL:-http://localhost:3001}
       APP_SECRET: ${DOCMOST_APP_SECRET:-deligo_docmost_secret_change_in_prod_32ch}
@@ -242,7 +242,7 @@ services:
   # ── Docmost PostgreSQL ─────────────────────────────────────────────────
   docmost-postgres:
     image: postgres:16-alpine
-    container_name: deligo-docmost-postgres
+    container_name: deligo-ride-docmost-postgres
     environment:
       POSTGRES_USER: ${DOCMOST_DB_USER:-docmost}
       POSTGRES_PASSWORD: ${DOCMOST_DB_PASSWORD:-docmostpassword}
@@ -260,7 +260,7 @@ services:
   # ── Docmost Redis ──────────────────────────────────────────────────────
   docmost-redis:
     image: redis:7-alpine
-    container_name: deligo-docmost-redis
+    container_name: deligo-ride-docmost-redis
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
     volumes:
       - docmost_redisdata:/data
