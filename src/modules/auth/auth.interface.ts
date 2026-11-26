@@ -2,6 +2,29 @@ import type { InitiateSignupInput } from './auth.validation';
 
 export type SignupInput = InitiateSignupInput;
 
+export type CustomerSignupInput = {
+  referralCode?: string | undefined;
+  email?: string | undefined;
+  contactNumber?: string | undefined;
+};
+
+export interface CustomerSignupRedisSession {
+  payload: {
+    email?: string;
+    contactNumber?: string;
+    referralCode: string | null;
+    referrerId: string | null;
+    role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER';
+  };
+  otp: {
+    codeHash: string;
+    channel: 'EMAIL' | 'PHONE';
+    expiresAt: number;
+  };
+  resendCount: number;
+  lastSentAt: number;
+}
+
 export interface SignupRedisSession {
   payload: {
     email?: string;
