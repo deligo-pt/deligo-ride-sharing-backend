@@ -8,6 +8,13 @@ import { AuthValidation } from './auth.validation';
 const router: Router = Router();
 
 router.post(
+  '/signup/customer',
+  authRateLimiter,
+  validateRequest(AuthValidation.CustomerSignUpSchema),
+  AuthController.customerSignUp,
+);
+
+router.post(
   '/signup/initiate',
   authRateLimiter,
   validateRequest(AuthValidation.initiateSignup),
