@@ -29,6 +29,7 @@ import {
   AppleLoginInput,
   CreateAdminInput,
   SetAdminPasswordInput,
+  CustomerSignUpInput,
 } from './auth.validation';
 import type {
   SignupInput,
@@ -39,6 +40,7 @@ import type {
   SocialUserProfile,
   SocialAuthOptions,
   GooglePayload,
+  CustomerSignupRedisSession,
 } from './auth.interface';
 import {
   DEFAULT_LANGUAGE,
@@ -293,6 +295,82 @@ const verifyGoogleIdToken = async (idToken: string): Promise<GooglePayload> => {
   }
 };
 
+const CustomerSignUp = async (
+  input: CustomerSignUpInput,
+  role: 'CUSTOMER' = 'CUSTOMER',
+): Promise<{
+  signupSessionId: string;
+  channel: 'EMAIL' | 'PHONE';
+  maskedTarget: string;
+  expiresIn: number;
+}> => {
+  const email = input.email;
+  const contactNumber = input.contactNumber;
+  const channel: 'EMAIL' | 'PHONE' = email ? 'EMAIL' : 'PHONE';
+
+  if (email) {
+    const existing = await prisma.user.findFirst({ where: { email, isDeleted: false } });
+    if (existing) {
+      throw new ConflictError('A user with this email address already exists');
+    }
+  } else if (contactNumber) {
+    const existing = await prisma.user.findFirst({
+      where: { phone: contactNumber, isDeleted: false },
+    });
+    if (existing) {
+      throw new ConflictError('A user with this phone number already exists');
+    }
+  }
+
+  let referrerId: string | null = null;
+  if (input.referralCode) {
+    const code = input.referralCode.trim().toUpperCase();
+    const referrer = await prisma.user.findUnique({
+      where: { referralCode: code },
+    });
+    if (!referrer || referrer.isDeleted) {
+      throw new BadRequestError('Invalid referral code provided');
+    }
+    referrerId = referrer.id;
+  }
+
+  const rawOtp = crypto.randomInt(100000, 1000000).toString();
+  const codeHash = hashSha256(rawOtp);
+  const signupSessionId = crypto.randomUUID();
+
+  const now = Date.now();
+  const expiresAt = now + config.otp.expiresInSeconds * 1000;
+
+  const sessionData: CustomerSignupRedisSession = {
+    payload: {
+      email,
+      contactNumber,
+      referralCode: input.referralCode?.trim().toUpperCase() || null,
+      referrerId,
+      role,
+    },
+    otp: {
+      codeHash,
+      channel,
+      expiresAt,
+    },
+    resendCount: 0,
+    lastSentAt: now,
+  };
+
+  const redisKey = `signup:session:${signupSessionId}`;
+  await redis.set(redisKey, JSON.stringify(sessionData), 'EX', config.otp.signupSessionTtlSeconds);
+
+  await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
+
+  return {
+    signupSessionId,
+    channel,
+    maskedTarget: maskTarget(channel, email, contactNumber),
+    expiresIn: config.otp.expiresInSeconds,
+  };
+};
+
 const initiateSignup = async (
   input: SignupInput,
   role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER' = 'CUSTOMER',
@@ -525,7 +603,7 @@ const verifySignupOtp = async (
           providerAccountId: user.id,
           email: session.payload.email ?? null,
           phone: session.payload.contactNumber ?? null,
-          passwordHash: session.payload.passwordHash,
+          passwordHash: session.payload.passwordHash ?? null,
         },
       });
 
@@ -1429,6 +1507,7 @@ export const AuthService = {
   sanitizeUser,
   generateUniqueReferralCode,
   verifyGoogleIdToken,
+  CustomerSignUp,
   initiateSignup,
   resendSignupOtp,
   verifySignupOtp,

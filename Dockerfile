@@ -14,7 +14,7 @@ ARG PNPM_VERSION=11
 RUN npm install -g pnpm@${PNPM_VERSION}
 
 
-# ── Stage 2: Full Dependencies (Build & Test) ───────────────────────────
+# ── Stage 2: Full Dependencies ──────────────────────────────────────────
 FROM base AS dependencies
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -22,20 +22,31 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 
-# ── Stage 3: TypeScript & Client Builder ────────────────────────────────
+# ── Stage 3: Dedicated Migration Runtime ────────────────────────────────
+FROM dependencies AS migration
+
+COPY prisma.config.ts ./
+COPY prisma ./prisma
+
+# Keep Prisma CLI and development dependencies available.
+# Migration only needs the schema and CLI; Client generation
+# is handled in the builder/prod-deps stages.
+
+
+# ── Stage 4: TypeScript & Application Builder ───────────────────────────
 FROM dependencies AS builder
 
 COPY tsconfig.json prisma.config.ts ./
 COPY prisma ./prisma
 
-RUN npx prisma generate
+RUN pnpm exec prisma generate
 
 COPY src ./src
 
 RUN npm run build
 
 
-# ── Stage 4: Production Runtime Dependencies ────────────────────────────
+# ── Stage 5: Production Runtime Dependencies ────────────────────────────
 FROM base AS prod-deps
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -47,7 +58,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts \
     && pnpm prune --prod --ignore-scripts
 
 
-# ── Stage 5: Hardened Production Runner ──────────────────────────────────
+# ── Stage 6: Hardened Production Runner ─────────────────────────────────
 FROM base AS runner
 
 ENV NODE_ENV=production

@@ -54,6 +54,15 @@ function allowAtMostOneContact(data: ContactFields, ctx: z.RefinementCtx): void 
   }
 }
 
+export const CustomerSignUpSchema = z
+  .object({
+    ...contactFields,
+    referralCode: z.string().trim().optional(),
+  })
+  .superRefine(requireExactlyOneContact);
+
+export type CustomerSignUpInput = z.infer<typeof CustomerSignUpSchema>;
+
 export const InitiateSignupSchema = z
   .object({
     ...contactFields,
@@ -176,6 +185,7 @@ const SetAdminPasswordSchema = z.object({
 export type SetAdminPasswordInput = z.infer<typeof SetAdminPasswordSchema>;
 
 export const AuthValidation = {
+  CustomerSignUpSchema: { body: CustomerSignUpSchema },
   initiateSignup: { body: InitiateSignupSchema },
   emailOnlySignup: { body: EmailOnlySignupSchema },
   resendOtp: { body: ResendOtpSchema },

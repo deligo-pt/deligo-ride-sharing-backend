@@ -27,8 +27,19 @@ import {
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
+const customerSignUp = catchAsync(async (req, res) => {
+  const result = await AuthService.CustomerSignUp(req.body as InitiateSignupInput, 'CUSTOMER');
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Verification code sent successfully',
+    data: result,
+  });
+});
+
 const initiateSignup = catchAsync(async (req, res) => {
-  const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'CUSTOMER');
+  const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'DRIVER');
 
   sendResponse(res, {
     statusCode: 200,
@@ -307,6 +318,7 @@ const setAdminPassword = catchAsync(async (req, res) => {
 });
 
 export const AuthController = {
+  customerSignUp,
   initiateSignup,
   resendOtp,
   verifyOtp,
