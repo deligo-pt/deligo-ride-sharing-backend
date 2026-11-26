@@ -1,7 +1,10 @@
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   AppleLoginInput,
   CreateAdminInput,
+  CustomerAuthRequestInput,
+  CustomerAuthVerifyInput,
   EmailOnlySignupInput,
   FacebookLoginInput,
   GoogleLoginInput,
@@ -27,14 +30,40 @@ import {
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 
-const customerSignUp = catchAsync(async (req, res) => {
-  const result = await AuthService.CustomerSignUp(req.body as InitiateSignupInput, 'CUSTOMER');
+export const requestCustomerAuthOtp = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.requestCustomerAuthOtp(req.body as CustomerAuthRequestInput);
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Verification code sent successfully',
     data: result,
+  });
+});
+
+export const verifyCustomerAuthOtp = catchAsync(async (req: Request, res: Response) => {
+  const clientInfo = {
+    ipAddress: req.ip,
+    userAgent: req.get('user-agent') || 'unknown',
+  };
+
+  const result = await AuthService.verifyCustomerAuthOtp(
+    req.body as CustomerAuthVerifyInput,
+    clientInfo,
+  );
+
+  // If your issueSessionAndTokens sets HTTP-only refresh/access cookies, attach them here if needed
+  sendResponse(res, {
+    statusCode: result.isNewUser ? 201 : 200,
+    success: true,
+    message: result.isNewUser
+      ? 'Account created and verified successfully'
+      : 'Logged in successfully',
+    data: {
+      user: result.user,
+      tokens: result.tokens,
+      isNewUser: result.isNewUser,
+    },
   });
 });
 
@@ -318,7 +347,8 @@ const setAdminPassword = catchAsync(async (req, res) => {
 });
 
 export const AuthController = {
-  customerSignUp,
+  requestCustomerAuthOtp,
+  verifyCustomerAuthOtp,
   initiateSignup,
   resendOtp,
   verifyOtp,
