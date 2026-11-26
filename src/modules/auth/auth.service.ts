@@ -1265,8 +1265,7 @@ const createAdmin = async (
       include: { adminProfile: true },
     });
 
-    const isSuperAdmin =
-      creator.role === 'SUPER_ADMIN' || creatorUser?.adminProfile?.accessLabel === 'SUPER_ADMIN';
+    const isSuperAdmin = creatorUser?.adminProfile?.accessLabel === 'SUPER_ADMIN';
 
     if (!isSuperAdmin) {
       throw new ForbiddenError('Only a SUPER_ADMIN can create another SUPER_ADMIN');
