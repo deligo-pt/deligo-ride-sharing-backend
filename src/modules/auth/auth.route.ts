@@ -8,10 +8,17 @@ import { AuthValidation } from './auth.validation';
 const router: Router = Router();
 
 router.post(
-  '/signup/customer',
+  '/customer/otp/request',
   authRateLimiter,
-  validateRequest(AuthValidation.CustomerSignUpSchema),
-  AuthController.customerSignUp,
+  validateRequest(AuthValidation.CustomerAuthRequestSchema),
+  AuthController.requestCustomerAuthOtp,
+);
+
+router.post(
+  '/customer/otp/verify',
+  authRateLimiter,
+  validateRequest(AuthValidation.CustomerAuthVerifySchema),
+  AuthController.verifyCustomerAuthOtp,
 );
 
 router.post(

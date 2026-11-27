@@ -257,6 +257,42 @@
       "value": "",
       "type": "string",
       "description": "Vehicle type for pricing-rule routes (use a value accepted by the pricing validation schema)"
+    },
+    {
+      "key": "authSessionId",
+      "value": "",
+      "type": "string",
+      "description": "Customer OTP authentication session UUID (captured by OTP request)"
+    },
+    {
+      "key": "isNewUser",
+      "value": "",
+      "type": "string",
+      "description": "Customer OTP flow flag returned by the OTP request"
+    },
+    {
+      "key": "existingCustomerEmail",
+      "value": "",
+      "type": "string",
+      "description": "Email for an existing active CUSTOMER account"
+    },
+    {
+      "key": "newCustomerEmail",
+      "value": "",
+      "type": "string",
+      "description": "Unused email for testing customer registration"
+    },
+    {
+      "key": "existingCustomerContactNumber",
+      "value": "",
+      "type": "string",
+      "description": "Portuguese phone number for an existing active CUSTOMER account"
+    },
+    {
+      "key": "newCustomerContactNumber",
+      "value": "",
+      "type": "string",
+      "description": "Unused Portuguese phone number for testing customer registration"
     }
   ],
   "item": [
@@ -312,10 +348,35 @@
       "item": [
         {
           "name": "Customer Auth",
-          "description": "End-to-end registration, OTP verification, and login for Customers.",
+          "description": "Unified customer OTP authentication: the same request/verify endpoints log in existing customers or register new customers, by email or Portuguese phone.",
           "item": [
             {
-              "name": "1. Initiate Customer Signup (email)",
+              "name": "1. Request Customer OTP - Existing Customer Login (email)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"OTP request returns HTTP 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the existing customer login case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(false);",
+                      "    });",
+                      "    if (json.data && json.data.authSessionId) {",
+                      "        pm.collectionVariables.set(\"authSessionId\", json.data.authSessionId);",
+                      "    }",
+                      "    if (json.data && typeof json.data.isNewUser === \"boolean\") {",
+                      "        pm.collectionVariables.set(\"isNewUser\", String(json.data.isNewUser));",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
               "request": {
                 "method": "POST",
                 "header": [
@@ -325,27 +386,59 @@
                   },
                   {
                     "key": "x-client-platform",
-                    "value": "mobile"
+                    "value": "mobile",
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"{{email}}\",\n  \"referralCode\": \"\"\n}",
+                  "raw": "{\n  \"email\": \"{{existingCustomerEmail}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
                 },
-                "url": "{{baseUrl}}/auth/signup/customer",
-                "description": "Starts a CUSTOMER signup session by email. Exactly one of email or contactNumber is required; referralCode is optional. This endpoint does not accept a password. It returns signupSessionId for OTP verification.\n\n### Implementation snapshot\n- Implemented route: POST {{baseUrl}}/auth/signup/customer.\n- Authentication: Public; no bearer required.\n- Required headers: Content-Type: application/json; x-client-platform: mobile is optional and returns refreshToken in JSON.\n- Path parameters: none.\n- Query parameters: none.\n- Example body fields/types: email: string, referralCode: string. Requiredness/constraints are enforced by AuthValidation.CustomerSignUpSchema; see existing endpoint-specific description above.\n- Success response: HTTP 200; JSON envelope contains success, statusCode, message, and controller data; data expression: result.\n- Possible errors: validation (422) and authentication/authorization (401/403) where applicable; route-specific service errors depend on the implementation.",
+                "url": "{{baseUrl}}/auth/customer/otp/request",
+                "description": "Unified customer OTP request. Use a known active CUSTOMER email identifier for login (isNewUser=false), or an unused email identifier for signup (isNewUser=true). The response contains authSessionId, channel, maskedTarget, expiresIn, and isNewUser. This example is configured for existing customer login.",
                 "auth": {
                   "type": "noauth"
                 }
-              }
+              },
+              "response": []
             },
             {
-              "name": "1. Initiate Customer Signup (Portuguese phone)",
+              "name": "2. Verify Customer OTP - Existing Customer Login (email)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"OTP verification returns HTTP 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the existing customer login case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(false);",
+                      "    });",
+                      "    if (json.data && json.data.tokens) {",
+                      "        if (json.data.tokens.accessToken) {",
+                      "            pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        }",
+                      "        if (json.data.tokens.refreshToken) {",
+                      "            pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        }",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"userId\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
               "request": {
                 "method": "POST",
                 "header": [
@@ -355,52 +448,51 @@
                   },
                   {
                     "key": "x-client-platform",
-                    "value": "mobile"
+                    "value": "mobile",
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"contactNumber\": \"{{contactNumber}}\",\n  \"referralCode\": \"\"\n}",
+                  "raw": "{\n  \"authSessionId\": \"{{authSessionId}}\",\n  \"email\": \"{{existingCustomerEmail}}\",\n  \"otp\": \"{{otp}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
                 },
-                "url": "{{baseUrl}}/auth/signup/customer",
-                "description": "Starts a CUSTOMER signup session by Portuguese phone. Exactly one of email or contactNumber is required; contactNumber is normalized to +351 and referralCode is optional. This endpoint does not accept a password. It returns signupSessionId for OTP verification.\n\n### Implementation snapshot\n- Implemented route: POST {{baseUrl}}/auth/signup/customer.\n- Authentication: Public; no bearer required.\n- Required headers: Content-Type: application/json; x-client-platform: mobile is optional and returns refreshToken in JSON.\n- Path parameters: none.\n- Query parameters: none.\n- Example body fields/types: contactNumber: string, referralCode: string. Requiredness/constraints are enforced by AuthValidation.CustomerSignUpSchema; see existing endpoint-specific description above.\n- Success response: HTTP 200; JSON envelope contains success, statusCode, message, and controller data; data expression: result.\n- Possible errors: validation (422) and authentication/authorization (401/403) where applicable; route-specific service errors depend on the implementation.",
+                "url": "{{baseUrl}}/auth/customer/otp/verify",
+                "description": "Verifies the OTP sent by the preceding request. Set otp to the six-digit code delivered to the configured email. Existing customers receive HTTP 200; new customers are registered and receive HTTP 201. The response includes user and tokens.",
                 "auth": {
                   "type": "noauth"
                 }
-              }
+              },
+              "response": []
             },
             {
-              "name": "2. Verify Customer Signup OTP",
+              "name": "1. Request Customer OTP - New Customer Signup (email)",
               "event": [
                 {
                   "listen": "test",
                   "script": {
+                    "type": "text/javascript",
                     "exec": [
-                      "pm.test(\"Status code is 200\", function () {",
+                      "pm.test(\"OTP request returns HTTP 200\", function () {",
                       "    pm.response.to.have.status(200);",
                       "});",
                       "if (pm.response.code === 200) {",
-                      "    var json = pm.response.json();",
-                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
-                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
-                      "        console.log(\"Captured Customer accessToken\");",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the new customer signup case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(true);",
+                      "    });",
+                      "    if (json.data && json.data.authSessionId) {",
+                      "        pm.collectionVariables.set(\"authSessionId\", json.data.authSessionId);",
                       "    }",
-                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
-                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
-                      "        console.log(\"Captured mobile refreshToken\");",
-                      "    }",
-                      "    if (json.data && json.data.user && json.data.user.id) {",
-                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
-                      "        console.log(\"Captured Customer mockUserId:\", json.data.user.id);",
+                      "    if (json.data && typeof json.data.isNewUser === \"boolean\") {",
+                      "        pm.collectionVariables.set(\"isNewUser\", String(json.data.isNewUser));",
                       "    }",
                       "}"
-                    ],
-                    "type": "text/javascript"
+                    ]
                   }
                 }
               ],
@@ -409,32 +501,25 @@
                 "header": [
                   {
                     "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
+                    "value": "application/json"
                   },
                   {
                     "key": "x-client-platform",
                     "value": "mobile",
-                    "type": "text",
-                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"email\": \"{{email}}\",\n  \"otp\": \"{{otp}}\"\n}"
+                  "raw": "{\n  \"email\": \"{{newCustomerEmail}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
-                "url": {
-                  "raw": "{{baseUrl}}/auth/signup/verify-otp",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "auth",
-                    "signup",
-                    "verify-otp"
-                  ]
-                },
-                "description": "Verifies a signup OTP and creates an account with the role stored in the signup session. Requires a valid signupSessionId and exactly six numeric OTP digits; optional contact must match the session. Shared by customer, driver, and fleet-manager signup.\n\n### Implementation snapshot\n- Implemented route: POST {{baseUrl}}/auth/signup/verify-otp.\n- Authentication: Public; no bearer required.\n- Required headers: Content-Type: application/json; x-client-platform: mobile is optional and returns refreshToken in JSON.\n- Path parameters: none.\n- Query parameters: none.\n- Example body fields/types: signupSessionId: string, email: string, otp: string. Requiredness/constraints are enforced by AuthValidation.verifyOtp; see existing endpoint-specific description above.\n- Success response: HTTP 201; JSON envelope contains success, statusCode, message, and controller data; data expression: { user: result.user, tokens: tokensForClient(req, result.tokens), }.\n- Possible errors: validation (422) and authentication/authorization (401/403) where applicable; route-specific service errors depend on the implementation.",
+                "url": "{{baseUrl}}/auth/customer/otp/request",
+                "description": "Unified customer OTP request. Use a known active CUSTOMER email identifier for login (isNewUser=false), or an unused email identifier for signup (isNewUser=true). The response contains authSessionId, channel, maskedTarget, expiresIn, and isNewUser. This example is configured for new customer signup.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -442,70 +527,34 @@
               "response": []
             },
             {
-              "name": "3. Resend Customer Signup OTP",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
-                  },
-                  {
-                    "key": "x-client-platform",
-                    "value": "mobile",
-                    "description": "Returns refresh token in JSON for Postman workflows."
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"signupSessionId\": \"{{signupSessionId}}\",\n  \"email\": \"{{email}}\"\n}"
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/auth/signup/resend-otp",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "auth",
-                    "signup",
-                    "resend-otp"
-                  ]
-                },
-                "description": "Resends an OTP for a signup session. Requires a valid signupSessionId; optionally include the original email or Portuguese contactNumber, at most one. Shared by customer, driver, and fleet-manager signup.\n\n### Implementation snapshot\n- Implemented route: POST {{baseUrl}}/auth/signup/resend-otp.\n- Authentication: Public; no bearer required.\n- Required headers: Content-Type: application/json; x-client-platform: mobile is optional and returns refreshToken in JSON.\n- Path parameters: none.\n- Query parameters: none.\n- Example body fields/types: signupSessionId: string, email: string. Requiredness/constraints are enforced by AuthValidation.resendOtp; see existing endpoint-specific description above.\n- Success response: HTTP 200; JSON envelope contains success, statusCode, message, and controller data; data expression: result.\n- Possible errors: validation (422) and authentication/authorization (401/403) where applicable; route-specific service errors depend on the implementation.",
-                "auth": {
-                  "type": "noauth"
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "4. Customer Login",
+              "name": "2. Verify Customer OTP - New Customer Signup (email)",
               "event": [
                 {
                   "listen": "test",
                   "script": {
+                    "type": "text/javascript",
                     "exec": [
-                      "pm.test(\"Status code is 200\", function () {",
-                      "    pm.response.to.have.status(200);",
+                      "pm.test(\"OTP verification returns HTTP 201\", function () {",
+                      "    pm.response.to.have.status(201);",
                       "});",
-                      "if (pm.response.code === 200) {",
-                      "    var json = pm.response.json();",
-                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
-                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
-                      "        console.log(\"Captured Customer accessToken\");",
-                      "    }",
-                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
-                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
-                      "        console.log(\"Captured mobile refreshToken\");",
+                      "if (pm.response.code === 201) {",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the new customer signup case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(true);",
+                      "    });",
+                      "    if (json.data && json.data.tokens) {",
+                      "        if (json.data.tokens.accessToken) {",
+                      "            pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        }",
+                      "        if (json.data.tokens.refreshToken) {",
+                      "            pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        }",
                       "    }",
                       "    if (json.data && json.data.user && json.data.user.id) {",
-                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
-                      "        console.log(\"Captured Customer mockUserId:\", json.data.user.id);",
+                      "        pm.collectionVariables.set(\"userId\", json.data.user.id);",
                       "    }",
                       "}"
-                    ],
-                    "type": "text/javascript"
+                    ]
                   }
                 }
               ],
@@ -514,31 +563,25 @@
                 "header": [
                   {
                     "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
+                    "value": "application/json"
                   },
                   {
                     "key": "x-client-platform",
                     "value": "mobile",
-                    "type": "text",
-                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"rememberMe\": true\n}"
+                  "raw": "{\n  \"authSessionId\": \"{{authSessionId}}\",\n  \"email\": \"{{newCustomerEmail}}\",\n  \"otp\": \"{{otp}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
-                "url": {
-                  "raw": "{{baseUrl}}/auth/login",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "auth",
-                    "login"
-                  ]
-                },
-                "description": "Authenticates a Customer with email or Portuguese contact number and password. Issues access token and sets refresh token cookie.\n\nSign in with EITHER `email` OR `contactNumber` (a Portuguese +351 number in any common format). `identifier` is no longer accepted.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only.\n\n### Implementation snapshot\n- Implemented route: POST {{baseUrl}}/auth/login.\n- Authentication: Public; no bearer required.\n- Required headers: Content-Type: application/json; x-client-platform: mobile is optional and returns refreshToken in JSON.\n- Path parameters: none.\n- Query parameters: none.\n- Example body fields/types: email: string, password: string, rememberMe: boolean. Requiredness/constraints are enforced by AuthValidation.login; see existing endpoint-specific description above.\n- Success response: HTTP 200; JSON envelope contains success, statusCode, message, and controller data; data expression: { user: result.user, tokens: tokensForClient(req, result.tokens), }.\n- Possible errors: validation (422) and authentication/authorization (401/403) where applicable; route-specific service errors depend on the implementation.",
+                "url": "{{baseUrl}}/auth/customer/otp/verify",
+                "description": "Verifies the OTP sent by the preceding request. Set otp to the six-digit code delivered to the configured email. Existing customers receive HTTP 200; new customers are registered and receive HTTP 201. The response includes user and tokens.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -546,32 +589,29 @@
               "response": []
             },
             {
-              "name": "4. Customer Login (Portuguese phone)",
+              "name": "1. Request Customer OTP - Existing Customer Login (phone)",
               "event": [
                 {
                   "listen": "test",
                   "script": {
+                    "type": "text/javascript",
                     "exec": [
-                      "pm.test(\"Status code is 200\", function () {",
+                      "pm.test(\"OTP request returns HTTP 200\", function () {",
                       "    pm.response.to.have.status(200);",
                       "});",
                       "if (pm.response.code === 200) {",
-                      "    var json = pm.response.json();",
-                      "    if (json.data && json.data.tokens && json.data.tokens.accessToken) {",
-                      "        pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
-                      "        console.log(\"Captured Customer accessToken\");",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the existing customer login case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(false);",
+                      "    });",
+                      "    if (json.data && json.data.authSessionId) {",
+                      "        pm.collectionVariables.set(\"authSessionId\", json.data.authSessionId);",
                       "    }",
-                      "    if (json.data && json.data.tokens && json.data.tokens.refreshToken) {",
-                      "        pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
-                      "        console.log(\"Captured mobile refreshToken\");",
-                      "    }",
-                      "    if (json.data && json.data.user && json.data.user.id) {",
-                      "        pm.collectionVariables.set(\"mockUserId\", json.data.user.id);",
-                      "        console.log(\"Captured Customer mockUserId:\", json.data.user.id);",
+                      "    if (json.data && typeof json.data.isNewUser === \"boolean\") {",
+                      "        pm.collectionVariables.set(\"isNewUser\", String(json.data.isNewUser));",
                       "    }",
                       "}"
-                    ],
-                    "type": "text/javascript"
+                    ]
                   }
                 }
               ],
@@ -580,31 +620,206 @@
                 "header": [
                   {
                     "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
+                    "value": "application/json"
                   },
                   {
                     "key": "x-client-platform",
                     "value": "mobile",
-                    "type": "text",
-                    "description": "Mobile apps receive refreshToken in the JSON body as well as the cookie"
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
                   }
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"contactNumber\": \"{{contactNumber}}\",\n  \"password\": \"{{password}}\",\n  \"rememberMe\": true\n}"
+                  "raw": "{\n  \"contactNumber\": \"{{existingCustomerContactNumber}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
-                "url": {
-                  "raw": "{{baseUrl}}/auth/login",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "auth",
-                    "login"
-                  ]
+                "url": "{{baseUrl}}/auth/customer/otp/request",
+                "description": "Unified customer OTP request. Use a known active CUSTOMER phone identifier for login (isNewUser=false), or an unused phone identifier for signup (isNewUser=true). The response contains authSessionId, channel, maskedTarget, expiresIn, and isNewUser. This example is configured for existing customer login.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "2. Verify Customer OTP - Existing Customer Login (phone)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"OTP verification returns HTTP 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the existing customer login case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(false);",
+                      "    });",
+                      "    if (json.data && json.data.tokens) {",
+                      "        if (json.data.tokens.accessToken) {",
+                      "            pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        }",
+                      "        if (json.data.tokens.refreshToken) {",
+                      "            pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        }",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"userId\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"authSessionId\": \"{{authSessionId}}\",\n  \"contactNumber\": \"{{existingCustomerContactNumber}}\",\n  \"otp\": \"{{otp}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
-                "description": "Authenticates a Customer with email or Portuguese contact number and password. Issues access token and sets refresh token cookie.\n\nSign in with EITHER `email` OR `contactNumber` (a Portuguese +351 number in any common format). `identifier` is no longer accepted.\n\nPlatform: MOBILE. Sends `x-client-platform: mobile`, so `data.tokens.refreshToken` is returned in the JSON body (in addition to the httpOnly cookie) and captured into `{{refreshToken}}`. Web clients omit the header and receive the cookie only.\n\n### Implementation snapshot\n- Implemented route: POST {{baseUrl}}/auth/login.\n- Authentication: Public; no bearer required.\n- Required headers: Content-Type: application/json; x-client-platform: mobile is optional and returns refreshToken in JSON.\n- Path parameters: none.\n- Query parameters: none.\n- Example body fields/types: contactNumber: string, password: string, rememberMe: boolean. Requiredness/constraints are enforced by AuthValidation.login; see existing endpoint-specific description above.\n- Success response: HTTP 200; JSON envelope contains success, statusCode, message, and controller data; data expression: { user: result.user, tokens: tokensForClient(req, result.tokens), }.\n- Possible errors: validation (422) and authentication/authorization (401/403) where applicable; route-specific service errors depend on the implementation.",
+                "url": "{{baseUrl}}/auth/customer/otp/verify",
+                "description": "Verifies the OTP sent by the preceding request. Set otp to the six-digit code delivered to the configured phone. Existing customers receive HTTP 200; new customers are registered and receive HTTP 201. The response includes user and tokens.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "1. Request Customer OTP - New Customer Signup (phone)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"OTP request returns HTTP 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "if (pm.response.code === 200) {",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the new customer signup case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(true);",
+                      "    });",
+                      "    if (json.data && json.data.authSessionId) {",
+                      "        pm.collectionVariables.set(\"authSessionId\", json.data.authSessionId);",
+                      "    }",
+                      "    if (json.data && typeof json.data.isNewUser === \"boolean\") {",
+                      "        pm.collectionVariables.set(\"isNewUser\", String(json.data.isNewUser));",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contactNumber\": \"{{newCustomerContactNumber}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}/auth/customer/otp/request",
+                "description": "Unified customer OTP request. Use a known active CUSTOMER phone identifier for login (isNewUser=false), or an unused phone identifier for signup (isNewUser=true). The response contains authSessionId, channel, maskedTarget, expiresIn, and isNewUser. This example is configured for new customer signup.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "2. Verify Customer OTP - New Customer Signup (phone)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"OTP verification returns HTTP 201\", function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "if (pm.response.code === 201) {",
+                      "    const json = pm.response.json();",
+                      "    pm.test(\"Response matches the new customer signup case\", function () {",
+                      "        pm.expect(json.data.isNewUser).to.eql(true);",
+                      "    });",
+                      "    if (json.data && json.data.tokens) {",
+                      "        if (json.data.tokens.accessToken) {",
+                      "            pm.collectionVariables.set(\"accessToken\", json.data.tokens.accessToken);",
+                      "        }",
+                      "        if (json.data.tokens.refreshToken) {",
+                      "            pm.collectionVariables.set(\"refreshToken\", json.data.tokens.refreshToken);",
+                      "        }",
+                      "    }",
+                      "    if (json.data && json.data.user && json.data.user.id) {",
+                      "        pm.collectionVariables.set(\"userId\", json.data.user.id);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "x-client-platform",
+                    "value": "mobile",
+                    "description": "Returns refreshToken in the JSON body for mobile clients"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"authSessionId\": \"{{authSessionId}}\",\n  \"contactNumber\": \"{{newCustomerContactNumber}}\",\n  \"otp\": \"{{otp}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}/auth/customer/otp/verify",
+                "description": "Verifies the OTP sent by the preceding request. Set otp to the six-digit code delivered to the configured phone. Existing customers receive HTTP 200; new customers are registered and receive HTTP 201. The response includes user and tokens.",
                 "auth": {
                   "type": "noauth"
                 }

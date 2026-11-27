@@ -54,14 +54,55 @@ function allowAtMostOneContact(data: ContactFields, ctx: z.RefinementCtx): void 
   }
 }
 
-export const CustomerSignUpSchema = z
+export const CustomerAuthRequestSchema = z
   .object({
     ...contactFields,
     referralCode: z.string().trim().optional(),
   })
-  .superRefine(requireExactlyOneContact);
+  .superRefine((data, ctx) => {
+    if (data.email && data.contactNumber) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Provide either email or contactNumber, not both',
+        path: ['contactNumber'],
+      });
+    } else if (!data.email && !data.contactNumber) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Either email or contactNumber is required',
+        path: ['email'],
+      });
+    }
+  });
 
-export type CustomerSignUpInput = z.infer<typeof CustomerSignUpSchema>;
+export type CustomerAuthRequestInput = z.infer<typeof CustomerAuthRequestSchema>;
+
+export const CustomerAuthVerifySchema = z
+  .object({
+    authSessionId: z.string().uuid('Invalid session ID'),
+    otp: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, 'OTP must be 6 digits'),
+    ...contactFields,
+  })
+  .superRefine((data, ctx) => {
+    if (data.email && data.contactNumber) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Provide either email or contactNumber, not both',
+        path: ['contactNumber'],
+      });
+    } else if (!data.email && !data.contactNumber) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Either email or contactNumber is required',
+        path: ['email'],
+      });
+    }
+  });
+
+export type CustomerAuthVerifyInput = z.infer<typeof CustomerAuthVerifySchema>;
 
 export const InitiateSignupSchema = z
   .object({
@@ -185,7 +226,8 @@ const SetAdminPasswordSchema = z.object({
 export type SetAdminPasswordInput = z.infer<typeof SetAdminPasswordSchema>;
 
 export const AuthValidation = {
-  CustomerSignUpSchema: { body: CustomerSignUpSchema },
+  CustomerAuthRequestSchema: { body: CustomerAuthRequestSchema },
+  CustomerAuthVerifySchema: { body: CustomerAuthVerifySchema },
   initiateSignup: { body: InitiateSignupSchema },
   emailOnlySignup: { body: EmailOnlySignupSchema },
   resendOtp: { body: ResendOtpSchema },
