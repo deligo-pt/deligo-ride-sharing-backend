@@ -16,3 +16,8 @@ export const REFRESH_COOKIE_PATH = '/api/v1/auth';
 export const MOBILE_PLATFORMS = new Set(['mobile', 'android', 'ios']);
 
 export const NATIVE_APP_USER_AGENT = /\b(okhttp|dart|cfnetwork|expo|reactnative)\b/i;
+
+export const OTP_TTL_SECONDS = 300; // ৫ মিনিট
+export const COOLDOWN_SECONDS = 60; // ৬০ সেকেন্ড
+export const HOURLY_LIMIT = 5;
+export const MAX_ATTEMPTS = 5;

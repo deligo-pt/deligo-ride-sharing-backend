@@ -1,6 +1,6 @@
-import type { InitiateSignupInput } from './auth.validation';
+import { EmailOnlySignupInput } from './auth.validation';
 
-export type SignupInput = InitiateSignupInput;
+export type SignupInput = EmailOnlySignupInput;
 
 export type CustomerSignupInput = {
   referralCode?: string | undefined;
@@ -94,4 +94,16 @@ export interface GooglePayload {
   given_name?: string;
   family_name?: string;
   picture?: string;
+}
+
+export interface ResetPasswordPayload {
+  email: string;
+}
+
+export interface ResetOtpSession {
+  userId: string;
+  otpHash: string;
+  channel: 'EMAIL';
+  target: string;
+  attempts: number;
 }

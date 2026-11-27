@@ -1,6 +1,7 @@
-import 'dotenv/config'; // Must be the VERY FIRST import to load .env
+import 'dotenv/config';
 import http from 'http';
 import type { Worker } from 'bullmq';
+
 import { createApp } from './app';
 import prisma from './config/db';
 import { config } from './config';
@@ -8,11 +9,12 @@ import { NotificationService } from './modules/notification/notification.service
 import { initSocketServer } from './sockets';
 import { rideWorker } from './queues/ride.worker';
 import { ensureRustFSBucketExists } from './utils/rustfs.util';
+import { seedSuperAdmin } from './seed/superadmin';
 
 // Server Entry Point
 
 async function bootstrap(): Promise<void> {
-  // ── 1. Verify database connectivity before binding the HTTP port ───────────
+  // 1. Verify database connectivity
   try {
     await prisma.$connect();
     console.info('✅ Database connection established');
@@ -21,26 +23,32 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // Object storage: create the bucket if missing (logs only — never blocks boot, e.g. offline dev)
+  // 2. Ensure object storage bucket exists
   await ensureRustFSBucketExists();
 
-  // ── 2. Create Express app + HTTP server + Socket.io ────────────────────────
+  // 3. Seed Super Admin
+  await seedSuperAdmin(prisma, config);
+  console.info('✅ Seed admin created');
+
+  // 4. Create Express app and HTTP server
   const app = createApp();
   const server = http.createServer(app);
 
-  // Attach Socket.io to the same HTTP server (same port as REST)
+  // 5. Initialize Socket.io
   const io = initSocketServer(server);
-
   NotificationService.setIo(io);
 
+  // 6. Initialize embedded worker if enabled
   let activeWorker: Worker | null = null;
+
   if (config.worker.embedded) {
     activeWorker = rideWorker;
-    console.info('⚙️  Embedded BullMQ worker initialized in server process');
+    console.info('⚙️ Embedded BullMQ worker initialized in server process');
   } else {
-    console.info('ℹ️  Embedded BullMQ worker disabled (ENABLE_WORKER=false)');
+    console.info('ℹ️ Embedded BullMQ worker disabled (ENABLE_WORKER=false)');
   }
 
+  // 7. Start HTTP server
   server.listen(config.port, () => {
     console.info(`🚀 Server running on http://localhost:${config.port}`);
     console.info(`   Environment : ${config.env}`);
@@ -49,33 +57,34 @@ async function bootstrap(): Promise<void> {
     console.info(`   WebSocket   : ws://localhost:${config.port}`);
   });
 
-  // ── 3. Graceful Shutdown ───────────────────────────────────────────────────
+  // 8. Graceful Shutdown
   const shutdown = (signal: string): void => {
     console.info(`\n🛑 Received ${signal}. Shutting down gracefully...`);
 
     const cleanup = async (): Promise<void> => {
-      console.info('   HTTP server closed');
       try {
         if (activeWorker) {
           await activeWorker.close();
           console.info('   BullMQ worker closed');
         }
+
         await prisma.$disconnect();
         console.info('   Database disconnected');
       } catch (err) {
         console.error('   Error during shutdown cleanup:', err);
       }
+
       console.info('✅ Shutdown complete');
       process.exit(0);
     };
 
     server.close(() => {
+      console.info('   HTTP server closed');
       void cleanup();
     });
 
-    // Force shutdown after 10 seconds if graceful shutdown stalls
     setTimeout(() => {
-      console.error('⚠️  Force shutdown after timeout');
+      console.error('⚠️ Force shutdown after timeout');
       process.exit(1);
     }, 10_000);
   };
@@ -83,7 +92,7 @@ async function bootstrap(): Promise<void> {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 
-  // ── 4. Unhandled rejection / exception handlers ────────────────────────────
+  // 9. Unhandled errors
   process.on('unhandledRejection', (reason: unknown) => {
     console.error('💥 Unhandled Promise Rejection:', reason);
     shutdown('unhandledRejection');
