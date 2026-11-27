@@ -49,7 +49,7 @@ export function createRateLimiter(options: RateLimitOptions): RequestHandler {
       return;
     }
 
-    void (async () => {
+    void (async (): Promise<void> => {
       let worst: { remaining: number; resetMs: number; blocked: boolean } = {
         remaining: Infinity,
         resetMs: 0,

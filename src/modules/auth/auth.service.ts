@@ -29,7 +29,8 @@ import {
   AppleLoginInput,
   CreateAdminInput,
   SetAdminPasswordInput,
-  CustomerSignUpInput,
+  CustomerAuthRequestInput,
+  CustomerAuthVerifyInput,
 } from './auth.validation';
 import type {
   SignupInput,
@@ -40,7 +41,6 @@ import type {
   SocialUserProfile,
   SocialAuthOptions,
   GooglePayload,
-  CustomerSignupRedisSession,
 } from './auth.interface';
 import {
   DEFAULT_LANGUAGE,
@@ -217,8 +217,13 @@ const dispatchOtp = async (
 ): Promise<void> => {
   const expiryMinutes = Math.max(1, Math.round(config.otp.expiresInSeconds / 60));
 
-  if (channel === 'EMAIL' && targetEmail) {
-    await sendEmail({
+  if (channel === 'EMAIL') {
+    if (!targetEmail) {
+      console.error('[OTP-TRACE] ❌ 8a. channel is EMAIL but targetEmail is missing');
+      throw new BadRequestError('Email address is required to send OTP');
+    }
+
+    const result = await sendEmail({
       to: targetEmail,
       subject: 'Deligo Verification Code',
       template: 'otp-verification',
@@ -228,7 +233,25 @@ const dispatchOtp = async (
         preferredLanguage: DEFAULT_LANGUAGE,
       },
     });
-  } else if (channel === 'PHONE' && targetPhone) {
+
+    if (!result.success) {
+      console.error('[OTP-TRACE] ❌ 10. sendEmail returned success:false', result.error);
+      throw new AppError(
+        result.error ? `Failed to send OTP email: ${result.error}` : 'Failed to send OTP email',
+        502,
+        'OTP_EMAIL_DELIVERY_FAILED',
+      );
+    }
+
+    return;
+  }
+
+  if (channel === 'PHONE') {
+    if (!targetPhone) {
+      console.error('[OTP-TRACE] ❌ 8c. channel is PHONE but targetPhone is missing');
+      throw new BadRequestError('Phone number is required to send OTP');
+    }
+
     await sendBulkGateSms(
       targetPhone,
       `Your Deligo verification code is: ${otp}. Valid for ${expiryMinutes} minutes.`,
@@ -295,38 +318,76 @@ const verifyGoogleIdToken = async (idToken: string): Promise<GooglePayload> => {
   }
 };
 
-const CustomerSignUp = async (
-  input: CustomerSignUpInput,
-  role: 'CUSTOMER' = 'CUSTOMER',
+type AuthFlow = 'LOGIN' | 'SIGNUP';
+
+interface CustomerAuthRedisSession {
+  flow: AuthFlow;
+  userId: string | null;
+  payload: {
+    email?: string;
+    contactNumber?: string;
+    referralCode: string | null;
+    referrerId: string | null;
+    role: 'CUSTOMER';
+  };
+  otp: {
+    codeHash: string;
+    channel: 'EMAIL' | 'PHONE';
+    expiresAt: number;
+  };
+  resendCount: number;
+  lastSentAt: number;
+}
+
+const OTP_COOLDOWN_SECONDS = 60;
+const OTP_MAX_PER_HOUR = 5;
+
+const enforceOtpRateLimit = async (identifier: string): Promise<void> => {
+  const cooldownKey = `otp:cooldown:${identifier}`;
+  const hourlyKey = `otp:hourly:${identifier}`;
+
+  const inCooldown = await redis.get(cooldownKey);
+  if (inCooldown) {
+    throw new RateLimitError('Please wait before requesting another verification code.');
+  }
+
+  const hourlyCount = await redis.incr(hourlyKey);
+  if (hourlyCount === 1) {
+    await redis.expire(hourlyKey, 3600);
+  }
+  if (hourlyCount > OTP_MAX_PER_HOUR) {
+    throw new RateLimitError('Too many OTP requests. Please try again after an hour.');
+  }
+
+  await redis.set(cooldownKey, '1', 'EX', OTP_COOLDOWN_SECONDS);
+};
+
+export const requestCustomerAuthOtp = async (
+  input: CustomerAuthRequestInput,
 ): Promise<{
-  signupSessionId: string;
+  authSessionId: string;
   channel: 'EMAIL' | 'PHONE';
   maskedTarget: string;
   expiresIn: number;
 }> => {
-  const email = input.email;
-  const contactNumber = input.contactNumber;
+  const email = input.email?.trim().toLowerCase();
+  const contactNumber = input.contactNumber?.trim();
   const channel: 'EMAIL' | 'PHONE' = email ? 'EMAIL' : 'PHONE';
+  const identifier = (email ?? contactNumber)!;
 
-  if (email) {
-    const existing = await prisma.user.findFirst({ where: { email, isDeleted: false } });
-    if (existing) {
-      throw new ConflictError('A user with this email address already exists');
-    }
-  } else if (contactNumber) {
-    const existing = await prisma.user.findFirst({
-      where: { phone: contactNumber, isDeleted: false },
-    });
-    if (existing) {
-      throw new ConflictError('A user with this phone number already exists');
-    }
-  }
+  await enforceOtpRateLimit(identifier);
+
+  const existingUser = await prisma.user.findFirst({
+    where: email ? { email, isDeleted: false } : { phone: contactNumber, isDeleted: false },
+    select: { id: true, role: true, status: true },
+  });
 
   let referrerId: string | null = null;
-  if (input.referralCode) {
+  if (!existingUser && input.referralCode) {
     const code = input.referralCode.trim().toUpperCase();
     const referrer = await prisma.user.findUnique({
       where: { referralCode: code },
+      select: { id: true, isDeleted: true },
     });
     if (!referrer || referrer.isDeleted) {
       throw new BadRequestError('Invalid referral code provided');
@@ -336,18 +397,19 @@ const CustomerSignUp = async (
 
   const rawOtp = crypto.randomInt(100000, 1000000).toString();
   const codeHash = hashSha256(rawOtp);
-  const signupSessionId = crypto.randomUUID();
-
+  const authSessionId = crypto.randomUUID();
   const now = Date.now();
   const expiresAt = now + config.otp.expiresInSeconds * 1000;
 
-  const sessionData: CustomerSignupRedisSession = {
+  const sessionData: CustomerAuthRedisSession = {
+    flow: existingUser ? 'LOGIN' : 'SIGNUP',
+    userId: existingUser?.id ?? null,
     payload: {
       email,
       contactNumber,
-      referralCode: input.referralCode?.trim().toUpperCase() || null,
+      referralCode: !existingUser ? input.referralCode?.trim().toUpperCase() || null : null,
       referrerId,
-      role,
+      role: 'CUSTOMER',
     },
     otp: {
       codeHash,
@@ -358,17 +420,165 @@ const CustomerSignUp = async (
     lastSentAt: now,
   };
 
-  const redisKey = `signup:session:${signupSessionId}`;
+  const redisKey = `auth:session:${authSessionId}`;
   await redis.set(redisKey, JSON.stringify(sessionData), 'EX', config.otp.signupSessionTtlSeconds);
 
-  await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
+  try {
+    await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
+  } catch (error) {
+    await redis.del(redisKey, `otp:cooldown:${identifier}`);
+    throw error;
+  }
 
   return {
-    signupSessionId,
+    authSessionId,
     channel,
     maskedTarget: maskTarget(channel, email, contactNumber),
     expiresIn: config.otp.expiresInSeconds,
   };
+};
+
+export const verifyCustomerAuthOtp = async (
+  input: CustomerAuthVerifyInput,
+  clientInfo: ClientInfo,
+): Promise<{ user: SanitizedUser; tokens: AuthTokens; isNewUser: boolean }> => {
+  const redisKey = `auth:session:${input.authSessionId}`;
+  const attemptsKey = `auth:otp:attempts:${input.authSessionId}`;
+  const rawData = await redis.get(redisKey);
+
+  if (!rawData) {
+    throw new NotFoundError('Verification session expired or not found. Please request a new OTP.');
+  }
+
+  const session = JSON.parse(rawData) as CustomerAuthRedisSession;
+
+  // Contact match check
+  if (session.otp.channel === 'EMAIL' && session.payload.email !== input.email) {
+    throw new BadRequestError('Email does not match the verification session');
+  }
+  if (session.otp.channel === 'PHONE' && session.payload.contactNumber !== input.contactNumber) {
+    throw new BadRequestError('Phone number does not match the verification session');
+  }
+
+  if (Date.now() > session.otp.expiresAt) {
+    await redis.del(redisKey, attemptsKey);
+    throw new BadRequestError('Verification code has expired. Please request a new one.');
+  }
+
+  const inputHash = hashSha256(input.otp);
+  const expectedHash = session.otp.codeHash;
+  const isMatch =
+    inputHash.length === expectedHash.length &&
+    crypto.timingSafeEqual(Buffer.from(inputHash), Buffer.from(expectedHash));
+
+  if (!isMatch) {
+    const attempts = await redis.incr(attemptsKey);
+    if (attempts === 1) {
+      await redis.expire(attemptsKey, config.otp.signupSessionTtlSeconds);
+    }
+
+    if (attempts >= MAX_OTP_ATTEMPTS) {
+      await redis.del(redisKey, attemptsKey);
+      throw new RateLimitError('Too many invalid attempts. Session terminated for security.');
+    }
+
+    throw new BadRequestError('Invalid verification code', {
+      remainingAttempts: MAX_OTP_ATTEMPTS - attempts,
+    });
+  }
+
+  // Consume session immediately to prevent concurrent replay
+  const deleted = await redis.del(redisKey, attemptsKey);
+  if (deleted === 0) {
+    throw new BadRequestError('Verification session already used.');
+  }
+
+  // FLOW 1: EXISTING USER -> LOGIN
+  if (session.flow === 'LOGIN' && session.userId) {
+    const existingUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+    });
+
+    if (!existingUser || existingUser.isDeleted || existingUser.status !== 'ACTIVE') {
+      throw new ForbiddenError('User account is inactive or unavailable.');
+    }
+
+    if (existingUser.role !== 'CUSTOMER') {
+      throw new ForbiddenError('This account is not registered as a customer.');
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        isEmailVerified: session.otp.channel === 'EMAIL' ? true : existingUser.isEmailVerified,
+        isPhoneVerified: session.otp.channel === 'PHONE' ? true : existingUser.isPhoneVerified,
+      },
+    });
+
+    const authResult = await issueSessionAndTokens(updatedUser, false, clientInfo);
+    return { ...authResult, isNewUser: false };
+  }
+
+  // FLOW 2: NEW USER -> REGISTER + LOGIN
+  const ownReferralCode = await generateUniqueReferralCode();
+
+  let createdUser;
+  try {
+    createdUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: session.payload.email ?? null,
+          phone: session.payload.contactNumber ?? null,
+          firstName: null,
+          lastName: null,
+          role: 'CUSTOMER',
+          status: 'ACTIVE',
+          referralCode: ownReferralCode,
+          referrerId: session.payload.referrerId,
+          isEmailVerified: session.otp.channel === 'EMAIL',
+          isPhoneVerified: session.otp.channel === 'PHONE',
+        },
+      });
+
+      await tx.account.create({
+        data: {
+          userId: user.id,
+          provider: 'CREDENTIALS',
+          providerAccountId: user.id,
+          email: session.payload.email ?? null,
+          phone: session.payload.contactNumber ?? null,
+          passwordHash: null,
+        },
+      });
+
+      await tx.customerProfile.create({
+        data: { userId: user.id },
+      });
+
+      await tx.wallet.create({
+        data: {
+          userId: user.id,
+          balance: 0,
+          currency: 'USD',
+        },
+      });
+
+      return user;
+    });
+  } catch (err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const target = (err.meta?.target as string[])?.join(', ') || 'field';
+      throw new ConflictError(`A user with this ${target} already exists`);
+    }
+    throw err;
+  }
+
+  if (createdUser.email) {
+    sendWelcomeEmailAsync(createdUser);
+  }
+
+  const authResult = await issueSessionAndTokens(createdUser, false, clientInfo);
+  return { ...authResult, isNewUser: true };
 };
 
 const initiateSignup = async (
@@ -1507,7 +1717,8 @@ export const AuthService = {
   sanitizeUser,
   generateUniqueReferralCode,
   verifyGoogleIdToken,
-  CustomerSignUp,
+  requestCustomerAuthOtp,
+  verifyCustomerAuthOtp,
   initiateSignup,
   resendSignupOtp,
   verifySignupOtp,
