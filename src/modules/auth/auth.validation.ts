@@ -47,13 +47,6 @@ function requireExactlyOneContact(data: ContactFields, ctx: z.RefinementCtx): vo
   }
 }
 
-/** Optional contact (OTP endpoints): at most one of email / contactNumber. */
-function allowAtMostOneContact(data: ContactFields, ctx: z.RefinementCtx): void {
-  if (data.email && data.contactNumber) {
-    addContactIssue(ctx, 'Provide either email or contactNumber, not both', 'contactNumber');
-  }
-}
-
 export const CustomerAuthRequestSchema = z
   .object({
     ...contactFields,
@@ -77,7 +70,7 @@ export const CustomerAuthRequestSchema = z
 
 export type CustomerAuthRequestInput = z.infer<typeof CustomerAuthRequestSchema>;
 
-export const CustomerAuthVerifySchema = z
+const CustomerAuthVerifySchema = z
   .object({
     authSessionId: z.string().uuid('Invalid session ID'),
     otp: z
@@ -104,16 +97,6 @@ export const CustomerAuthVerifySchema = z
 
 export type CustomerAuthVerifyInput = z.infer<typeof CustomerAuthVerifySchema>;
 
-export const InitiateSignupSchema = z
-  .object({
-    ...contactFields,
-    password: passwordSchema,
-    referralCode: z.string().trim().optional(),
-  })
-  .superRefine(requireExactlyOneContact);
-
-export type InitiateSignupInput = z.infer<typeof InitiateSignupSchema>;
-
 export const EmailOnlySignupSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
@@ -122,39 +105,47 @@ export const EmailOnlySignupSchema = z.object({
 
 export type EmailOnlySignupInput = z.infer<typeof EmailOnlySignupSchema>;
 
-const ResendOtpSchema = z
-  .object({
-    signupSessionId: z.string().uuid('Invalid signupSessionId format'),
-    ...contactFields,
-  })
-  .superRefine(allowAtMostOneContact);
+const ResendOtpSchema = z.object({
+  signupSessionId: z.string().uuid('Invalid signupSessionId format'),
+  email: emailSchema,
+});
 
 export type ResendOtpInput = z.infer<typeof ResendOtpSchema>;
 
-const VerifyOtpSchema = z
-  .object({
-    includeRefreshToken: z.boolean().optional(),
-    signupSessionId: z.string().uuid('Invalid signupSessionId format'),
-    ...contactFields,
-    otp: z
-      .string()
-      .length(6, 'OTP must be exactly 6 digits')
-      .regex(/^\d{6}$/, 'OTP must contain only numbers'),
-  })
-  .superRefine(allowAtMostOneContact);
+const VerifyOtpSchema = z.object({
+  includeRefreshToken: z.boolean().optional(),
+  signupSessionId: z.string().uuid('Invalid signupSessionId format'),
+  email: emailSchema,
+  otp: z
+    .string()
+    .length(6, 'OTP must be exactly 6 digits')
+    .regex(/^\d{6}$/, 'OTP must contain only numbers'),
+});
 
 export type VerifyOtpInput = z.infer<typeof VerifyOtpSchema>;
 
 const LoginSchema = z
   .object({
     includeRefreshToken: z.boolean().optional(),
-    ...contactFields,
+    email: emailSchema,
     password: z.string().min(1, 'Password is required'),
     rememberMe: z.boolean().optional().default(false),
   })
   .superRefine(requireExactlyOneContact);
 
 export type LoginInput = z.infer<typeof LoginSchema>;
+
+const ResetPasswordRequestOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+});
+
+export type ResetPasswordRequestOtpInput = z.infer<typeof ResetPasswordRequestOtpSchema>;
+
+const ResetPasswordSchema = z.object({
+  resetSessionId: z.string(),
+  otp: z.string(),
+  password: passwordSchema,
+});
 
 const LogoutSchema = z.object({
   refreshToken: z.string().optional(),
@@ -218,6 +209,10 @@ const CreateAdminSchema = z.object({
 
 export type CreateAdminInput = z.infer<typeof CreateAdminSchema>;
 
+const ResendAdminInviteSchema = z.object({
+  email: emailSchema,
+});
+
 const SetAdminPasswordSchema = z.object({
   token: z.string().min(1, 'Invitation token is required').trim(),
   password: passwordSchema,
@@ -228,15 +223,17 @@ export type SetAdminPasswordInput = z.infer<typeof SetAdminPasswordSchema>;
 export const AuthValidation = {
   CustomerAuthRequestSchema: { body: CustomerAuthRequestSchema },
   CustomerAuthVerifySchema: { body: CustomerAuthVerifySchema },
-  initiateSignup: { body: InitiateSignupSchema },
   emailOnlySignup: { body: EmailOnlySignupSchema },
   resendOtp: { body: ResendOtpSchema },
   verifyOtp: { body: VerifyOtpSchema },
   login: { body: LoginSchema },
+  resetPasswordRequestOtp: { body: ResetPasswordRequestOtpSchema },
+  resetPassword: { body: ResetPasswordSchema },
   googleLogin: { body: GoogleLoginSchema },
   facebookLogin: { body: FacebookLoginSchema },
   appleLogin: { body: AppleLoginSchema },
   createAdmin: { body: CreateAdminSchema },
+  resendAdminInvite: { body: ResendAdminInviteSchema },
   setAdminPassword: { body: SetAdminPasswordSchema },
   refreshToken: { body: z.preprocess((value) => value ?? {}, RefreshTokenSchema) },
   logout: { body: z.preprocess((value) => value ?? {}, LogoutSchema) },

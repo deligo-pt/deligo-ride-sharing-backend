@@ -25,6 +25,14 @@ export const config = {
     url: env.DATABASE_URL,
   },
 
+  superAdmin: {
+    email: env.SUPER_ADMIN_EMAIL,
+    password: env.SUPER_ADMIN_PASSWORD,
+    firstName: env.SUPER_ADMIN_FIRST_NAME,
+    lastName: env.SUPER_ADMIN_LAST_NAME,
+    phone: env.SUPER_ADMIN_PHONE,
+  },
+
   redis: {
     url: env.REDIS_URL,
   },
