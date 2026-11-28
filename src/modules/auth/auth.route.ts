@@ -22,17 +22,12 @@ router.post(
 );
 
 router.post(
-  '/signup/initiate',
-  authRateLimiter,
-  validateRequest(AuthValidation.initiateSignup),
-  AuthController.initiateSignup,
-);
-router.post(
   '/signup/resend-otp',
   authRateLimiter,
   validateRequest(AuthValidation.resendOtp),
   AuthController.resendOtp,
 );
+
 router.post(
   '/signup/verify-otp',
   authRateLimiter,
@@ -40,7 +35,6 @@ router.post(
   AuthController.verifyOtp,
 );
 
-router.post('/login', authRateLimiter, validateRequest(AuthValidation.login), AuthController.login);
 router.post(
   '/google',
   authRateLimiter,
@@ -84,20 +78,47 @@ router.post(
   AuthController.driverLogin,
 );
 
-for (const prefix of ['/fleet', '/fleet-manager']) {
-  router.post(
-    `${prefix}/signup/initiate`,
-    authRateLimiter,
-    validateRequest(AuthValidation.emailOnlySignup),
-    AuthController.fleetInitiateSignup,
-  );
-  router.post(
-    `${prefix}/login`,
-    authRateLimiter,
-    validateRequest(AuthValidation.login),
-    AuthController.fleetLogin,
-  );
-}
+router.post(
+  '/driver/request-password-reset-otp',
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPasswordRequestOtp),
+  AuthController.requestPasswordResetOtp,
+);
+
+router.post(
+  '/driver/reset-password',
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPassword),
+  AuthController.resetPassword,
+);
+
+router.post(
+  '/fleet-manager/signup/initiate',
+  authRateLimiter,
+  validateRequest(AuthValidation.emailOnlySignup),
+  AuthController.fleetInitiateSignup,
+);
+
+router.post(
+  '/fleet-manager/login',
+  authRateLimiter,
+  validateRequest(AuthValidation.login),
+  AuthController.fleetLogin,
+);
+
+router.post(
+  '/fleet-manager/request-password-reset-otp',
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPasswordRequestOtp),
+  AuthController.requestPasswordResetOtp,
+);
+
+router.post(
+  '/fleet-manager/reset-password',
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPassword),
+  AuthController.resetPassword,
+);
 
 router.post(
   '/admin/login',
@@ -105,6 +126,7 @@ router.post(
   validateRequest(AuthValidation.login),
   AuthController.adminLogin,
 );
+
 router.post(
   '/admin/create',
   authRateLimiter,
@@ -113,11 +135,33 @@ router.post(
   validateRequest(AuthValidation.createAdmin),
   AuthController.createAdmin,
 );
+
 router.post(
   '/admin/set-password',
   authRateLimiter,
   validateRequest(AuthValidation.setAdminPassword),
   AuthController.setAdminPassword,
+);
+
+router.post(
+  '/admin/resend-invite',
+  authRateLimiter,
+  validateRequest(AuthValidation.resendAdminInvite),
+  AuthController.resendAdminInvite,
+);
+
+router.post(
+  '/admin/request-password-reset-otp',
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPasswordRequestOtp),
+  AuthController.requestPasswordResetOtp,
+);
+
+router.post(
+  '/admin/reset-password',
+  authRateLimiter,
+  validateRequest(AuthValidation.resetPassword),
+  AuthController.resetPassword,
 );
 
 export const authRouter = router;

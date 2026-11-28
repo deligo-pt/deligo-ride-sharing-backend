@@ -8,7 +8,6 @@ import {
   EmailOnlySignupInput,
   FacebookLoginInput,
   GoogleLoginInput,
-  InitiateSignupInput,
   LoginInput,
   LogoutInput,
   RefreshTokenInput,
@@ -29,6 +28,7 @@ import {
 } from './auth.constant';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
+import { ResetPasswordPayload } from './auth.interface';
 
 export const requestCustomerAuthOtp = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.requestCustomerAuthOtp(req.body as CustomerAuthRequestInput);
@@ -67,17 +67,6 @@ export const verifyCustomerAuthOtp = catchAsync(async (req: Request, res: Respon
   });
 });
 
-const initiateSignup = catchAsync(async (req, res) => {
-  const result = await AuthService.initiateSignup(req.body as InitiateSignupInput, 'DRIVER');
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Verification code sent successfully',
-    data: result,
-  });
-});
-
 const resendOtp = catchAsync(async (req, res) => {
   const result = await AuthService.resendSignupOtp(req.body as ResendOtpInput);
 
@@ -98,27 +87,6 @@ const verifyOtp = catchAsync(async (req, res) => {
     statusCode: 201,
     success: true,
     message: 'Account verified and created successfully',
-    data: {
-      user: result.user,
-      tokens: tokensForClient(req, result.tokens),
-    },
-  });
-});
-
-const login = catchAsync(async (req, res) => {
-  const input = req.body as LoginInput;
-  const result = await AuthService.login(input, getClientInfo(req), ['CUSTOMER']);
-
-  setRefreshTokenCookie(
-    res,
-    result.tokens.refreshToken,
-    input.rememberMe ? REMEMBER_ME_SESSION_DAYS : DEFAULT_SESSION_DAYS,
-  );
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Logged in successfully',
     data: {
       user: result.user,
       tokens: tokensForClient(req, result.tokens),
@@ -267,6 +235,34 @@ const driverLogin = catchAsync(async (req, res) => {
   });
 });
 
+const requestPasswordResetOtp = catchAsync(async (req, res) => {
+  const result = await AuthService.requestPasswordResetOtp(req.body as ResetPasswordPayload);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Password reset code sent successfully',
+    data: {
+      result,
+    },
+  });
+});
+
+const resetPassword = catchAsync(async (req, res) => {
+  const result = await AuthService.resetPassword(
+    req.body as { resetSessionId: string; otp: string; password: string },
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Password reset successfully',
+    data: {
+      result,
+    },
+  });
+});
+
 const fleetInitiateSignup = catchAsync(async (req, res) => {
   const result = await AuthService.initiateSignup(
     req.body as EmailOnlySignupInput,
@@ -335,6 +331,17 @@ const createAdmin = catchAsync(async (req, res) => {
   });
 });
 
+const resendAdminInvite = catchAsync(async (req, res) => {
+  const result = await AuthService.resendAdminInvite(req.body as { email: string });
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: 'Admin invitation sent successfully',
+    data: result,
+  });
+});
+
 const setAdminPassword = catchAsync(async (req, res) => {
   const result = await AuthService.setAdminPassword(req.body as SetAdminPasswordInput);
 
@@ -349,10 +356,8 @@ const setAdminPassword = catchAsync(async (req, res) => {
 export const AuthController = {
   requestCustomerAuthOtp,
   verifyCustomerAuthOtp,
-  initiateSignup,
   resendOtp,
   verifyOtp,
-  login,
   googleLogin,
   facebookLogin,
   appleLogin,
@@ -360,9 +365,12 @@ export const AuthController = {
   logout,
   driverInitiateSignup,
   driverLogin,
+  requestPasswordResetOtp,
+  resetPassword,
   fleetInitiateSignup,
   fleetLogin,
   adminLogin,
   createAdmin,
+  resendAdminInvite,
   setAdminPassword,
 };

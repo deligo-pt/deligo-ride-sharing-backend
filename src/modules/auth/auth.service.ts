@@ -41,6 +41,8 @@ import type {
   SocialUserProfile,
   SocialAuthOptions,
   GooglePayload,
+  ResetPasswordPayload,
+  ResetOtpSession,
 } from './auth.interface';
 import {
   DEFAULT_LANGUAGE,
@@ -53,6 +55,8 @@ import {
   DEFAULT_SESSION_DAYS,
   REMEMBER_ME_SESSION_DAYS,
   ACCESS_TOKEN_TTL_SECONDS,
+  OTP_TTL_SECONDS,
+  MAX_ATTEMPTS,
 } from './auth.constant';
 
 export const googleAuthClient = new OAuth2Client();
@@ -212,8 +216,8 @@ const issueSessionAndTokens = async (
 const dispatchOtp = async (
   channel: 'EMAIL' | 'PHONE',
   otp: string,
-  targetEmail: string | null,
-  targetPhone: string | null,
+  targetEmail?: string | null,
+  targetPhone?: string | null,
 ): Promise<void> => {
   const expiryMinutes = Math.max(1, Math.round(config.otp.expiresInSeconds / 60));
 
@@ -583,29 +587,19 @@ export const verifyCustomerAuthOtp = async (
 
 const initiateSignup = async (
   input: SignupInput,
-  role: 'CUSTOMER' | 'DRIVER' | 'FLEET_MANAGER' = 'CUSTOMER',
+  role: 'DRIVER' | 'FLEET_MANAGER' = 'DRIVER',
 ): Promise<{
   signupSessionId: string;
-  channel: 'EMAIL' | 'PHONE';
+  channel: 'EMAIL';
   maskedTarget: string;
   expiresIn: number;
 }> => {
   const email = input.email;
-  const contactNumber = input.contactNumber;
-  const channel: 'EMAIL' | 'PHONE' = email ? 'EMAIL' : 'PHONE';
+  const channel = 'EMAIL';
 
-  if (email) {
-    const existing = await prisma.user.findFirst({ where: { email, isDeleted: false } });
-    if (existing) {
-      throw new ConflictError('A user with this email address already exists');
-    }
-  } else if (contactNumber) {
-    const existing = await prisma.user.findFirst({
-      where: { phone: contactNumber, isDeleted: false },
-    });
-    if (existing) {
-      throw new ConflictError('A user with this phone number already exists');
-    }
+  const existing = await prisma.user.findFirst({ where: { email, isDeleted: false } });
+  if (existing) {
+    throw new ConflictError('A user with this email address already exists');
   }
 
   let referrerId: string | null = null;
@@ -631,7 +625,6 @@ const initiateSignup = async (
   const sessionData: SignupRedisSession = {
     payload: {
       email,
-      contactNumber,
       passwordHash,
       referralCode: input.referralCode?.trim().toUpperCase() || null,
       referrerId,
@@ -649,12 +642,12 @@ const initiateSignup = async (
   const redisKey = `signup:session:${signupSessionId}`;
   await redis.set(redisKey, JSON.stringify(sessionData), 'EX', config.otp.signupSessionTtlSeconds);
 
-  await dispatchOtp(channel, rawOtp, email ?? null, contactNumber ?? null);
+  await dispatchOtp(channel, rawOtp, email ?? null);
 
   return {
     signupSessionId,
     channel,
-    maskedTarget: maskTarget(channel, email, contactNumber),
+    maskedTarget: maskTarget(channel, email),
     expiresIn: config.otp.expiresInSeconds,
   };
 };
@@ -677,7 +670,7 @@ const resendSignupOtp = async (
   input: ResendOtpInput,
 ): Promise<{
   signupSessionId: string;
-  channel: 'EMAIL' | 'PHONE';
+  channel: 'EMAIL';
   maskedTarget: string;
   expiresIn: number;
 }> => {
@@ -737,7 +730,7 @@ const resendSignupOtp = async (
 
   return {
     signupSessionId: input.signupSessionId,
-    channel: targetChannel,
+    channel: targetChannel as 'EMAIL',
     maskedTarget: maskTarget(targetChannel, session.payload.email, session.payload.contactNumber),
     expiresIn: config.otp.expiresInSeconds,
   };
@@ -797,7 +790,7 @@ const verifySignupOtp = async (
           phone: session.payload.contactNumber ?? null,
           firstName: null,
           lastName: null,
-          role: session.payload.role || 'CUSTOMER',
+          role: session.payload.role || 'DRIVER',
           status: 'ACTIVE',
           referralCode: ownReferralCode,
           referrerId: session.payload.referrerId,
@@ -832,10 +825,6 @@ const verifySignupOtp = async (
             verificationStatus: 'PENDING_VERIFICATION',
           },
         });
-      } else {
-        await tx.customerProfile.create({
-          data: { userId: user.id },
-        });
       }
 
       await tx.wallet.create({
@@ -865,11 +854,11 @@ const verifySignupOtp = async (
 const login = async (
   input: LoginInput,
   clientInfo: ClientInfo,
-  allowedRoles?: ('CUSTOMER' | 'DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
+  allowedRoles?: ('DRIVER' | 'ADMIN' | 'FLEET_MANAGER')[],
 ): Promise<{ user: SanitizedUser; tokens: AuthTokens }> => {
   const user = await prisma.user.findFirst({
     where: {
-      ...(input.email ? { email: input.email } : { phone: input.contactNumber }),
+      email: input.email,
       isDeleted: false,
     },
     include: {
@@ -896,7 +885,7 @@ const login = async (
     throw new UnauthorizedError('Invalid credentials');
   }
 
-  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.some((role) => role === user.role)) {
     throw new ForbiddenError('This account is not authorized to sign in to this app.');
   }
 
@@ -911,6 +900,139 @@ const login = async (
   }
 
   return issueSessionAndTokens(user, Boolean(input.rememberMe), clientInfo);
+};
+
+const GENERIC_RESPONSE = {
+  message: 'If an account exists with this email, an OTP has been sent. Please check your email.',
+  expiresIn: OTP_TTL_SECONDS,
+};
+
+export const requestPasswordResetOtp = async (
+  input: ResetPasswordPayload,
+): Promise<{
+  resetSessionId: string;
+  channel: 'EMAIL';
+  maskedTarget: string;
+  expiresIn: number;
+  maxAttempts?: number;
+  message: string;
+}> => {
+  const normalizedEmail = input.email?.trim().toLowerCase();
+  const channel = 'EMAIL';
+
+  await enforceOtpRateLimit(normalizedEmail);
+
+  const existingUser = await prisma.user.findFirst({
+    where: { email: normalizedEmail },
+    select: { id: true, status: true, role: true },
+  });
+
+  if (!existingUser || existingUser.role === 'CUSTOMER' || existingUser.status !== 'ACTIVE') {
+    return {
+      resetSessionId: crypto.randomUUID(),
+      channel,
+      maskedTarget: maskTarget(channel, normalizedEmail),
+      ...GENERIC_RESPONSE,
+    };
+  }
+
+  const otp = crypto.randomInt(100000, 999999).toString();
+  const resetSessionId = crypto.randomUUID();
+  const sessionKey = `pwd_reset:session:${resetSessionId}`;
+
+  const sessionData: ResetOtpSession = {
+    userId: existingUser.id,
+    otpHash: crypto.createHash('sha256').update(otp).digest('hex'),
+    channel,
+    target: normalizedEmail,
+    attempts: 0,
+  };
+
+  await redis.set(sessionKey, JSON.stringify(sessionData), 'EX', OTP_TTL_SECONDS);
+
+  try {
+    await dispatchOtp(channel, otp, normalizedEmail);
+  } catch (error) {
+    await redis.del(sessionKey, `otp:cooldown:${normalizedEmail}`);
+    throw error;
+  }
+
+  return {
+    resetSessionId,
+    channel,
+    maskedTarget: maskTarget(channel, normalizedEmail),
+    expiresIn: OTP_TTL_SECONDS,
+    maxAttempts: MAX_ATTEMPTS,
+    message: GENERIC_RESPONSE.message,
+  };
+};
+
+const resetPassword = async (input: {
+  resetSessionId: string;
+  otp: string;
+  password: string;
+}): Promise<{ message: string }> => {
+  const sessionKey = `pwd_reset:session:${input.resetSessionId}`;
+  const rawSession = await redis.get(sessionKey);
+
+  if (!rawSession) {
+    throw new BadRequestError('Invalid or expired password reset session');
+  }
+
+  const session = JSON.parse(rawSession) as ResetOtpSession;
+  const inputHash = hashSha256(input.otp);
+  const isMatch =
+    inputHash.length === session.otpHash.length &&
+    crypto.timingSafeEqual(Buffer.from(inputHash), Buffer.from(session.otpHash));
+
+  if (!isMatch) {
+    session.attempts += 1;
+    if (session.attempts >= MAX_ATTEMPTS) {
+      await redis.del(sessionKey);
+      throw new RateLimitError('Too many invalid attempts. Password reset session terminated.');
+    }
+
+    const ttl = await redis.ttl(sessionKey);
+    if (ttl > 0) {
+      await redis.set(sessionKey, JSON.stringify(session), 'EX', ttl);
+    }
+    throw new BadRequestError('Invalid verification code', {
+      remainingAttempts: MAX_ATTEMPTS - session.attempts,
+    });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  if (!user || user.isDeleted || user.email !== session.target) {
+    await redis.del(sessionKey);
+    throw new BadRequestError('Password reset account is no longer available');
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, config.bcrypt.saltRounds);
+  await prisma.account.upsert({
+    where: {
+      provider_providerAccountId: {
+        provider: 'CREDENTIALS',
+        providerAccountId: user.id,
+      },
+    },
+    create: {
+      userId: user.id,
+      provider: 'CREDENTIALS',
+      providerAccountId: user.id,
+      email: user.email,
+      passwordHash,
+    },
+    update: {
+      passwordHash,
+      isDeleted: false,
+      deletedAt: null,
+    },
+  });
+
+  await redis.del(sessionKey);
+  await revokeAllUserSessions(user.id);
+
+  return { message: 'Password reset successfully. You can now log in.' };
 };
 
 const handleSocialAuth = async (
@@ -1654,6 +1776,100 @@ const createAdmin = async (
   };
 };
 
+const resendAdminInvite = async (input: { email: string }): Promise<{ message: string }> => {
+  const normalizedEmail = input.email.trim().toLowerCase();
+
+  const adminUser = await prisma.user.findFirst({
+    where: {
+      email: normalizedEmail,
+      isDeleted: false,
+    },
+    include: {
+      adminProfile: true,
+      account: {
+        where: {
+          provider: 'CREDENTIALS',
+          isDeleted: false,
+        },
+      },
+    },
+  });
+
+  if (!adminUser || adminUser.role !== 'ADMIN') {
+    throw new NotFoundError('Pending admin account not found for this email');
+  }
+
+  const credentialsAccount = adminUser.account[0];
+  const hasPassword = Boolean(credentialsAccount?.passwordHash);
+
+  if (hasPassword || adminUser.status !== 'PENDING_VERIFICATION') {
+    throw new BadRequestError('Password is already set or this admin account is already active');
+  }
+
+  const roleLabel = adminUser.adminProfile?.accessLabel === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN';
+
+  // Optional: remove previous invite keys for this userId if you index/scan them,
+  // or issue a fresh token in Redis with full TTL:
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashSha256(rawToken);
+  const redisKey = `admin:invite:${tokenHash}`;
+
+  const payload = JSON.stringify({
+    userId: adminUser.id,
+    email: adminUser.email,
+    role: roleLabel,
+  });
+
+  await redis.set(redisKey, payload, 'EX', INVITE_TOKEN_TTL_SECONDS);
+
+  const adminUrl = config.frontend.adminUrl;
+  const inviteUrl = `${adminUrl.replace(/\/+$/, '')}/set-password?token=${rawToken}`;
+
+  try {
+    const emailResult = await sendEmail({
+      to: adminUser.email!,
+      subject: 'You have been invited as an Administrator on Deligo',
+      template: 'admin-invite',
+      data: {
+        name: adminUser.firstName,
+        inviteUrl,
+        role: roleLabel,
+        expiresInHours: 24,
+      },
+    });
+
+    if (!emailResult.success) {
+      console.error(
+        `[adminAuth] Failed to resend invitation email to ${adminUser.email}: ${emailResult.error}`,
+      );
+      if (config.isProduction) {
+        await redis.del(redisKey);
+        throw new AppError(
+          `Failed to deliver invitation email: ${emailResult.error || 'Unknown email service error'}`,
+          500,
+          'EMAIL_DELIVERY_FAILED',
+        );
+      }
+    }
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[adminAuth] Exception during admin invitation resend: ${errMsg}`);
+    await redis.del(redisKey);
+    throw new AppError(
+      `Failed to deliver invitation email: ${errMsg}`,
+      500,
+      'EMAIL_DELIVERY_FAILED',
+    );
+  }
+
+  return {
+    message: 'Invitation link resent to email.',
+  };
+};
+
 const setAdminPassword = async (input: SetAdminPasswordInput): Promise<{ message: string }> => {
   const tokenHash = hashSha256(input.token.trim());
   const redisKey = `admin:invite:${tokenHash}`;
@@ -1723,6 +1939,8 @@ export const AuthService = {
   resendSignupOtp,
   verifySignupOtp,
   login,
+  requestPasswordResetOtp,
+  resetPassword,
   handleSocialAuth,
   googleLogin,
   facebookLogin,
@@ -1731,5 +1949,6 @@ export const AuthService = {
   revokeAllUserSessions,
   logoutUser,
   createAdmin,
+  resendAdminInvite,
   setAdminPassword,
 };
